@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { Sparkles } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { MonitorPlay, Sparkles } from "lucide-react";
 import type { ChatMessage } from "@/lib/types";
-import { parseStreamingContent } from "@/lib/parseContent";
+import type { ProjectFile } from "@/lib/parseContent";
+import { extractProjectFiles, parseStreamingContent } from "@/lib/parseContent";
 import MessageItem from "./MessageItem";
 import WelcomeHero from "./WelcomeHero";
+
+const PREVIEWABLE_EXTS = new Set(["html", "htm", "css", "js"]);
 
 export default function MessageList({
   messages,
@@ -19,6 +22,7 @@ export default function MessageList({
   onContinue,
   continuingMessageId,
   continuationStreamingContent,
+  onPreviewFiles,
 }: {
   messages: ChatMessage[];
   isGenerating: boolean;
@@ -31,12 +35,22 @@ export default function MessageList({
   onContinue: (messageId: string) => void;
   continuingMessageId: string | null;
   continuationStreamingContent: string;
+  onPreviewFiles: (files: ProjectFile[]) => void;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const thinkBoxRef = useRef<HTMLDivElement>(null);
+  const [thinkOpen, setThinkOpen] = useState(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages.length, streamingContent, continuationStreamingContent]);
+
+  // لو بوكس التفكير الصغير مفتوح، انزل تلقائياً مع آخر سطر تفكير
+  useEffect(() => {
+    if (thinkOpen && thinkBoxRef.current) {
+      thinkBoxRef.current.scrollTop = thinkBoxRef.current.scrollHeight;
+    }
+  }, [streamingReasoning, thinkOpen]);
 
   if (messages.length === 0 && !isGenerating) {
     return (
@@ -49,6 +63,10 @@ export default function MessageList({
   }
 
   const streamSegments = isGenerating ? parseStreamingContent(streamingContent) : [];
+  const streamFiles = isGenerating ? extractProjectFiles(streamingContent) : [];
+  const streamHasPreview = streamFiles.some((f) =>
+    PREVIEWABLE_EXTS.has((f.path.split(".").pop() || "").toLowerCase())
+  );
 
   return (
     <div className="flex-1 overflow-y-auto py-2">
@@ -62,11 +80,12 @@ export default function MessageList({
           continuationStreamingContent={
             continuingMessageId === m.id ? continuationStreamingContent : null
           }
+          onPreviewFiles={onPreviewFiles}
         />
       ))}
 
       {isGenerating && (
-        <div className="flex w-full justify-start gap-2 px-2.5 py-1.5">
+        <div className="animate-slideUp [animation-fill-mode:both] flex w-full justify-start gap-2 px-2.5 py-1.5">
           <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-cyan/50 bg-purple/15">
             <Sparkles size={13} className="text-cyan animate-pulse" />
           </div>
@@ -81,11 +100,35 @@ export default function MessageList({
             </div>
             <div className="rounded-lg rounded-bl-sm border border-line2 bg-panel2 px-3 py-2">
               {streamingReasoning && (
-                <div className="mb-2 rounded-md border border-line2 bg-panel3 px-2.5 py-2">
-                  <p className="text-[11px] font-bold text-amber">بيفكّر...</p>
-                  <p className="mt-1 whitespace-pre-wrap text-[11.5px] leading-5 text-txt2">
-                    {streamingReasoning}
-                  </p>
+                <div className="mb-2">
+                  <button
+                    onClick={() => setThinkOpen(!thinkOpen)}
+                    className="flex items-center gap-1.5 rounded-md border border-amber/30 bg-amber/10 px-2 py-1 transition-colors hover:border-amber/60 hover:bg-amber/15"
+                    title={thinkOpen ? "اخفاء التفكير" : "اضغط تشوف التفكير"}
+                  >
+                    <span
+                      className={`mono text-[11px] font-bold text-amber transition-transform duration-200 ${
+                        thinkOpen ? "rotate-90" : ""
+                      }`}
+                    >
+                      {">"}
+                    </span>
+                    <span className="shimmer-text text-[11px] font-bold">يفكر</span>
+                    <span className="flex gap-0.5">
+                      <span className="h-1 w-1 animate-pulse rounded-full bg-amber" />
+                      <span className="h-1 w-1 animate-pulse rounded-full bg-amber [animation-delay:150ms]" />
+                    </span>
+                  </button>
+                  {thinkOpen && (
+                    <div
+                      ref={thinkBoxRef}
+                      className="reasoning-box animate-fadeIn mt-1.5 max-h-[180px] w-[320px] max-w-full overflow-y-auto rounded-md border border-line2 bg-panel3 px-2.5 py-2"
+                    >
+                      <p className="whitespace-pre-wrap text-[11px] leading-5 text-txt2">
+                        {streamingReasoning}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
               {streamSegments.length === 0 && !streamingContent && (
@@ -109,6 +152,14 @@ export default function MessageList({
                     </span>
                   </div>
                 )
+              )}
+              {streamHasPreview && (
+                <button
+                  onClick={() => onPreviewFiles(streamFiles)}
+                  className="mt-2 flex items-center gap-1.5 rounded-md border border-cyan/50 bg-cyan/10 px-2.5 py-1.5 text-[11px] font-medium text-cyan transition-colors hover:bg-cyan/15"
+                >
+                  <MonitorPlay size={12} /> معاينة الصفحة
+                </button>
               )}
             </div>
           </div>

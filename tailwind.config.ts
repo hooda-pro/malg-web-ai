@@ -40,6 +40,14 @@ const config: Config = {
           "0%": { opacity: "0", transform: "translateY(4px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
+        slideUp: {
+          "0%": { opacity: "0", transform: "translateY(10px) scale(0.98)" },
+          "100%": { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
+        float: {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-8px)" },
+        },
         pulseGreen: {
           "0%, 100%": { boxShadow: "0 0 0 0 rgba(0,255,157,0.35)" },
           "50%": { boxShadow: "0 0 0 6px rgba(0,255,157,0)" },
@@ -48,6 +56,8 @@ const config: Config = {
       animation: {
         blink: "blink 1s step-start infinite",
         fadeIn: "fadeIn 0.2s ease-out",
+        slideUp: "slideUp 0.3s ease-out",
+        float: "float 3.5s ease-in-out infinite",
         pulseGreen: "pulseGreen 2s ease-in-out infinite",
       },
     },

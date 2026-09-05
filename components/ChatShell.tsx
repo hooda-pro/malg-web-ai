@@ -3,13 +3,40 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChatMessage, ChatSession, SessionUser } from "@/lib/types";
 import { consumeSSEStream } from "@/lib/streamClient";
+import { extractProjectFiles } from "@/lib/parseContent";
+import type { ProjectFile } from "@/lib/parseContent";
 import TopBar from "./TopBar";
 import ChatDrawer from "./ChatDrawer";
 import MessageList from "./MessageList";
 import BottomInputBar from "./BottomInputBar";
 import AuthModal from "./AuthModal";
 import CodeRunnerModal from "./CodeRunnerModal";
+import PreviewModal from "./PreviewModal";
 import Toast from "./Toast";
+
+const PREVIEWABLE_EXTS = new Set(["html", "htm", "css", "js"]);
+
+/** هل الرد ده فيه كود صفحة/ويب يقدر يتعاين؟ */
+function hasPreviewableFiles(content: string): boolean {
+  return extractProjectFiles(content).some((f) =>
+    PREVIEWABLE_EXTS.has((f.path.split(".").pop() || "").toLowerCase())
+  );
+}
+
+/** المستخدم كتب أمر معاينة («معاينة» / «عاين» / preview...)؟ */
+function isPreviewCommand(text: string): boolean {
+  const t = text
+    .trim()
+    .replace(/^[«"'\(\[]+/, "")
+    .replace(/[»"'\)\]]+$/, "")
+    .replace(/[.!؟?،,~*]+$/, "")
+    .trim();
+  return (
+    /^(?:ممكن|عايز|عاوز|أريد|اريد|ابدأ|إبدأ|افتح|إفتح|شغل|دوس|اعمل)?\s*(?:ال)?(?:معاينة|عاين|اعاين|إعاين)(?:\s+(?:الصفحة|الموقع|الكود|النتيجة|الملفات))?$/.test(
+      t
+    ) || /^(?:open\s+)?preview$/i.test(t)
+  );
+}
 
 export default function ChatShell() {
   const [authChecked, setAuthChecked] = useState(false);
@@ -35,12 +62,21 @@ export default function ChatShell() {
   const [runnerCode, setRunnerCode] = useState<string | undefined>(undefined);
   const [runnerLang, setRunnerLang] = useState<string | undefined>(undefined);
 
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewFiles, setPreviewFiles] = useState<ProjectFile[]>([]);
+
   const abortRef = useRef<AbortController | null>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast((t) => (t === msg ? null : t)), 4500);
   };
+
+  const openPreviewWithFiles = useCallback((files: ProjectFile[]) => {
+    if (!files.length) return;
+    setPreviewFiles(files);
+    setPreviewOpen(true);
+  }, []);
 
   const refreshQuota = useCallback(async () => {
     try {
@@ -191,9 +227,22 @@ export default function ChatShell() {
 
   const sendMessage = useCallback(
     async (text: string) => {
-      if (!text.trim() || isGenerating) return;
+      const trimmed = text.trim();
+      if (!trimmed || isGenerating) return;
       if (!user) {
         setShowAuthModal(true);
+        return;
+      }
+
+      // أمر «معاينة»: يفتح معاينة حية لآخر أكواد اتبنت في المحادثة دي
+      if (isPreviewCommand(trimmed)) {
+        const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+        const files = lastAssistant ? extractProjectFiles(lastAssistant.content) : [];
+        if (files.length > 0) {
+          openPreviewWithFiles(files);
+          return;
+        }
+        showToast("مفيش كود صفحة اتبنى لسه عشان أعرضه — اطلب من mlag يبني صفحة الأول ✨");
         return;
       }
 
@@ -222,12 +271,13 @@ export default function ChatShell() {
 
       const controller = new AbortController();
       abortRef.current = controller;
+      let accContent = "";
 
       try {
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId, message: text }),
+          body: JSON.stringify({ sessionId, message: trimmed }),
           signal: controller.signal,
         });
 
@@ -240,7 +290,10 @@ export default function ChatShell() {
 
         const reader = res.body!.getReader();
         await consumeSSEStream(reader, {
-          onContent: (t) => setStreamingContent((prev) => prev + t),
+          onContent: (t) => {
+            accContent += t;
+            setStreamingContent((prev) => prev + t);
+          },
           onReasoning: (t) => setStreamingReasoning((prev) => prev + t),
         });
       } catch (e: any) {
@@ -250,13 +303,19 @@ export default function ChatShell() {
       } finally {
         abortRef.current = null;
         setIsGenerating(false);
+        // لو الرد أنتج كود صفحة قابل للمعاينة — نبه المستخدم إنه يقدر يعاين قبل النشر
+        if (hasPreviewableFiles(accContent)) {
+          showToast(
+            "خلصت الكود ✅ لو عايز تعاين الصفحة وتشوفها قبل ما تنشرها — اكتب «معاينة» في الشات أو دوس زر المعاينة 👁"
+          );
+        }
         setStreamingContent("");
         setStreamingReasoning("");
         await refreshMessages(sessionId);
         await refreshQuota();
       }
     },
-    [isGenerating, user, ensureSessionId, refreshMessages, refreshQuota]
+    [isGenerating, user, messages, ensureSessionId, refreshMessages, refreshQuota, openPreviewWithFiles]
   );
 
   const continueMessage = useCallback(
@@ -267,6 +326,7 @@ export default function ChatShell() {
 
       const controller = new AbortController();
       abortRef.current = controller;
+      let accContent = "";
 
       try {
         const res = await fetch("/api/chat/continue", {
@@ -284,7 +344,10 @@ export default function ChatShell() {
 
         const reader = res.body!.getReader();
         await consumeSSEStream(reader, {
-          onContent: (t) => setContinuationStreamingContent((prev) => prev + t),
+          onContent: (t) => {
+            accContent += t;
+            setContinuationStreamingContent((prev) => prev + t);
+          },
         });
       } catch (e: any) {
         if (e?.name !== "AbortError") {
@@ -293,6 +356,11 @@ export default function ChatShell() {
       } finally {
         abortRef.current = null;
         setContinuingMessageId(null);
+        if (hasPreviewableFiles(accContent)) {
+          showToast(
+            "خلصت الكود ✅ لو عايز تعاين الصفحة وتشوفها قبل ما تنشرها — اكتب «معاينة» في الشات أو دوس زر المعاينة 👁"
+          );
+        }
         setContinuationStreamingContent("");
         await refreshMessages(currentSessionId);
         await refreshQuota();
@@ -320,34 +388,39 @@ export default function ChatShell() {
   const remainingTokens = quota ? Math.max(quota.total - quota.used, 0) : null;
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden">
-      <TopBar
-        onToggleDrawer={() => setDrawerOpen(true)}
-        remainingTokens={remainingTokens}
-        onOpenRunner={openRunnerDemo}
-      />
+    <div className="flex h-[100dvh] overflow-hidden">
+      {/* العمود الرئيسي: الشات — بياخد باقي العرض جنب القايمة الجانبية الثابتة */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <TopBar
+          onToggleDrawer={() => setDrawerOpen(true)}
+          remainingTokens={remainingTokens}
+          onOpenRunner={openRunnerDemo}
+        />
 
-      <MessageList
-        messages={messages}
-        isGenerating={isGenerating}
-        streamingContent={streamingContent}
-        streamingReasoning={streamingReasoning}
-        totalTokens={quota?.total ?? 500000}
-        onPromptSelected={(p) => sendMessage(p)}
-        onOpenRunner={openRunnerDemo}
-        onRunCode={openRunnerWithCode}
-        onContinue={continueMessage}
-        continuingMessageId={continuingMessageId}
-        continuationStreamingContent={continuationStreamingContent}
-      />
+        <MessageList
+          messages={messages}
+          isGenerating={isGenerating}
+          streamingContent={streamingContent}
+          streamingReasoning={streamingReasoning}
+          totalTokens={quota?.total ?? 500000}
+          onPromptSelected={(p) => sendMessage(p)}
+          onOpenRunner={openRunnerDemo}
+          onRunCode={openRunnerWithCode}
+          onContinue={continueMessage}
+          continuingMessageId={continuingMessageId}
+          continuationStreamingContent={continuationStreamingContent}
+          onPreviewFiles={openPreviewWithFiles}
+        />
 
-      <BottomInputBar
-        isGenerating={isGenerating}
-        onSend={sendMessage}
-        onStop={stopGeneration}
-        disabled={!authChecked}
-      />
+        <BottomInputBar
+          isGenerating={isGenerating}
+          onSend={sendMessage}
+          onStop={stopGeneration}
+          disabled={!authChecked}
+        />
+      </div>
 
+      {/* القايمة الجانبية: ثابتة على الشمال في شاشة الكمبيوتر، ودرج منزلق في الموبايل */}
       <ChatDrawer
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
@@ -375,6 +448,10 @@ export default function ChatShell() {
           initialCode={runnerCode}
           initialLanguage={runnerLang}
         />
+      )}
+
+      {previewOpen && (
+        <PreviewModal files={previewFiles} onClose={() => setPreviewOpen(false)} />
       )}
 
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}

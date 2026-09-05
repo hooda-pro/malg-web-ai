@@ -3,7 +3,7 @@ import { sql, ensureSchema } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
 import { checkAndMaybeRenewQuota, deductTokens } from "@/lib/quota";
 import { negotiateUpstream, estimateTokens, type ApiMessage } from "@/lib/ai";
-import { SYSTEM_PROMPT } from "@/lib/systemPrompt";
+import { buildSystemPrompt } from "@/lib/systemPrompt";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
   `) as { role: string; content: string }[];
 
   const apiMessages: ApiMessage[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: buildSystemPrompt({ userName: user.displayName }) },
     ...history.slice(-10).map((m) => ({ role: m.role, content: m.content })),
     { role: "user", content: CONTINUE_INSTRUCTION },
   ];

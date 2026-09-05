@@ -4,7 +4,7 @@ import { sql, ensureSchema } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
 import { checkAndMaybeRenewQuota, deductTokens } from "@/lib/quota";
 import { negotiateUpstream, estimateTokens, type ApiMessage } from "@/lib/ai";
-import { SYSTEM_PROMPT } from "@/lib/systemPrompt";
+import { buildSystemPrompt, REGISTERED_TOKEN_QUOTA } from "@/lib/systemPrompt";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -58,9 +58,22 @@ export async function POST(req: NextRequest) {
     await sql`UPDATE chat_sessions SET updated_at = now() WHERE id = ${sessionId}`;
   }
 
-  // 2) جهّز الرسائل المرسلة للموديل: system prompt + آخر 10 رسائل
+  // 2) جهّز الرسائل المرسلة للموديل: system prompt ديناميكي (اسم اليوزر + الرصيد + معرفة المنصة) + آخر 10 رسائل
+  const quotaRows = (await sql`
+    SELECT total_allocated_tokens, used_tokens FROM user_quota WHERE user_id = ${user.id}
+  `) as { total_allocated_tokens: number; used_tokens: number }[];
+  const totalAllocated = Number(quotaRows[0]?.total_allocated_tokens ?? REGISTERED_TOKEN_QUOTA);
+  const usedTokensCount = Number(quotaRows[0]?.used_tokens ?? 0);
+
   const apiMessages: ApiMessage[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    {
+      role: "system",
+      content: buildSystemPrompt({
+        userName: user.displayName,
+        totalTokens: totalAllocated,
+        remainingTokens: Math.max(totalAllocated - usedTokensCount, 0),
+      }),
+    },
     ...existing.slice(-10).map((m) => ({ role: m.role, content: m.content })),
   ];
 

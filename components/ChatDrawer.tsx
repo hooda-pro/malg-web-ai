@@ -34,17 +34,17 @@ export default function ChatDrawer({
       {open && (
         <div
           onClick={onClose}
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[1px]"
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[1px] lg:hidden"
         />
       )}
       <aside
-        className={`fixed inset-y-0 right-0 z-50 flex w-[82%] max-w-[300px] flex-col border-l border-line bg-panel transition-transform duration-200 ${
-          open ? "translate-x-0" : "translate-x-full"
+        className={`fixed inset-y-0 left-0 z-50 flex w-[82%] max-w-[300px] shrink-0 flex-col border-r border-line bg-panel transition-transform duration-200 lg:static lg:z-auto lg:w-[264px] lg:max-w-none lg:translate-x-0 ${
+          open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
       >
         <div className="flex items-center justify-between border-b border-line px-3 py-3">
           <span className="mono text-xs font-bold text-green">$ mlag --sessions</span>
-          <button onClick={onClose} className="text-txt3 hover:text-txt">
+          <button onClick={onClose} className="text-txt3 hover:text-txt lg:hidden">
             <X size={16} />
           </button>
         </div>

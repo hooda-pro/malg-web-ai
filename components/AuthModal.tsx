@@ -25,6 +25,10 @@ export default function AuthModal({
       setError("يرجى إدخال بريد إلكتروني صحيح وكلمة مرور من 6 أحرف على الأقل");
       return;
     }
+    if (tab === "register" && !name.trim()) {
+      setError("يرجى إدخال اسمك — النموذج هيستخدمه عشان يناديك بيه");
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(`/api/auth/${tab === "login" ? "login" : "register"}`, {
@@ -96,7 +100,7 @@ export default function AuthModal({
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="اسمك (اختياري)"
+                  placeholder="اسمك"
                   className="flex-1 bg-transparent text-[12.5px] text-txt placeholder:text-txt3 focus:outline-none"
                 />
               </div>

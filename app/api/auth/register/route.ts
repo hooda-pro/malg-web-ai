@@ -21,6 +21,12 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+    if (!name) {
+      return NextResponse.json(
+        { error: "يرجى إدخال اسمك — النموذج محتاج يعرف اسمك عشان يناديك بيه" },
+        { status: 400 }
+      );
+    }
 
     await ensureSchema();
 
