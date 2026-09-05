@@ -1,15 +1,28 @@
-import { neon } from "@neondatabase/serverless";
+import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 
-const connectionString = process.env.DATABASE_URL || "";
+// مهم: ما بنعملش neon(...) على مستوى الملف مباشرة، عشان Next.js بيستورد
+// الملف ده وقت الـ build (خطوة "Collecting page data") حتى لو الراوت
+// نفسه مش بيتنفذ — ولو DATABASE_URL مش متاح في اللحظة دي، هيوقع الـ build
+// كله. بدل كده بنأجل إنشاء الاتصال لحد أول استعلام فعلي وقت الطلب (runtime).
+let _sql: NeonQueryFunction<false, false> | null = null;
 
-if (!connectionString) {
-  // لا نرمي استثناء وقت الـ build، بس أي استعلام فعلي هيفشل برسالة واضحة.
-  console.warn(
-    "[db] DATABASE_URL مش متضبط — لازم تضيفه في متغيرات البيئة (Neon connection string)."
-  );
+function getClient(): NeonQueryFunction<false, false> {
+  if (!_sql) {
+    const connectionString = process.env.DATABASE_URL || "";
+    if (!connectionString) {
+      throw new Error(
+        "DATABASE_URL مش متضبط في متغيرات البيئة — ضيفه في Vercel Project Settings > Environment Variables (رابط الاتصال من Neon) وأعد النشر."
+      );
+    }
+    _sql = neon(connectionString);
+  }
+  return _sql;
 }
 
-export const sql = neon(connectionString);
+// نفس شكل الاستخدام القديم: sql`SELECT ...` — لكن الاتصال الحقيقي
+// بيتعمل بس أول مرة تتنفذ فيها الدالة دي فعليًا.
+export const sql: NeonQueryFunction<false, false> = ((strings: TemplateStringsArray, ...values: unknown[]) =>
+  getClient()(strings, ...values)) as unknown as NeonQueryFunction<false, false>;
 
 let schemaReady: Promise<void> | null = null;
 
