@@ -1,8 +1,9 @@
 "use client";
 
-import { LogIn, LogOut, MessageCircle, Plus, ShieldCheck, Trash2, X } from "lucide-react";
+import { LogIn, LogOut, MessageCircle, Plus, Settings, ShieldCheck, Trash2, X } from "lucide-react";
 import type { ChatSession, SessionUser } from "@/lib/types";
 import { formatTime } from "@/lib/utils";
+import { useSettings } from "./SettingsContext";
 
 export default function ChatDrawer({
   open,
@@ -16,6 +17,7 @@ export default function ChatDrawer({
   user,
   onOpenAuth,
   onLogout,
+  onOpenSettings,
 }: {
   open: boolean;
   onClose: () => void;
@@ -28,7 +30,10 @@ export default function ChatDrawer({
   user: SessionUser | null;
   onOpenAuth: () => void;
   onLogout: () => void;
+  onOpenSettings: () => void;
 }) {
+  const { t } = useSettings();
+
   return (
     <>
       {open && (
@@ -54,19 +59,19 @@ export default function ChatDrawer({
             onClick={onNewChat}
             className="flex w-full items-center justify-center gap-2 rounded-md border border-green/40 bg-green/10 py-2 text-[12.5px] font-medium text-green hover:bg-green/15"
           >
-            <Plus size={14} /> محادثة جديدة
+            <Plus size={14} /> {t("newChat")}
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-2 pb-2">
           {sessions.length === 0 && (
-            <p className="mt-6 text-center text-[11.5px] text-txt3">لا يوجد محادثات بعد</p>
+            <p className="mt-6 text-center text-[11.5px] text-txt3">{t("noSessions")}</p>
           )}
           {sessions.map((s) => (
             <button
               key={s.id}
               onClick={() => onSelectSession(s.id)}
-              className={`group mb-1 flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-right ${
+              className={`group mb-1 flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-start ${
                 s.id === currentSessionId
                   ? "border border-cyan/40 bg-cyan/10"
                   : "border border-transparent hover:bg-white/[0.03]"
@@ -94,28 +99,40 @@ export default function ChatDrawer({
               onClick={onClearAll}
               className="flex w-full items-center justify-center gap-1.5 rounded-md border border-line2 py-1.5 text-[11px] text-txt3 hover:border-rose/40 hover:text-rose"
             >
-              <Trash2 size={12} /> مسح كل المحادثات
+              <Trash2 size={12} /> {t("clearAll")}
             </button>
           </div>
         )}
 
         <div className="border-t border-line p-3">
           {user ? (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 overflow-hidden">
+            <div className="flex items-center justify-between gap-1">
+              {/* الضغط على الحساب يفتح الإعدادات */}
+              <button
+                onClick={onOpenSettings}
+                title={t("accountSettings")}
+                className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-md px-1 py-1 text-start transition-colors hover:bg-white/[0.04]"
+              >
                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-green/40 bg-green/10">
                   {user.isAdmin ? (
                     <ShieldCheck size={13} className="text-green" />
                   ) : (
-                    <span className="mono text-[11px] text-green">{user.displayName[0]?.toUpperCase()}</span>
+                    <span className="mono text-[11px] text-green">
+                      {user.displayName[0]?.toUpperCase()}
+                    </span>
                   )}
                 </div>
-                <div className="overflow-hidden">
+                <div className="min-w-0 overflow-hidden">
                   <p className="truncate text-[12px] font-medium text-txt">{user.displayName}</p>
                   <p className="truncate text-[10px] text-txt3">{user.email}</p>
                 </div>
-              </div>
-              <button onClick={onLogout} className="shrink-0 rounded p-1.5 text-txt3 hover:text-rose">
+                <Settings size={13} className="shrink-0 text-txt3" />
+              </button>
+              <button
+                onClick={onLogout}
+                title={t("logout")}
+                className="shrink-0 rounded p-1.5 text-txt3 hover:text-rose"
+              >
                 <LogOut size={14} />
               </button>
             </div>
@@ -124,7 +141,7 @@ export default function ChatDrawer({
               onClick={onOpenAuth}
               className="flex w-full items-center justify-center gap-2 rounded-md border border-cyan/40 bg-cyan/10 py-2 text-[12.5px] font-medium text-cyan hover:bg-cyan/15"
             >
-              <LogIn size={14} /> تسجيل الدخول / حساب جديد
+              <LogIn size={14} /> {t("loginOrRegister")}
             </button>
           )}
         </div>

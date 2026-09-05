@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Eye, EyeOff, Lock, Mail, Terminal, User, X } from "lucide-react";
 import type { SessionUser } from "@/lib/types";
+import { useSettings } from "./SettingsContext";
 
 export default function AuthModal({
   onClose,
@@ -11,6 +12,7 @@ export default function AuthModal({
   onClose: () => void;
   onAuthenticated: (user: SessionUser) => void;
 }) {
+  const { t } = useSettings();
   const [tab, setTab] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,11 +24,11 @@ export default function AuthModal({
   const submit = async () => {
     setError(null);
     if (!email.trim() || password.length < 6) {
-      setError("يرجى إدخال بريد إلكتروني صحيح وكلمة مرور من 6 أحرف على الأقل");
+      setError(t("errEmailPass"));
       return;
     }
     if (tab === "register" && !name.trim()) {
-      setError("يرجى إدخال اسمك — النموذج هيستخدمه عشان يناديك بيه");
+      setError(t("errName"));
       return;
     }
     setLoading(true);
@@ -38,12 +40,12 @@ export default function AuthModal({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "حصل خطأ، حاول تاني");
+        setError(data.error || t("errGeneric"));
         return;
       }
       onAuthenticated(data.user);
     } catch {
-      setError("تعذر الاتصال بالسيرفر");
+      setError(t("errConn"));
     } finally {
       setLoading(false);
     }
@@ -70,7 +72,7 @@ export default function AuthModal({
           <div className="mb-4 flex items-center justify-center gap-2">
             <Terminal size={18} className="text-green" />
             <h2 className="mono text-sm font-bold text-txt">
-              {tab === "login" ? "تسجيل الدخول" : "إنشاء حساب جديد"}
+              {tab === "login" ? t("authLoginTitle") : t("authRegisterTitle")}
             </h2>
           </div>
 
@@ -81,7 +83,7 @@ export default function AuthModal({
                 tab === "login" ? "bg-green/15 text-green" : "text-txt3"
               }`}
             >
-              دخول
+              {t("tabLogin")}
             </button>
             <button
               onClick={() => setTab("register")}
@@ -89,7 +91,7 @@ export default function AuthModal({
                 tab === "register" ? "bg-green/15 text-green" : "text-txt3"
               }`}
             >
-              حساب جديد
+              {t("tabRegister")}
             </button>
           </div>
 
@@ -100,7 +102,7 @@ export default function AuthModal({
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="اسمك"
+                  placeholder={t("phName")}
                   className="flex-1 bg-transparent text-[12.5px] text-txt placeholder:text-txt3 focus:outline-none"
                 />
               </div>
@@ -110,7 +112,7 @@ export default function AuthModal({
               <input
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="البريد الإلكتروني"
+                placeholder={t("phEmail")}
                 dir="ltr"
                 className="flex-1 bg-transparent text-[12.5px] text-txt placeholder:text-txt3 focus:outline-none"
               />
@@ -121,7 +123,7 @@ export default function AuthModal({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 type={showPassword ? "text" : "password"}
-                placeholder="كلمة المرور (6 أحرف على الأقل)"
+                placeholder={t("phPassword")}
                 dir="ltr"
                 className="flex-1 bg-transparent text-[12.5px] text-txt placeholder:text-txt3 focus:outline-none"
                 onKeyDown={(e) => e.key === "Enter" && submit()}
@@ -138,7 +140,7 @@ export default function AuthModal({
               disabled={loading}
               className="w-full rounded-md bg-green/15 py-2.5 text-[13px] font-bold text-green hover:bg-green/25 disabled:opacity-50"
             >
-              {loading ? "جاري التنفيذ..." : tab === "login" ? "دخول" : "إنشاء الحساب"}
+              {loading ? t("working") : tab === "login" ? t("btnLogin") : t("btnRegister")}
             </button>
           </div>
         </div>

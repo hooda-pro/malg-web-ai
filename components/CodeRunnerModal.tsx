@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Code2, Play, RefreshCw, X } from "lucide-react";
+import { useSettings } from "./SettingsContext";
 
 const DEMO_HTML = `<!doctype html>
 <html lang="ar" dir="rtl">
@@ -56,6 +57,7 @@ export default function CodeRunnerModal({
   initialCode?: string;
   initialLanguage?: string;
 }) {
+  const { t } = useSettings();
   const [code, setCode] = useState(initialCode ?? DEMO_HTML);
   const [language, setLanguage] = useState(initialLanguage ?? "html");
   const [runKey, setRunKey] = useState(0);
@@ -87,7 +89,7 @@ export default function CodeRunnerModal({
             tab === "code" ? "border-b-2 border-green text-green" : "text-txt3"
           }`}
         >
-          <Code2 size={13} /> الكود
+          <Code2 size={13} /> {t("runnerTabCode")}
         </button>
         <button
           onClick={() => setTab("preview")}
@@ -95,7 +97,7 @@ export default function CodeRunnerModal({
             tab === "preview" ? "border-b-2 border-green text-green" : "text-txt3"
           }`}
         >
-          <Play size={13} /> المعاينة
+          <Play size={13} /> {t("runnerTabPreview")}
         </button>
         <div className="mr-auto flex items-center gap-2 px-3">
           <select
@@ -114,7 +116,7 @@ export default function CodeRunnerModal({
             }}
             className="flex items-center gap-1 rounded bg-green/15 px-2 py-1 text-[11px] text-green hover:bg-green/25"
           >
-            <RefreshCw size={11} /> تشغيل
+            <RefreshCw size={11} /> {t("runnerRun")}
           </button>
         </div>
       </div>
@@ -138,7 +140,7 @@ export default function CodeRunnerModal({
           />
         ) : (
           <div className="flex h-full items-center justify-center px-6 text-center text-[12.5px] text-txt3">
-            لا يمكن تشغيل لغة "{language}" مباشرة داخل المتصفح — انسخ الكود وشغّله في بيئتك المحلية.
+            {t("runnerUnsupported", { lang: language })}
           </div>
         )}
       </div>

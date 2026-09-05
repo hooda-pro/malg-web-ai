@@ -2,6 +2,7 @@
 
 import { Menu, Sparkles, Terminal, Zap } from "lucide-react";
 import { formatTokens } from "@/lib/ai";
+import { useSettings } from "./SettingsContext";
 
 export default function TopBar({
   onToggleDrawer,
@@ -12,12 +13,14 @@ export default function TopBar({
   remainingTokens: number | null;
   onOpenRunner: () => void;
 }) {
+  const { t } = useSettings();
+
   return (
     <header className="flex items-center justify-between border-b border-line bg-panel/90 px-3 py-2.5 backdrop-blur">
       <button
         onClick={onToggleDrawer}
         className="rounded-md p-1.5 text-txt2 hover:bg-white/5 hover:text-txt lg:hidden"
-        title="القايمة الجانبية"
+        title={t("topbarDrawer")}
       >
         <Menu size={18} />
       </button>
@@ -27,7 +30,7 @@ export default function TopBar({
           <Sparkles size={14} className="text-green" />
           <span className="absolute -bottom-0.5 -left-0.5 h-2 w-2 rounded-full bg-green animate-pulseGreen ring-2 ring-panel" />
         </div>
-        <div className="text-right leading-tight">
+        <div className="text-start leading-tight">
           <p className="mono text-[13px] font-bold text-txt">mlag AI</p>
           <p className="text-[9px] text-txt3">v2.3 · web</p>
         </div>
@@ -43,7 +46,7 @@ export default function TopBar({
         <button
           onClick={onOpenRunner}
           className="rounded-md p-1.5 text-txt2 hover:bg-white/5 hover:text-green"
-          title="بيئة تشغيل الكود"
+          title={t("topbarRunner")}
         >
           <Terminal size={17} />
         </button>

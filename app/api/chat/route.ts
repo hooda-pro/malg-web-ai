@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const sessionId = String(body?.sessionId || "");
   const userPrompt = String(body?.message || "").trim();
+  const uiLanguage = typeof body?.uiLanguage === "string" ? body.uiLanguage.slice(0, 8) : null;
 
   if (!sessionId || !userPrompt) {
     return NextResponse.json({ error: "الرسالة فارغة" }, { status: 400 });
@@ -72,6 +73,7 @@ export async function POST(req: NextRequest) {
         userName: user.displayName,
         totalTokens: totalAllocated,
         remainingTokens: Math.max(totalAllocated - usedTokensCount, 0),
+        uiLanguage,
       }),
     },
     ...existing.slice(-10).map((m) => ({ role: m.role, content: m.content })),
@@ -157,11 +159,6 @@ export async function POST(req: NextRequest) {
         // انقطاع أثناء القراءة — لو المستخدم هو اللي وقف، هنحفظ اللي وصلنا لحد دلوقتي
       } finally {
         req.signal.removeEventListener("abort", onAbort);
-        try {
-          streamController.close();
-        } catch {
-          // القناة مقفولة بالفعل
-        }
 
         const finalContent = accumulatedContent.trim();
         const finalReasoning = accumulatedReasoning.trim() || null;
@@ -188,6 +185,16 @@ export async function POST(req: NextRequest) {
           } catch (e) {
             console.error("failed to persist assistant message", e);
           }
+        }
+
+        // مهم جداً: نحفظ في الداتابيز الأول (فوق)، وبعدين نرسل إشارة [MLAG_SAVED]
+        // وبعد كده نقفل القناة. لو قفلنا القناة قبل الحفظ، العميل يعمل refresh
+        // ويلاقي الرسايل لسه متسجلتش — فيختفي الرد من الواجهة رغم إنه اتحفظ بعدها.
+        try {
+          streamController.enqueue(encoder.encode("data: [MLAG_SAVED]\n\n"));
+          streamController.close();
+        } catch {
+          // العميل قطع الاتصال أو القناة مقفولة بالفعل
         }
       }
     },

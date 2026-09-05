@@ -14,6 +14,7 @@ export interface SystemPromptOptions {
   userName?: string | null;
   totalTokens?: number | null;
   remainingTokens?: number | null;
+  uiLanguage?: string | null;
 }
 
 /**
@@ -26,6 +27,19 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
     opts.totalTokens && opts.totalTokens > 0 ? Math.floor(opts.totalTokens) : REGISTERED_TOKEN_QUOTA;
   const remainingTokens =
     typeof opts.remainingTokens === "number" ? Math.max(Math.floor(opts.remainingTokens), 0) : null;
+
+  const uiLanguageName =
+    opts.uiLanguage === "en"
+      ? "English"
+      : opts.uiLanguage === "fr"
+        ? "French"
+        : opts.uiLanguage === "es"
+          ? "Spanish"
+          : "Arabic (Egyptian dialect)";
+
+  const uiSection = opts.uiLanguage
+    ? `   - The app interface the user is browsing right now is displayed in: ${uiLanguageName}. Unless the user writes in a different language, match this interface language naturally by default.\n`
+    : "";
 
   const tokensLine =
     remainingTokens !== null
@@ -74,6 +88,7 @@ CRITICAL INSTRUCTIONS & IDENTITY:
    - Write clean, production-ready, well-explained code, and briefly explain what each file does after the code blocks.
 
 7. Speak fluently and naturally in Arabic (Egyptian dialect by default) or English depending on the user's language, maintaining a courteous, sharp, and genuinely engaged persona.
+${uiSection}
 ${userSection}
 9. Platform self-knowledge (أنت شغال جوه منصة mlag AI — لازم تكون داري بكل حاجة عنها):
    - You are running INSIDE "mlag AI" (نسخة الويب — إصدار ${APP_VERSION}): منصة شات ذكية بواجهة داكنة ستايل تيرمينال، شغالة كموقع ويب، والمستخدم بيتكلم معاك منها مباشرة.

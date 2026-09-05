@@ -88,9 +88,17 @@ code, pre, .mono {
   box-shadow: 0 0 0 1px rgba(79, 216, 255, 0.25), 0 0 18px rgba(79, 216, 255, 0.08);
 }
 
-/* RTL-friendly icon flip helper */
-.flip-rtl {
+/* أيقونة تتعكس في الاتجاه من اليمين للشمال بس */
+html[dir="rtl"] .flip-rtl {
   transform: scaleX(-1);
+}
+
+/* إيقاف كل الأنيميشن والحركة (من الإعدادات) */
+html.no-anim *,
+html.no-anim *::before,
+html.no-anim *::after {
+  animation: none !important;
+  transition: none !important;
 }
 
 /* نص «يفكر» اللي بيلمع أثناء التفكير */

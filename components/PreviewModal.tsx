@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Code2, MonitorPlay, RefreshCw, X } from "lucide-react";
 import type { ProjectFile } from "@/lib/parseContent";
 import CodeBlock from "./CodeBlock";
+import { useSettings } from "./SettingsContext";
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -86,6 +87,7 @@ export default function PreviewModal({
   files: ProjectFile[];
   onClose: () => void;
 }) {
+  const { t } = useSettings();
   const [runKey, setRunKey] = useState(0);
   const [viewingFile, setViewingFile] = useState<string | null>(null);
   const doc = useMemo(() => buildPreviewDoc(files), [files]);
@@ -100,7 +102,7 @@ export default function PreviewModal({
             <span className="h-2 w-2 rounded-full bg-green/70" />
           </span>
           <span className="mono text-[11px] text-txt3">
-            preview — {files.length} {files.length === 1 ? "ملف" : "ملفات"}
+            {files.length === 1 ? t("previewFilesOne") : t("previewFiles", { n: files.length })}
           </span>
         </div>
         <div className="flex items-center gap-1">
@@ -110,7 +112,7 @@ export default function PreviewModal({
               setViewingFile(null);
             }}
             className="rounded-md p-1.5 text-txt2 hover:bg-white/5 hover:text-green"
-            title="إعادة تشغيل المعاينة"
+            title={t("previewRerun")}
           >
             <RefreshCw size={16} />
           </button>
@@ -127,7 +129,7 @@ export default function PreviewModal({
             viewingFile === null ? "border-b-2 border-green text-green" : "text-txt3 hover:text-txt2"
           }`}
         >
-          <MonitorPlay size={13} /> المعاينة
+          <MonitorPlay size={13} /> {t("previewTab")}
         </button>
         {files.map((f) => (
           <button

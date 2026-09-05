@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Send, Square } from "lucide-react";
+import { useSettings } from "./SettingsContext";
 
 export default function BottomInputBar({
   isGenerating,
@@ -14,6 +15,7 @@ export default function BottomInputBar({
   onStop: () => void;
   disabled: boolean;
 }) {
+  const { t } = useSettings();
   const [text, setText] = useState("");
   const taRef = useRef<HTMLTextAreaElement>(null);
 
@@ -48,7 +50,7 @@ export default function BottomInputBar({
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
           rows={1}
-          placeholder="اكتب رسالتك هنا..."
+          placeholder={t("placeholder")}
           disabled={disabled}
           className="max-h-[88px] flex-1 resize-none bg-transparent text-[13px] text-txt placeholder:text-txt3 focus:outline-none disabled:opacity-50"
         />
@@ -56,7 +58,7 @@ export default function BottomInputBar({
           <button
             onClick={onStop}
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-rose/20 text-rose hover:bg-rose/30"
-            title="إيقاف"
+            title={t("stop")}
           >
             <Square size={13} fill="currentColor" />
           </button>
@@ -65,15 +67,13 @@ export default function BottomInputBar({
             onClick={handleSend}
             disabled={!text.trim() || disabled}
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-green/15 text-green hover:bg-green/25 disabled:opacity-30"
-            title="إرسال"
+            title={t("send")}
           >
             <Send size={13} className="flip-rtl" />
           </button>
         )}
       </div>
-      <p className="mt-1 text-center text-[10px] text-txt3">
-        mlag AI ممكن يغلط أحياناً — راجع المعلومات المهمة.
-      </p>
+      <p className="mt-1 text-center text-[10px] text-txt3">{t("disclaimer")}</p>
     </div>
   );
 }

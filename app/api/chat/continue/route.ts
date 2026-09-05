@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const sessionId = String(body?.sessionId || "");
   const messageId = String(body?.messageId || "");
+  const uiLanguage = typeof body?.uiLanguage === "string" ? body.uiLanguage.slice(0, 8) : null;
   if (!sessionId || !messageId) {
     return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
   }
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest) {
   `) as { role: string; content: string }[];
 
   const apiMessages: ApiMessage[] = [
-    { role: "system", content: buildSystemPrompt({ userName: user.displayName }) },
+    { role: "system", content: buildSystemPrompt({ userName: user.displayName, uiLanguage }) },
     ...history.slice(-10).map((m) => ({ role: m.role, content: m.content })),
     { role: "user", content: CONTINUE_INSTRUCTION },
   ];
@@ -130,11 +131,6 @@ export async function POST(req: NextRequest) {
         // تم الإيقاف من المستخدم أو خطأ اتصال
       } finally {
         req.signal.removeEventListener("abort", onAbort);
-        try {
-          streamController.close();
-        } catch {
-          // مقفولة بالفعل
-        }
 
         if (accumulatedContent || accumulatedReasoning) {
           const mergedContent = existing.content + accumulatedContent;
@@ -158,6 +154,15 @@ export async function POST(req: NextRequest) {
           } catch (e) {
             console.error("failed to persist continued message", e);
           }
+        }
+
+        // مهم: الحفظ في الداتابيز الأول، وبعدين إشارة [MLAG_SAVED] وقفل القناة
+        // — يمنع العميل يعمل refresh قبل الحفظ فيختفي الرد.
+        try {
+          streamController.enqueue(encoder.encode("data: [MLAG_SAVED]\n\n"));
+          streamController.close();
+        } catch {
+          // العميل قطع الاتصال أو القناة مقفولة بالفعل
         }
       }
     },

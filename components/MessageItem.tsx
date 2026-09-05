@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import {
   Check,
   Copy,
-  Lightbulb,
   MonitorPlay,
   Play,
   Sparkles,
@@ -16,6 +15,7 @@ import { extractProjectFiles, parseMessageContent } from "@/lib/parseContent";
 import { formatTime } from "@/lib/utils";
 import CodeBlock from "./CodeBlock";
 import ProjectFilesCard from "./ProjectFilesCard";
+import { useSettings } from "./SettingsContext";
 
 const PREVIEWABLE_EXTS = new Set(["html", "htm", "css", "js"]);
 
@@ -34,6 +34,7 @@ export default function MessageItem({
   continuationStreamingContent: string | null;
   onPreviewFiles: (files: ProjectFile[]) => void;
 }) {
+  const { t, showTime } = useSettings();
   const isUser = message.role === "user";
   const [reasoningOpen, setReasoningOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -81,7 +82,34 @@ export default function MessageItem({
             {message.tokensUsed > 0 && (
               <span className="text-[9px] text-green">⚡ {message.tokensUsed} tokens</span>
             )}
-            <span className="text-[9px] text-txt3">{formatTime(message.createdAt)}</span>
+            {showTime && <span className="text-[9px] text-txt3">{formatTime(message.createdAt)}</span>}
+          </div>
+        )}
+
+        {/* مؤشر التفكير — كلمة واحدة عارية فوق الفقاعة، من غير أي فقاعة حواليها */}
+        {!isUser && message.reasoning && (
+          <div className="mb-2">
+            <button
+              onClick={() => setReasoningOpen(!reasoningOpen)}
+              className="flex items-center gap-1 rounded px-0.5"
+              title={`${t("thinkShow")} • ${thinkingLabel}`}
+            >
+              <span
+                className={`mono text-[11px] font-bold text-amber transition-transform duration-200 ${
+                  reasoningOpen ? "rotate-90" : ""
+                }`}
+              >
+                {">"}
+              </span>
+              <span className="text-[11px] font-bold text-amber">{t("thinking")}</span>
+            </button>
+            {reasoningOpen && (
+              <div className="reasoning-box animate-fadeIn mt-1.5 max-h-[200px] w-[320px] max-w-full overflow-y-auto rounded-md border border-line2 bg-panel3 px-2.5 py-2">
+                <p className="whitespace-pre-wrap text-[11px] leading-5 text-txt2">
+                  {message.reasoning}
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -92,39 +120,12 @@ export default function MessageItem({
               : "rounded-tr-lg rounded-br-lg rounded-bl-sm border-line2 bg-panel2"
           }`}
         >
-          {!isUser && message.reasoning && (
-            <div className="mb-2">
-              <button
-                onClick={() => setReasoningOpen(!reasoningOpen)}
-                className="flex items-center gap-1.5 rounded-md border border-line2 bg-panel3 px-2 py-1 transition-colors hover:border-amber/50 hover:bg-amber/10"
-                title={reasoningOpen ? "اخفاء التفكير" : "اضغط تشوف التفكير"}
-              >
-                <span
-                  className={`mono text-[11px] font-bold text-amber transition-transform duration-200 ${
-                    reasoningOpen ? "rotate-90" : ""
-                  }`}
-                >
-                  {">"}
-                </span>
-                <Lightbulb size={12} className="text-amber" />
-                <span className="text-[10.5px] font-bold text-amber">{thinkingLabel}</span>
-              </button>
-              {reasoningOpen && (
-                <div className="reasoning-box animate-fadeIn mt-1.5 max-h-[200px] w-[320px] max-w-full overflow-y-auto rounded-md border border-line2 bg-panel3 px-2.5 py-2">
-                  <p className="whitespace-pre-wrap text-[11px] leading-5 text-txt2">
-                    {message.reasoning}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
           {canPreview && (
             <button
               onClick={() => onPreviewFiles(projectFiles)}
               className="mb-2 flex items-center gap-1.5 rounded-md border border-cyan/50 bg-cyan/10 px-2.5 py-1.5 text-[11.5px] font-medium text-cyan transition-colors hover:bg-cyan/15"
             >
-              <MonitorPlay size={13} /> معاينة الصفحة
+              <MonitorPlay size={13} /> {t("previewPage")}
             </button>
           )}
 
@@ -152,21 +153,21 @@ export default function MessageItem({
               {isContinuing ? (
                 <div className="flex items-center gap-2 text-[11.5px] text-txt2">
                   <span className="h-3 w-3 animate-spin rounded-full border-2 border-cyan border-t-transparent" />
-                  جاري المتابعة...
+                  {t("continuing")}
                 </div>
               ) : (
                 <button
                   onClick={onContinue}
                   className="flex items-center gap-1.5 rounded-md border border-cyan/50 bg-cyan/10 px-3 py-1.5 text-[11.5px] font-medium text-cyan hover:bg-cyan/15"
                 >
-                  <Play size={13} /> الرد اتقطع — دوس عشان يكمل
+                  <Play size={13} /> {t("continueBtn")}
                 </button>
               )}
             </div>
           )}
 
           <div className="mt-1 flex items-center justify-between">
-            {isUser ? (
+            {isUser && showTime ? (
               <span className="text-[10px] text-txt3">{formatTime(message.createdAt)}</span>
             ) : (
               <span />

@@ -12,7 +12,9 @@ import BottomInputBar from "./BottomInputBar";
 import AuthModal from "./AuthModal";
 import CodeRunnerModal from "./CodeRunnerModal";
 import PreviewModal from "./PreviewModal";
+import SettingsModal from "./SettingsModal";
 import Toast from "./Toast";
+import { useSettings } from "./SettingsContext";
 
 const PREVIEWABLE_EXTS = new Set(["html", "htm", "css", "js"]);
 
@@ -39,6 +41,7 @@ function isPreviewCommand(text: string): boolean {
 }
 
 export default function ChatShell() {
+  const { t, lang } = useSettings();
   const [authChecked, setAuthChecked] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -64,6 +67,7 @@ export default function ChatShell() {
 
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewFiles, setPreviewFiles] = useState<ProjectFile[]>([]);
+  const [showSettings, setShowSettings] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -178,9 +182,9 @@ export default function ChatShell() {
         setDrawerOpen(false);
       }
     } catch {
-      showToast("تعذر إنشاء محادثة جديدة");
+      showToast(t("toastNewChatFail"));
     }
-  }, []);
+  }, [t]);
 
   const handleSelectSession = (id: string) => {
     setCurrentSessionId(id);
@@ -195,7 +199,7 @@ export default function ChatShell() {
         setCurrentSessionId(list.length > 0 ? list[0].id : null);
       }
     } catch {
-      showToast("تعذر حذف المحادثة");
+      showToast(t("toastDeleteFail"));
     }
   };
 
@@ -206,7 +210,7 @@ export default function ChatShell() {
       setCurrentSessionId(null);
       setMessages([]);
     } catch {
-      showToast("تعذر مسح المحادثات");
+      showToast(t("toastClearFail"));
     }
   };
 
@@ -242,13 +246,13 @@ export default function ChatShell() {
           openPreviewWithFiles(files);
           return;
         }
-        showToast("مفيش كود صفحة اتبنى لسه عشان أعرضه — اطلب من mlag يبني صفحة الأول ✨");
+        showToast(t("toastNoPreview"));
         return;
       }
 
       const sessionId = await ensureSessionId();
       if (!sessionId) {
-        showToast("تعذر تجهيز المحادثة، حاول تاني");
+        showToast(t("toastSessionFail"));
         return;
       }
 
@@ -277,14 +281,14 @@ export default function ChatShell() {
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId, message: trimmed }),
+          body: JSON.stringify({ sessionId, message: trimmed, uiLanguage: lang }),
           signal: controller.signal,
         });
 
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
           setMessages((prev) => prev.filter((m) => m.id !== optimisticUser.id));
-          showToast(data.error || "حصل خطأ أثناء إرسال الرسالة");
+          showToast(data.error || t("toastSendFail"));
           return;
         }
 
@@ -298,24 +302,27 @@ export default function ChatShell() {
         });
       } catch (e: any) {
         if (e?.name !== "AbortError") {
-          showToast("انقطع الاتصال أثناء الرد");
+          showToast(t("toastDrop"));
         }
       } finally {
         abortRef.current = null;
         setIsGenerating(false);
         // لو الرد أنتج كود صفحة قابل للمعاينة — نبه المستخدم إنه يقدر يعاين قبل النشر
         if (hasPreviewableFiles(accContent)) {
-          showToast(
-            "خلصت الكود ✅ لو عايز تعاين الصفحة وتشوفها قبل ما تنشرها — اكتب «معاينة» في الشات أو دوس زر المعاينة 👁"
-          );
+          showToast(t("toastPreviewReady"));
         }
         setStreamingContent("");
         setStreamingReasoning("");
         await refreshMessages(sessionId);
         await refreshQuota();
+        // أمان إضافي ضد سباق الحفظ: تحديث تاني بعد لحظة — يضمن إن الرد ما يختفيش
+        // حتى لو السيرفر اتأخر شوية في تسجيل الرسالة في الداتابيز
+        setTimeout(() => {
+          void refreshMessages(sessionId);
+        }, 700);
       }
     },
-    [isGenerating, user, messages, ensureSessionId, refreshMessages, refreshQuota, openPreviewWithFiles]
+    [isGenerating, user, messages, lang, t, ensureSessionId, refreshMessages, refreshQuota, openPreviewWithFiles]
   );
 
   const continueMessage = useCallback(
@@ -332,13 +339,13 @@ export default function ChatShell() {
         const res = await fetch("/api/chat/continue", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: currentSessionId, messageId }),
+          body: JSON.stringify({ sessionId: currentSessionId, messageId, uiLanguage: lang }),
           signal: controller.signal,
         });
 
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          showToast(data.error || "تعذر متابعة الرد");
+          showToast(data.error || t("toastContinueFail"));
           return;
         }
 
@@ -351,22 +358,24 @@ export default function ChatShell() {
         });
       } catch (e: any) {
         if (e?.name !== "AbortError") {
-          showToast("انقطع الاتصال أثناء المتابعة");
+          showToast(t("toastContinueDrop"));
         }
       } finally {
         abortRef.current = null;
         setContinuingMessageId(null);
         if (hasPreviewableFiles(accContent)) {
-          showToast(
-            "خلصت الكود ✅ لو عايز تعاين الصفحة وتشوفها قبل ما تنشرها — اكتب «معاينة» في الشات أو دوس زر المعاينة 👁"
-          );
+          showToast(t("toastPreviewReady"));
         }
         setContinuationStreamingContent("");
         await refreshMessages(currentSessionId);
         await refreshQuota();
+        // أمان إضافي ضد سباق الحفظ — تحديث تاني بعد لحظة
+        setTimeout(() => {
+          void refreshMessages(currentSessionId);
+        }, 700);
       }
     },
-    [user, currentSessionId, continuingMessageId, refreshMessages, refreshQuota]
+    [user, currentSessionId, continuingMessageId, lang, t, refreshMessages, refreshQuota]
   );
 
   const stopGeneration = () => {
@@ -436,6 +445,10 @@ export default function ChatShell() {
           setShowAuthModal(true);
         }}
         onLogout={handleLogout}
+        onOpenSettings={() => {
+          setDrawerOpen(false);
+          setShowSettings(true);
+        }}
       />
 
       {showAuthModal && (
@@ -453,6 +466,8 @@ export default function ChatShell() {
       {previewOpen && (
         <PreviewModal files={previewFiles} onClose={() => setPreviewOpen(false)} />
       )}
+
+      {showSettings && <SettingsModal user={user} onClose={() => setShowSettings(false)} />}
 
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
     </div>
