@@ -3,19 +3,45 @@ export interface ProjectFile {
   content: string;
 }
 
-// ```lang path="relative/path"
+// ```lang path="relative/path"   (أو كتلة كود عادية من غير path — بتتحول لملف تلقائيًا)
 // ...content...
 // ```
-const FILE_BLOCK_REGEX = /```[a-zA-Z0-9_+\-]*\s+path="([^"]+)"\s*\n([\s\S]*?)```/g;
+const ANY_FENCE_REGEX = /```([a-zA-Z0-9_+\-]*)(?:[ \t]+path="([^"]*)")?[ \t]*\n([\s\S]*?)```/g;
 
-/** يستخرج كل الملفات اللي وصلت بصيغة path="..." من رد المساعد. */
+/** أسماء قاعدة ذكية حسب اللغة — عشان أي كود inline يتحول لملف باسم معقول. */
+const LANG_BASE: Record<string, string> = {
+  html: "index", htm: "index", css: "style", js: "script", javascript: "script",
+  jsx: "App", ts: "main", typescript: "main", tsx: "App", py: "main", python: "main",
+  java: "Main", kt: "Main", kotlin: "Main", c: "main", cpp: "main", "c++": "main",
+  cs: "Program", csharp: "Program", php: "index", go: "main", rs: "main", rust: "main",
+  rb: "main", ruby: "main", swift: "main", sh: "script", bash: "script", zsh: "script",
+  sql: "query", json: "data", xml: "data", yaml: "config", yml: "config",
+  md: "README", markdown: "README", txt: "file", text: "file",
+};
+
+function autoFileName(lang: string, used: Map<string, number>): string {
+  const l = (lang || "").toLowerCase();
+  const base = LANG_BASE[l] ?? "file";
+  const ext = l && /^[a-z0-9+]+$/.test(l) ? l : "txt";
+  const key = `${base}.${ext}`;
+  const n = used.get(key) ?? 0;
+  used.set(key, n + 1);
+  return n === 0 ? key : `${base}-${n + 1}.${ext}`;
+}
+
+/** يستخرج كل كتل الكود كملفات: اللي عليها path بياخده، واللي من غيره بيتسمى تلقائيًا.
+ * ده بيضمن إن أي كود يكتبه الموديل عمره ما يظهر كنص في الشات — دايمًا ملف. */
 export function extractProjectFiles(content: string): ProjectFile[] {
   const files: ProjectFile[] = [];
-  const regex = new RegExp(FILE_BLOCK_REGEX);
+  const used = new Map<string, number>();
+  const regex = new RegExp(ANY_FENCE_REGEX);
   let match: RegExpExecArray | null;
   while ((match = regex.exec(content)) !== null) {
-    const path = match[1].trim().replace(/^\//, "") || "file.txt";
-    const fileContent = match[2].replace(/\n+$/, "");
+    const lang = match[1] || "";
+    const explicit = (match[2] || "").trim();
+    const fileContent = match[3].replace(/\n+$/, "");
+    if (!fileContent.trim()) continue;
+    const path = explicit ? explicit.replace(/^\//, "") || "file.txt" : autoFileName(lang, used);
     files.push({ path, content: fileContent });
   }
   return files;
@@ -68,24 +94,27 @@ export type StreamingSegment =
   | { type: "prose"; text: string }
   | { type: "fileblock"; language: string; path: string; isComplete: boolean };
 
-/** أثناء البث الحي: يظهر ملفات path="..." كـ "جاري كتابة ملف" بدل نص خام،
- * ويترك باقي الكلام كنص عادي — بالظبط زي parseStreamingContent في التطبيق الأصلي. */
+/** أثناء البث الحي: أي كتلة كود (بـ path أو من غيره) بتظهر كـ "جاري بناء ملف" في الخلفية
+ * بدل نص خام — الكود عمره ما يترسم في الشات، بالظبط زي Claude وهو بيتبني في بيئته. */
 export function parseStreamingContent(content: string): StreamingSegment[] {
   const segments: StreamingSegment[] = [];
-  const regex = /```([a-zA-Z0-9_+\-]*)\s+path="([^"]+)"\s*\n([\s\S]*?)(```|$)/g;
+  const used = new Map<string, number>();
+  const regex = /```([a-zA-Z0-9_+\-]*)(?:[ \t]+path="([^"]*)")?[ \t]*\n([\s\S]*?)(```|$)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = regex.exec(content)) !== null) {
-    const [full, lang, path, , closer] = match;
+    const [full, lang, explicitPath, body, closer] = match;
     if (match.index > lastIndex) {
       const proseText = content.slice(lastIndex, match.index);
       if (proseText.trim()) segments.push({ type: "prose", text: proseText });
     }
+    const explicit = (explicitPath || "").trim();
+    const path = explicit ? explicit.replace(/^\//, "") || "file.txt" : autoFileName(lang || "", used);
     segments.push({
       type: "fileblock",
       language: lang || "text",
       path,
-      isComplete: closer === "```",
+      isComplete: closer === "```" && body.trim().length > 0,
     });
     lastIndex = match.index + full.length;
   }

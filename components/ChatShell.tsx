@@ -82,6 +82,16 @@ export default function ChatShell() {
     setPanelOpen(true);
   }, []);
 
+  // زي Claude بالظبط: أول ما أي ملف يبدأ يتكتب أثناء البث — افتح اللوحة فورًا على الديسكتوب
+  // عشان المستخدم يشوف البناء حاصل في الخلفية مش نص خام في الشات
+  useEffect(() => {
+    if (!isGenerating || !streamingContent) return;
+    if (panelOpen) return;
+    if (typeof window !== "undefined" && window.innerWidth < 1024) return;
+    const files = extractProjectFiles(streamingContent);
+    if (files.length > 0) openPanelWithFiles(files);
+  }, [streamingContent, isGenerating, panelOpen, openPanelWithFiles]);
+
   const refreshQuota = useCallback(async () => {
     try {
       const res = await fetch("/api/quota");
@@ -410,6 +420,10 @@ export default function ChatShell() {
 
   const remainingTokens = quota ? Math.max(quota.total - quota.used, 0) : null;
 
+  // أثناء البث: نسخة لايف من ملفات الرد الجاري — اللوحة بتتحدث لحظة بلحظة زي Claude
+  const liveStreamFiles =
+    isGenerating && streamingContent ? extractProjectFiles(streamingContent) : null;
+
   return (
     <div className="flex h-[100dvh] overflow-hidden">
       {/* القايمة الجانبية: أول عنصر في الصف — بتفضل على الشمال في الإنجليزي،
@@ -467,9 +481,12 @@ export default function ChatShell() {
       </div>
 
       {/* لوحة الأرتيفاكت الجانبية — زي Claude: بتقسم الشاشة جنب الشات على الديسكتوب،
-          وبتاخد الشاشة كلها overlay على الموبايل. بتقفل برجع الشات ملء العرض. */}
+          وبتاخد الشاشة كلها overlay على الموبايل. أثناء البث بتاخد نسخة لايف من الملفات. */}
       {panelOpen && panelFiles.length > 0 && (
-        <ArtifactPanel files={panelFiles} onClose={() => setPanelOpen(false)} />
+        <ArtifactPanel
+          files={liveStreamFiles && liveStreamFiles.length > 0 ? liveStreamFiles : panelFiles}
+          onClose={() => setPanelOpen(false)}
+        />
       )}
 
       {showAuthModal && (

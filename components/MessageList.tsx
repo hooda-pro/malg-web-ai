@@ -131,6 +131,16 @@ export default function MessageList({
               </div>
             )}
 
+            {/* شريط البناء — زي Claude: الموديل بيبني في بيئته والكود مش بيتكتب في الشات */}
+            {streamSegments.some((s) => s.type === "fileblock") && (
+              <div className="mb-2 flex items-center gap-2 rounded-md border border-green/30 bg-green/5 px-2.5 py-1.5">
+                <span className="mono text-[10.5px] font-bold text-green" dir="ltr">
+                  $ mlag build --live
+                </span>
+                <span className="shimmer-text text-[11px] text-txt2">{t("buildingFiles")}</span>
+              </div>
+            )}
+
             {/* الفقاعة نفسها مبتظهرش خالص لحد ما يوصل كلام فعلي — مفيش فقاعة فاضية */}
             {(streamSegments.length > 0 || streamingContent) && (
               <div className="rounded-lg rounded-bl-sm border border-line2 bg-panel2 px-3 py-2">
