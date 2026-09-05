@@ -49,8 +49,8 @@ export default function MessageItem({
 
   const thinkingLabel = useMemo(() => {
     const secs = (message.thinkingDurationMs ?? 0) / 1000;
-    return secs >= 1 ? `فكّر لمدة ${Math.round(secs)}ث` : "التفكير";
-  }, [message.thinkingDurationMs]);
+    return secs >= 1 ? t("thoughtFor", { n: Math.round(secs) }) : t("thinking");
+  }, [message.thinkingDurationMs, t]);
 
   const handleCopy = async () => {
     try {

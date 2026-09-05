@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, Download, FileCode2, FolderArchive } from "luci
 import type { ProjectFile } from "@/lib/parseContent";
 import { sanitizeFileName } from "@/lib/utils";
 import CodeBlock from "./CodeBlock";
+import { useSettings } from "./SettingsContext";
 
 function downloadTextFile(name: string, content: string) {
   const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
@@ -46,6 +47,7 @@ export default function ProjectFilesCard({
 }) {
   const [openPath, setOpenPath] = useState<string | null>(files.length === 1 ? files[0].path : null);
   const isProject = files.length >= 2;
+  const { t } = useSettings();
 
   const langFromPath = (path: string) => path.split(".").pop() || "text";
 
@@ -55,7 +57,7 @@ export default function ProjectFilesCard({
         <div className="flex items-center gap-2 text-txt">
           {isProject ? <FolderArchive size={14} className="text-cyan" /> : <FileCode2 size={14} className="text-cyan" />}
           <span className="mono text-xs">
-            {isProject ? `مشروع (${files.length} ملفات)` : "ملف جاهز"}
+            {isProject ? t("filesCardProject", { n: files.length }) : t("filesCardFile")}
           </span>
         </div>
         {isProject && (
@@ -63,7 +65,7 @@ export default function ProjectFilesCard({
             onClick={() => downloadZip(files, `mlag-project-${messageId.slice(0, 6)}.zip`)}
             className="flex items-center gap-1 rounded bg-green/10 px-2 py-1 text-[11px] text-green hover:bg-green/20"
           >
-            <Download size={12} /> تحميل الكل (zip)
+            <Download size={12} /> {t("filesCardDownloadAll")}
           </button>
         )}
       </div>

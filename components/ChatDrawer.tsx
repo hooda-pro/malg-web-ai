@@ -32,7 +32,7 @@ export default function ChatDrawer({
   onLogout: () => void;
   onOpenSettings: () => void;
 }) {
-  const { t } = useSettings();
+  const { t, dir } = useSettings();
 
   return (
     <>
@@ -43,9 +43,11 @@ export default function ChatDrawer({
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[82%] max-w-[300px] shrink-0 flex-col border-r border-line bg-panel transition-transform duration-200 lg:static lg:z-auto lg:w-[264px] lg:max-w-none lg:translate-x-0 ${
-          open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        }`}
+        className={`fixed inset-y-0 z-50 flex w-[82%] max-w-[300px] shrink-0 flex-col border-line bg-panel transition-transform duration-200 start-0 lg:static lg:z-auto lg:w-[264px] lg:max-w-none lg:translate-x-0 ${
+          open
+            ? "translate-x-0"
+            : "-translate-x-full rtl:translate-x-full lg:translate-x-0 rtl:lg:translate-x-0"
+        } ${dir === "rtl" ? "border-s" : "border-e"}`}
       >
         <div className="flex items-center justify-between border-b border-line px-3 py-3">
           <span className="mono text-xs font-bold text-green">$ mlag --sessions</span>

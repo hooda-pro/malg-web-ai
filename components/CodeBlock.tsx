@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Check, Copy, Play, Terminal } from "lucide-react";
 import { highlightCode } from "@/lib/highlight";
+import { useSettings } from "./SettingsContext";
 
 const RUNNABLE_LANGS = new Set(["html", "htm", "css", "js", "javascript", "jsx"]);
 
@@ -15,6 +16,7 @@ export default function CodeBlock({
   code: string;
   onRun?: (code: string, language: string) => void;
 }) {
+  const { t } = useSettings();
   const [copied, setCopied] = useState(false);
   const html = useMemo(() => highlightCode(code), [code]);
   const canRun = RUNNABLE_LANGS.has((language || "").toLowerCase()) && !!onRun;
@@ -42,7 +44,7 @@ export default function CodeBlock({
               onClick={() => onRun?.(code, language)}
               className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-green hover:bg-green/10"
             >
-              <Play size={12} /> تشغيل
+              <Play size={12} /> {t("runnerRun")}
             </button>
           )}
           <button
@@ -50,7 +52,7 @@ export default function CodeBlock({
             className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-txt2 hover:bg-white/5"
           >
             {copied ? <Check size={12} className="text-green" /> : <Copy size={12} />}
-            {copied ? "اتنسخ" : "نسخ"}
+            {copied ? t("copied") : t("copy")}
           </button>
         </div>
       </div>

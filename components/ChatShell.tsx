@@ -11,7 +11,7 @@ import MessageList from "./MessageList";
 import BottomInputBar from "./BottomInputBar";
 import AuthModal from "./AuthModal";
 import CodeRunnerModal from "./CodeRunnerModal";
-import PreviewModal from "./PreviewModal";
+import ArtifactPanel from "./ArtifactPanel";
 import SettingsModal from "./SettingsModal";
 import Toast from "./Toast";
 import { useSettings } from "./SettingsContext";
@@ -65,8 +65,8 @@ export default function ChatShell() {
   const [runnerCode, setRunnerCode] = useState<string | undefined>(undefined);
   const [runnerLang, setRunnerLang] = useState<string | undefined>(undefined);
 
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewFiles, setPreviewFiles] = useState<ProjectFile[]>([]);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelFiles, setPanelFiles] = useState<ProjectFile[]>([]);
   const [showSettings, setShowSettings] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
@@ -76,10 +76,10 @@ export default function ChatShell() {
     setTimeout(() => setToast((t) => (t === msg ? null : t)), 4500);
   };
 
-  const openPreviewWithFiles = useCallback((files: ProjectFile[]) => {
+  const openPanelWithFiles = useCallback((files: ProjectFile[]) => {
     if (!files.length) return;
-    setPreviewFiles(files);
-    setPreviewOpen(true);
+    setPanelFiles(files);
+    setPanelOpen(true);
   }, []);
 
   const refreshQuota = useCallback(async () => {
@@ -247,7 +247,7 @@ export default function ChatShell() {
         const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
         const files = lastAssistant ? extractProjectFiles(lastAssistant.content) : [];
         if (files.length > 0) {
-          openPreviewWithFiles(files);
+          openPanelWithFiles(files);
           return;
         }
         showToast(t("toastNoPreview"));
@@ -312,8 +312,13 @@ export default function ChatShell() {
         abortRef.current = null;
         setIsGenerating(false);
         // لو الرد أنتج كود صفحة قابل للمعاينة — نبه المستخدم إنه يقدر يعاين قبل النشر
-        if (hasPreviewableFiles(accContent)) {
-          showToast(t("toastPreviewReady"));
+        const producedFiles = accContent ? extractProjectFiles(accContent) : [];
+        if (producedFiles.length > 0) {
+          if (window.innerWidth >= 1024) {
+            openPanelWithFiles(producedFiles);
+          } else if (hasPreviewableFiles(accContent)) {
+            showToast(t("toastPreviewReady"));
+          }
         }
         setStreamingContent("");
         setStreamingReasoning("");
@@ -326,7 +331,7 @@ export default function ChatShell() {
         }, 700);
       }
     },
-    [isGenerating, user, messages, lang, t, ensureSessionId, refreshMessages, refreshQuota, openPreviewWithFiles]
+    [isGenerating, user, messages, lang, t, ensureSessionId, refreshMessages, refreshQuota, openPanelWithFiles]
   );
 
   const continueMessage = useCallback(
@@ -367,8 +372,13 @@ export default function ChatShell() {
       } finally {
         abortRef.current = null;
         setContinuingMessageId(null);
-        if (hasPreviewableFiles(accContent)) {
-          showToast(t("toastPreviewReady"));
+        const producedFiles = accContent ? extractProjectFiles(accContent) : [];
+        if (producedFiles.length > 0) {
+          if (window.innerWidth >= 1024) {
+            openPanelWithFiles(producedFiles);
+          } else if (hasPreviewableFiles(accContent)) {
+            showToast(t("toastPreviewReady"));
+          }
         }
         setContinuationStreamingContent("");
         await refreshMessages(currentSessionId);
@@ -379,7 +389,7 @@ export default function ChatShell() {
         }, 700);
       }
     },
-    [user, currentSessionId, continuingMessageId, lang, t, refreshMessages, refreshQuota]
+    [user, currentSessionId, continuingMessageId, lang, t, refreshMessages, refreshQuota, openPanelWithFiles]
   );
 
   const stopGeneration = () => {
@@ -402,38 +412,8 @@ export default function ChatShell() {
 
   return (
     <div className="flex h-[100dvh] overflow-hidden">
-      {/* العمود الرئيسي: الشات — بياخد باقي العرض جنب القايمة الجانبية الثابتة */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar
-          onToggleDrawer={() => setDrawerOpen(true)}
-          remainingTokens={remainingTokens}
-          onOpenRunner={openRunnerDemo}
-        />
-
-        <MessageList
-          messages={messages}
-          isGenerating={isGenerating}
-          streamingContent={streamingContent}
-          streamingReasoning={streamingReasoning}
-          totalTokens={quota?.total ?? 500000}
-          onPromptSelected={(p) => sendMessage(p)}
-          onOpenRunner={openRunnerDemo}
-          onRunCode={openRunnerWithCode}
-          onContinue={continueMessage}
-          continuingMessageId={continuingMessageId}
-          continuationStreamingContent={continuationStreamingContent}
-          onPreviewFiles={openPreviewWithFiles}
-        />
-
-        <BottomInputBar
-          isGenerating={isGenerating}
-          onSend={sendMessage}
-          onStop={stopGeneration}
-          disabled={!authChecked}
-        />
-      </div>
-
-      {/* القايمة الجانبية: ثابتة على الشمال في شاشة الكمبيوتر، ودرج منزلق في الموبايل */}
+      {/* القايمة الجانبية: أول عنصر في الصف — بتفضل على الشمال في الإنجليزي،
+          وبتتنقل على اليمين تلقائيًا في العربي (لأن الـ flex بيقلب مع dir=rtl) */}
       <ChatDrawer
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
@@ -455,6 +435,43 @@ export default function ChatShell() {
         }}
       />
 
+      {/* العمود الرئيسي: الشات — بياخد باقي العرض جنب القايمة الجانبية ولوحة الأرتيفاكت */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <TopBar
+          onToggleDrawer={() => setDrawerOpen(true)}
+          remainingTokens={remainingTokens}
+          onOpenRunner={openRunnerDemo}
+        />
+
+        <MessageList
+          messages={messages}
+          isGenerating={isGenerating}
+          streamingContent={streamingContent}
+          streamingReasoning={streamingReasoning}
+          totalTokens={quota?.total ?? 500000}
+          onPromptSelected={(p) => sendMessage(p)}
+          onOpenRunner={openRunnerDemo}
+          onRunCode={openRunnerWithCode}
+          onContinue={continueMessage}
+          continuingMessageId={continuingMessageId}
+          continuationStreamingContent={continuationStreamingContent}
+          onPreviewFiles={openPanelWithFiles}
+        />
+
+        <BottomInputBar
+          isGenerating={isGenerating}
+          onSend={sendMessage}
+          onStop={stopGeneration}
+          disabled={!authChecked}
+        />
+      </div>
+
+      {/* لوحة الأرتيفاكت الجانبية — زي Claude: بتقسم الشاشة جنب الشات على الديسكتوب،
+          وبتاخد الشاشة كلها overlay على الموبايل. بتقفل برجع الشات ملء العرض. */}
+      {panelOpen && panelFiles.length > 0 && (
+        <ArtifactPanel files={panelFiles} onClose={() => setPanelOpen(false)} />
+      )}
+
       {showAuthModal && (
         <AuthModal onClose={() => setShowAuthModal(false)} onAuthenticated={handleAuthenticated} />
       )}
@@ -465,10 +482,6 @@ export default function ChatShell() {
           initialCode={runnerCode}
           initialLanguage={runnerLang}
         />
-      )}
-
-      {previewOpen && (
-        <PreviewModal files={previewFiles} onClose={() => setPreviewOpen(false)} />
       )}
 
       {showSettings && (
