@@ -27,6 +27,12 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+    if (name.length > 40) {
+      return NextResponse.json(
+        { error: "الاسم طويل جداً — 40 حرف كحد أقصى" },
+        { status: 400 }
+      );
+    }
 
     await ensureSchema();
 

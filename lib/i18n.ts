@@ -86,6 +86,11 @@ const ar: Dict = {
   langEs: "Español",
   topbarDrawer: "القايمة الجانبية",
   topbarRunner: "بيئة تشغيل الكود",
+  editName: "اسمك",
+  editNameHint: "النموذج هيناديك بالاسم ده",
+  save: "حفظ",
+  saving: "جاري الحفظ...",
+  nameSaved: "اتحفظ ✓",
 };
 
 const en: Dict = {
@@ -160,6 +165,11 @@ const en: Dict = {
   langEs: "Español",
   topbarDrawer: "Sidebar",
   topbarRunner: "Code runner",
+  editName: "Your name",
+  editNameHint: "The model will address you by this name",
+  save: "Save",
+  saving: "Saving...",
+  nameSaved: "Saved ✓",
 };
 
 const fr: Dict = {
@@ -234,6 +244,11 @@ const fr: Dict = {
   langEs: "Español",
   topbarDrawer: "Barre latérale",
   topbarRunner: "Exécuteur de code",
+  editName: "Votre nom",
+  editNameHint: "Le modèle s'adressera à vous avec ce nom",
+  save: "Enregistrer",
+  saving: "Enregistrement...",
+  nameSaved: "Enregistré ✓",
 };
 
 const es: Dict = {
@@ -308,6 +323,11 @@ const es: Dict = {
   langEs: "Español",
   topbarDrawer: "Barra lateral",
   topbarRunner: "Ejecutor de código",
+  editName: "Tu nombre",
+  editNameHint: "El modelo se dirigirá a ti con este nombre",
+  save: "Guardar",
+  saving: "Guardando...",
+  nameSaved: "Guardado ✓",
 };
 
 export const DICT: Record<Lang, Dict> = { ar, en, fr, es };

@@ -1,6 +1,7 @@
 "use client";
 
-import { Check, Settings as SettingsIcon, X } from "lucide-react";
+import { useState } from "react";
+import { Check, RefreshCw, Settings as SettingsIcon, X } from "lucide-react";
 import type { SessionUser } from "@/lib/types";
 import { LANGUAGES, type Lang } from "@/lib/i18n";
 import { useSettings } from "./SettingsContext";
@@ -25,11 +26,49 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: (v: boolean) => void 
 export default function SettingsModal({
   user,
   onClose,
+  onNameUpdated,
 }: {
   user: SessionUser | null;
   onClose: () => void;
+  onNameUpdated: (newName: string) => void;
 }) {
   const { t, lang, animations, showTime, setLang, setAnimations, setShowTime } = useSettings();
+  const [nameDraft, setNameDraft] = useState(user?.displayName ?? "");
+  const [nameStatus, setNameStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [nameError, setNameError] = useState<string | null>(null);
+
+  const saveName = async () => {
+    if (!user) return;
+    const newName = nameDraft.trim();
+    if (!newName) {
+      setNameError(t("errName"));
+      return;
+    }
+    if (newName === user.displayName) {
+      return;
+    }
+    setNameStatus("saving");
+    setNameError(null);
+    try {
+      const res = await fetch("/api/auth/update-name", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setNameError(data.error || t("errGeneric"));
+        setNameStatus("idle");
+        return;
+      }
+      setNameStatus("saved");
+      onNameUpdated(data.user.displayName);
+      setTimeout(() => setNameStatus("idle"), 2500);
+    } catch {
+      setNameError(t("errConn"));
+      setNameStatus("idle");
+    }
+  };
 
   return (
     <div className="animate-fadeIn fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
@@ -49,17 +88,64 @@ export default function SettingsModal({
         </div>
 
         <div className="px-4 py-4">
-          {/* الحساب */}
+          {/* الحساب + تغيير الاسم */}
           {user && (
-            <div className="mb-4 flex items-center gap-2 rounded-md border border-line2 bg-panel2 px-2.5 py-2">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-green/40 bg-green/10">
-                <span className="mono text-[12px] text-green">{user.displayName[0]?.toUpperCase()}</span>
+            <div className="mb-4 rounded-md border border-line2 bg-panel2 px-2.5 py-2.5">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-green/40 bg-green/10">
+                  <span className="mono text-[12px] text-green">
+                    {user.displayName[0]?.toUpperCase()}
+                  </span>
+                </div>
+                <div className="min-w-0 overflow-hidden">
+                  <p className="truncate text-[12.5px] font-medium text-txt">{user.displayName}</p>
+                  <p className="truncate text-[10.5px] text-txt3">{user.email}</p>
+                </div>
+                <SettingsIcon size={14} className="shrink-0 text-txt3" />
               </div>
-              <div className="min-w-0 overflow-hidden">
-                <p className="truncate text-[12.5px] font-medium text-txt">{user.displayName}</p>
-                <p className="truncate text-[10.5px] text-txt3">{user.email}</p>
+
+              {/* تغيير الاسم */}
+              <div className="mt-2.5 border-t border-line pt-2.5">
+                <p className="mb-1.5 text-[10.5px] font-bold text-txt3">
+                  {t("editName")} — {t("editNameHint")}
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    value={nameDraft}
+                    onChange={(e) => {
+                      setNameDraft(e.target.value);
+                      setNameStatus("idle");
+                      setNameError(null);
+                    }}
+                    onKeyDown={(e) => e.key === "Enter" && saveName()}
+                    placeholder={t("phName")}
+                    maxLength={40}
+                    className="min-w-0 flex-1 rounded border border-line2 bg-panel px-2 py-1.5 text-[12px] text-txt placeholder:text-txt3 focus:border-green/50 focus:outline-none"
+                  />
+                  <button
+                    onClick={saveName}
+                    disabled={
+                      nameStatus === "saving" ||
+                      !nameDraft.trim() ||
+                      nameDraft.trim() === user.displayName
+                    }
+                    className="flex shrink-0 items-center gap-1 rounded bg-green/15 px-2.5 py-1.5 text-[11.5px] font-bold text-green transition-colors hover:bg-green/25 disabled:opacity-40"
+                  >
+                    {nameStatus === "saving" ? (
+                      <>
+                        <RefreshCw size={11} className="animate-spin" /> {t("saving")}
+                      </>
+                    ) : nameStatus === "saved" ? (
+                      <>
+                        <Check size={11} /> {t("nameSaved")}
+                      </>
+                    ) : (
+                      t("save")
+                    )}
+                  </button>
+                </div>
+                {nameError && <p className="mt-1.5 text-[10.5px] text-rose">{nameError}</p>}
               </div>
-              <SettingsIcon size={14} className="shrink-0 text-txt3" />
             </div>
           )}
 

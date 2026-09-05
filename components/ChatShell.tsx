@@ -229,6 +229,10 @@ export default function ChatShell() {
     setShowAuthModal(false);
   };
 
+  const handleNameUpdated = (newName: string) => {
+    setUser((u) => (u ? { ...u, displayName: newName } : u));
+  };
+
   const sendMessage = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
@@ -467,7 +471,13 @@ export default function ChatShell() {
         <PreviewModal files={previewFiles} onClose={() => setPreviewOpen(false)} />
       )}
 
-      {showSettings && <SettingsModal user={user} onClose={() => setShowSettings(false)} />}
+      {showSettings && (
+        <SettingsModal
+          user={user}
+          onClose={() => setShowSettings(false)}
+          onNameUpdated={handleNameUpdated}
+        />
+      )}
 
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
     </div>
