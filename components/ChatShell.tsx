@@ -1,0 +1,383 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { ChatMessage, ChatSession, SessionUser } from "@/lib/types";
+import { consumeSSEStream } from "@/lib/streamClient";
+import TopBar from "./TopBar";
+import ChatDrawer from "./ChatDrawer";
+import MessageList from "./MessageList";
+import BottomInputBar from "./BottomInputBar";
+import AuthModal from "./AuthModal";
+import CodeRunnerModal from "./CodeRunnerModal";
+import Toast from "./Toast";
+
+export default function ChatShell() {
+  const [authChecked, setAuthChecked] = useState(false);
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [quota, setQuota] = useState<{ total: number; used: number } | null>(null);
+
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [streamingContent, setStreamingContent] = useState("");
+  const [streamingReasoning, setStreamingReasoning] = useState("");
+
+  const [continuingMessageId, setContinuingMessageId] = useState<string | null>(null);
+  const [continuationStreamingContent, setContinuationStreamingContent] = useState("");
+
+  const [runnerOpen, setRunnerOpen] = useState(false);
+  const [runnerCode, setRunnerCode] = useState<string | undefined>(undefined);
+  const [runnerLang, setRunnerLang] = useState<string | undefined>(undefined);
+
+  const abortRef = useRef<AbortController | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast((t) => (t === msg ? null : t)), 4500);
+  };
+
+  const refreshQuota = useCallback(async () => {
+    try {
+      const res = await fetch("/api/quota");
+      const data = await res.json();
+      if (data.quota) {
+        setQuota({ total: data.quota.totalAllocatedTokens, used: data.quota.usedTokens });
+      } else {
+        setQuota(null);
+      }
+    } catch {
+      // تجاهل
+    }
+  }, []);
+
+  const refreshMessages = useCallback(async (sessionId: string) => {
+    try {
+      const res = await fetch(`/api/messages/${sessionId}`);
+      const data = await res.json();
+      setMessages(data.messages || []);
+    } catch {
+      // تجاهل
+    }
+  }, []);
+
+  const refreshSessions = useCallback(async (): Promise<ChatSession[]> => {
+    try {
+      const res = await fetch("/api/sessions");
+      const data = await res.json();
+      const list: ChatSession[] = data.sessions || [];
+      setSessions(list);
+      return list;
+    } catch {
+      return [];
+    }
+  }, []);
+
+  // تحميل أولي: اليوزر ثم الجلسات
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/me");
+        const data = await res.json();
+        setUser(data.user || null);
+        if (!data.user) setShowAuthModal(true);
+      } finally {
+        setAuthChecked(true);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!authChecked) return;
+    if (!user) {
+      setSessions([]);
+      setCurrentSessionId(null);
+      setMessages([]);
+      setQuota(null);
+      return;
+    }
+    (async () => {
+      const list = await refreshSessions();
+      if (list.length > 0) {
+        setCurrentSessionId(list[0].id);
+      }
+      await refreshQuota();
+    })();
+  }, [authChecked, user, refreshSessions, refreshQuota]);
+
+  useEffect(() => {
+    if (currentSessionId) refreshMessages(currentSessionId);
+    else setMessages([]);
+  }, [currentSessionId, refreshMessages]);
+
+  const ensureSessionId = useCallback(async (): Promise<string | null> => {
+    if (currentSessionId) return currentSessionId;
+    try {
+      const res = await fetch("/api/sessions", { method: "POST" });
+      const data = await res.json();
+      if (data.session) {
+        setSessions((prev) => [data.session, ...prev]);
+        setCurrentSessionId(data.session.id);
+        return data.session.id;
+      }
+    } catch {
+      // تجاهل
+    }
+    return null;
+  }, [currentSessionId]);
+
+  const handleNewChat = useCallback(async () => {
+    try {
+      const res = await fetch("/api/sessions", { method: "POST" });
+      const data = await res.json();
+      if (data.session) {
+        setSessions((prev) => [data.session, ...prev]);
+        setCurrentSessionId(data.session.id);
+        setMessages([]);
+        setDrawerOpen(false);
+      }
+    } catch {
+      showToast("تعذر إنشاء محادثة جديدة");
+    }
+  }, []);
+
+  const handleSelectSession = (id: string) => {
+    setCurrentSessionId(id);
+    setDrawerOpen(false);
+  };
+
+  const handleDeleteSession = async (id: string) => {
+    try {
+      await fetch(`/api/sessions/${id}`, { method: "DELETE" });
+      const list = await refreshSessions();
+      if (currentSessionId === id) {
+        setCurrentSessionId(list.length > 0 ? list[0].id : null);
+      }
+    } catch {
+      showToast("تعذر حذف المحادثة");
+    }
+  };
+
+  const handleClearAll = async () => {
+    try {
+      await fetch("/api/sessions/clear", { method: "POST" });
+      setSessions([]);
+      setCurrentSessionId(null);
+      setMessages([]);
+    } catch {
+      showToast("تعذر مسح المحادثات");
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      setUser(null);
+      setDrawerOpen(false);
+      setShowAuthModal(true);
+    }
+  };
+
+  const handleAuthenticated = (u: SessionUser) => {
+    setUser(u);
+    setShowAuthModal(false);
+  };
+
+  const sendMessage = useCallback(
+    async (text: string) => {
+      if (!text.trim() || isGenerating) return;
+      if (!user) {
+        setShowAuthModal(true);
+        return;
+      }
+
+      const sessionId = await ensureSessionId();
+      if (!sessionId) {
+        showToast("تعذر تجهيز المحادثة، حاول تاني");
+        return;
+      }
+
+      const optimisticUser: ChatMessage = {
+        id: `tmp-${Date.now()}`,
+        sessionId,
+        role: "user",
+        content: text,
+        reasoning: null,
+        thinkingDurationMs: null,
+        isTruncated: false,
+        tokensUsed: 0,
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, optimisticUser]);
+
+      setIsGenerating(true);
+      setStreamingContent("");
+      setStreamingReasoning("");
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId, message: text }),
+          signal: controller.signal,
+        });
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setMessages((prev) => prev.filter((m) => m.id !== optimisticUser.id));
+          showToast(data.error || "حصل خطأ أثناء إرسال الرسالة");
+          return;
+        }
+
+        const reader = res.body!.getReader();
+        await consumeSSEStream(reader, {
+          onContent: (t) => setStreamingContent((prev) => prev + t),
+          onReasoning: (t) => setStreamingReasoning((prev) => prev + t),
+        });
+      } catch (e: any) {
+        if (e?.name !== "AbortError") {
+          showToast("انقطع الاتصال أثناء الرد");
+        }
+      } finally {
+        abortRef.current = null;
+        setIsGenerating(false);
+        setStreamingContent("");
+        setStreamingReasoning("");
+        await refreshMessages(sessionId);
+        await refreshQuota();
+      }
+    },
+    [isGenerating, user, ensureSessionId, refreshMessages, refreshQuota]
+  );
+
+  const continueMessage = useCallback(
+    async (messageId: string) => {
+      if (!user || !currentSessionId || continuingMessageId) return;
+      setContinuingMessageId(messageId);
+      setContinuationStreamingContent("");
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      try {
+        const res = await fetch("/api/chat/continue", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: currentSessionId, messageId }),
+          signal: controller.signal,
+        });
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          showToast(data.error || "تعذر متابعة الرد");
+          return;
+        }
+
+        const reader = res.body!.getReader();
+        await consumeSSEStream(reader, {
+          onContent: (t) => setContinuationStreamingContent((prev) => prev + t),
+        });
+      } catch (e: any) {
+        if (e?.name !== "AbortError") {
+          showToast("انقطع الاتصال أثناء المتابعة");
+        }
+      } finally {
+        abortRef.current = null;
+        setContinuingMessageId(null);
+        setContinuationStreamingContent("");
+        await refreshMessages(currentSessionId);
+        await refreshQuota();
+      }
+    },
+    [user, currentSessionId, continuingMessageId, refreshMessages, refreshQuota]
+  );
+
+  const stopGeneration = () => {
+    abortRef.current?.abort();
+  };
+
+  const openRunnerDemo = () => {
+    setRunnerCode(undefined);
+    setRunnerLang(undefined);
+    setRunnerOpen(true);
+  };
+
+  const openRunnerWithCode = (code: string, language: string) => {
+    setRunnerCode(code);
+    setRunnerLang(language);
+    setRunnerOpen(true);
+  };
+
+  const remainingTokens = quota ? Math.max(quota.total - quota.used, 0) : null;
+
+  return (
+    <div className="flex h-[100dvh] flex-col overflow-hidden">
+      <TopBar
+        onToggleDrawer={() => setDrawerOpen(true)}
+        remainingTokens={remainingTokens}
+        onOpenRunner={openRunnerDemo}
+      />
+
+      <MessageList
+        messages={messages}
+        isGenerating={isGenerating}
+        streamingContent={streamingContent}
+        streamingReasoning={streamingReasoning}
+        totalTokens={quota?.total ?? 500000}
+        onPromptSelected={(p) => sendMessage(p)}
+        onOpenRunner={openRunnerDemo}
+        onRunCode={openRunnerWithCode}
+        onContinue={continueMessage}
+        continuingMessageId={continuingMessageId}
+        continuationStreamingContent={continuationStreamingContent}
+      />
+
+      <BottomInputBar
+        isGenerating={isGenerating}
+        onSend={sendMessage}
+        onStop={stopGeneration}
+        disabled={!authChecked}
+      />
+
+      <ChatDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        sessions={sessions}
+        currentSessionId={currentSessionId}
+        onSelectSession={handleSelectSession}
+        onNewChat={handleNewChat}
+        onDeleteSession={handleDeleteSession}
+        onClearAll={handleClearAll}
+        user={user}
+        onOpenAuth={() => {
+          setDrawerOpen(false);
+          setShowAuthModal(true);
+        }}
+        onLogout={handleLogout}
+      />
+
+      {showAuthModal && (
+        <AuthModal onClose={() => setShowAuthModal(false)} onAuthenticated={handleAuthenticated} />
+      )}
+
+      {runnerOpen && (
+        <CodeRunnerModal
+          onClose={() => setRunnerOpen(false)}
+          initialCode={runnerCode}
+          initialLanguage={runnerLang}
+        />
+      )}
+
+      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+    </div>
+  );
+}

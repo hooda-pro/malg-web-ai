@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html, body {
+  background-color: #050706;
+  color: #e7f3ee;
+  height: 100%;
+}
+
+body {
+  background-image:
+    linear-gradient(rgba(0, 255, 157, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 157, 0.035) 1px, transparent 1px);
+  background-size: 28px 28px;
+  background-attachment: fixed;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1d2b26 transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #1d2b26;
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #26382f;
+}
+
+.font-arabic-text {
+  font-family: var(--font-arabic), Tahoma, sans-serif;
+}
+
+.term-caret::after {
+  content: "▌";
+  display: inline-block;
+  margin-inline-start: 2px;
+  color: #00ff9d;
+  animation: blink 1s step-start infinite;
+}
+
+.terminal-dots span {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  margin-inline-end: 6px;
+}
+
+/* Syntax highlight tokens (see lib/highlight.ts) */
+.tok-comment { color: #526059; font-style: italic; }
+.tok-string { color: #7ee8b8; }
+.tok-number { color: #4fd8ff; }
+.tok-keyword { color: #ff8f7a; font-weight: 600; }
+
+code, pre, .mono {
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
+}
+
+.scanline-overlay {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.012) 0px,
+    rgba(255, 255, 255, 0.012) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  mix-blend-mode: overlay;
+}
+
+.glow-green {
+  box-shadow: 0 0 0 1px rgba(0, 255, 157, 0.25), 0 0 18px rgba(0, 255, 157, 0.08);
+}
+.glow-cyan {
+  box-shadow: 0 0 0 1px rgba(79, 216, 255, 0.25), 0 0 18px rgba(79, 216, 255, 0.08);
+}
+
+/* RTL-friendly icon flip helper */
+.flip-rtl {
+  transform: scaleX(-1);
+}
