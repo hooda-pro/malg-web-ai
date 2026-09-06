@@ -152,19 +152,47 @@ async function negotiateGLM(apiMessages: ApiMessage[], signal: AbortSignal): Pro
 // ---------------------------------------------------------------------------
 
 /**
- * بيقرأ كل مفاتيح OpenRouter من متغير بيئة واحد اسمه OPENROUTER_API_KEYS.
- * تقدر تحط فيه أكتر من مفتاح مفصولين بفاصلة (,) أو سطر جديد أو فاصلة منقوطة (;) —
- * كل مفتاح بيدي حصة توكنز منفصلة، فكل ما تضيف مفتاح، إجمالي التوكنز المتاحة للموديل بيزيد.
- * مثال (في إعدادات Environment Variables على Vercel):
- *   OPENROUTER_API_KEYS = sk-or-key-1,sk-or-key-2,sk-or-key-3,...,sk-or-key-10
- * تقدر ترفع أكتر من 10 مفاتيح براحتك، مفيش حد أقصى في الكود.
+ * بيقرأ كل مفاتيح OpenRouter بطريقتين — استخدم أي واحدة تريحك أو اخلطهم مع بعض:
+ *
+ * 1) متغيرات مرقمة منفصلة (الأسهل لو عايز تضيف/تشيل مفتاح لوحده من غير ما تلمس الباقي):
+ *      OPENROUTER_API_KEYS1 = sk-or-key-1
+ *      OPENROUTER_API_KEYS2 = sk-or-key-2
+ *      OPENROUTER_API_KEYS3 = sk-or-key-3
+ *      ... لحد أي رقم عايزه (مفيش حد أقصى)
+ *    (بيقبل برضو الصيغة اللي فيها underscore زي OPENROUTER_API_KEYS_1)
+ *
+ * 2) أو متغير واحد فيه كل المفاتيح مفصولة بفاصلة/سطر جديد:
+ *      OPENROUTER_API_KEYS = sk-or-key-1,sk-or-key-2,sk-or-key-3
+ *
+ * الكود بيجمع الاتنين مع بعض لو موجودين، وبيشيل أي تكرار.
  */
 function getOpenRouterKeys(): string[] {
-  const raw = process.env.OPENROUTER_API_KEYS || process.env.OPENROUTER_API_KEY || "";
-  return raw
-    .split(/[\n,;]+/)
-    .map((k) => k.trim())
-    .filter(Boolean);
+  const keys: string[] = [];
+
+  // (1) متغيرات مرقمة: OPENROUTER_API_KEYS1, OPENROUTER_API_KEYS2, OPENROUTER_API_KEYS_3, ...
+  const numberedPattern = /^OPENROUTER_API_KEYS?_?(\d+)$/i;
+  const numberedEntries = Object.keys(process.env)
+    .map((name) => {
+      const match = name.match(numberedPattern);
+      return match ? { name, index: parseInt(match[1], 10) } : null;
+    })
+    .filter((x): x is { name: string; index: number } => x !== null)
+    .sort((a, b) => a.index - b.index);
+
+  for (const entry of numberedEntries) {
+    const val = process.env[entry.name];
+    if (val && val.trim()) keys.push(val.trim());
+  }
+
+  // (2) متغير واحد فيه كل المفاتيح مفصولة بفاصلة/سطر جديد/فاصلة منقوطة
+  const bulk = process.env.OPENROUTER_API_KEYS || process.env.OPENROUTER_API_KEY || "";
+  for (const k of bulk.split(/[\n,;]+/)) {
+    const trimmed = k.trim();
+    if (trimmed) keys.push(trimmed);
+  }
+
+  // شيل أي تكرار مع الحفاظ على الترتيب
+  return [...new Set(keys)];
 }
 
 // عداد بسيط في الذاكرة لتدوير المفاتيح (Round Robin) بين الطلبات المختلفة —
@@ -201,7 +229,8 @@ async function negotiateOpenRouter(
   if (keys.length === 0) {
     return {
       ok: false,
-      errorMessage: "موديل malg-2.1 محتاج مفتاح OpenRouter واحد على الأقل (OPENROUTER_API_KEYS).",
+      errorMessage:
+        "موديل malg-2.1 محتاج مفتاح OpenRouter واحد على الأقل — ضيف OPENROUTER_API_KEYS1 (وهكذا) أو OPENROUTER_API_KEYS في إعدادات Vercel.",
     };
   }
 

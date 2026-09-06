@@ -3,18 +3,25 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Menu, Sparkles, Terminal, Zap } from "lucide-react";
 import { formatTokens } from "@/lib/ai";
+import type { ModelId } from "./SettingsContext";
 import { AVAILABLE_MODELS, useSettings } from "./SettingsContext";
 
 export default function TopBar({
   onToggleDrawer,
   remainingTokens,
   onOpenRunner,
+  lockedModel,
+  onPickModel,
 }: {
   onToggleDrawer: () => void;
   remainingTokens: number | null;
   onOpenRunner: () => void;
+  /** الموديل اللي الشات الحالي متثبت عليه (لو فيه رسايل اتبعتت فيه بالفعل) */
+  lockedModel?: ModelId | null;
+  /** اختيار موديل من القايمة — بيتعامل معاه ChatShell (تحديث + تحذير لو الشات متثبت) */
+  onPickModel: (id: ModelId) => void;
 }) {
-  const { t, model, setModel } = useSettings();
+  const { t, model } = useSettings();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -35,10 +42,13 @@ export default function TopBar({
     };
   }, [menuOpen]);
 
-  const currentModel = AVAILABLE_MODELS.find((m) => m.id === model) ?? AVAILABLE_MODELS[0];
+  // اللي بيتعرض فوق: لو الشات الحالي متثبت على موديل معين، وريه هو ده — مش الاختيار
+  // العام المؤقت — عشان الشات يفضل شغال بنفس الموديل لحد ما يتفتح شات جديد.
+  const displayModelId = lockedModel ?? model;
+  const currentModel = AVAILABLE_MODELS.find((m) => m.id === displayModelId) ?? AVAILABLE_MODELS[0];
 
   return (
-    <header className="relative flex items-center justify-between border-b border-line bg-panel/90 px-3 py-2.5 backdrop-blur">
+    <header className="relative z-30 flex items-center justify-between border-b border-line bg-panel/90 px-3 py-2.5 backdrop-blur">
       <button
         onClick={onToggleDrawer}
         className="rounded-md p-1.5 text-txt2 hover:bg-white/5 hover:text-txt lg:hidden"
@@ -66,13 +76,13 @@ export default function TopBar({
         </button>
 
         {menuOpen && (
-          <div className="animate-fadeIn absolute start-0 top-[calc(100%+6px)] z-50 w-60 overflow-hidden rounded-lg border border-line2 bg-panel2 py-1 shadow-xl">
+          <div className="animate-fadeIn absolute start-0 top-[calc(100%+6px)] z-50 w-64 overflow-hidden rounded-lg border border-line2 bg-panel2 py-1 shadow-xl">
             <p className="px-3 py-1.5 text-[10px] font-medium text-txt3">{t("modelSwitcherTitle")}</p>
             {AVAILABLE_MODELS.map((m) => (
               <button
                 key={m.id}
                 onClick={() => {
-                  setModel(m.id);
+                  onPickModel(m.id);
                   setMenuOpen(false);
                 }}
                 className="flex w-full items-center justify-between gap-2 px-3 py-2 text-start hover:bg-white/[0.04]"
@@ -81,9 +91,14 @@ export default function TopBar({
                   <span className="mono block text-[12.5px] text-txt">{m.label}</span>
                   <span className="block text-[10px] text-txt3">{m.hint}</span>
                 </span>
-                {m.id === model && <Check size={14} className="shrink-0 text-green" />}
+                {m.id === displayModelId && <Check size={14} className="shrink-0 text-green" />}
               </button>
             ))}
+            {lockedModel && (
+              <p className="border-t border-line2 px-3 pb-1.5 pt-2 text-[10px] leading-relaxed text-txt3">
+                {t("modelLockedHint")}
+              </p>
+            )}
           </div>
         )}
       </div>

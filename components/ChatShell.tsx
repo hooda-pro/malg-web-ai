@@ -14,9 +14,11 @@ import CodeRunnerModal from "./CodeRunnerModal";
 import ArtifactPanel from "./ArtifactPanel";
 import SettingsModal from "./SettingsModal";
 import Toast from "./Toast";
+import type { ModelId } from "./SettingsContext";
 import { useSettings } from "./SettingsContext";
 
 const PREVIEWABLE_EXTS = new Set(["html", "htm", "css", "js"]);
+const SESSION_MODELS_KEY = "mlag-session-models";
 
 /** هل الرد ده فيه كود صفحة/ويب يقدر يتعاين؟ */
 function hasPreviewableFiles(content: string): boolean {
@@ -40,8 +42,18 @@ function isPreviewCommand(text: string): boolean {
   );
 }
 
+function loadSessionModels(): Record<string, ModelId> {
+  try {
+    const raw = localStorage.getItem(SESSION_MODELS_KEY);
+    if (raw) return JSON.parse(raw) as Record<string, ModelId>;
+  } catch {
+    // تجاهل
+  }
+  return {};
+}
+
 export default function ChatShell() {
-  const { t, lang, model } = useSettings();
+  const { t, lang, model, setModel } = useSettings();
   const [authChecked, setAuthChecked] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -69,6 +81,53 @@ export default function ChatShell() {
   const [panelFiles, setPanelFiles] = useState<ProjectFile[]>([]);
   const [panelFocusPath, setPanelFocusPath] = useState<string | undefined>(undefined);
   const [showSettings, setShowSettings] = useState(false);
+
+  // كل شات (session) بيتثبت على أول موديل اتبعتله رسالة بيه، وبيفضل شغال بيه
+  // لحد ما يتفتح شات جديد — الخريطة دي بتتحفظ على الجهاز عشان تفضل بعد الريفريش.
+  const [sessionModels, setSessionModels] = useState<Record<string, ModelId>>({});
+  useEffect(() => {
+    setSessionModels(loadSessionModels());
+  }, []);
+  const lockedModel: ModelId | undefined = currentSessionId
+    ? sessionModels[currentSessionId]
+    : undefined;
+
+  const lockSessionModel = useCallback((sessionId: string, m: ModelId) => {
+    setSessionModels((prev) => {
+      if (prev[sessionId]) return prev; // متثبت بالفعل — متغيرش
+      const next = { ...prev, [sessionId]: m };
+      try {
+        localStorage.setItem(SESSION_MODELS_KEY, JSON.stringify(next));
+      } catch {
+        // تجاهل
+      }
+      return next;
+    });
+  }, []);
+
+  const forgetSessionModel = useCallback((sessionId: string) => {
+    setSessionModels((prev) => {
+      if (!(sessionId in prev)) return prev;
+      const next = { ...prev };
+      delete next[sessionId];
+      try {
+        localStorage.setItem(SESSION_MODELS_KEY, JSON.stringify(next));
+      } catch {
+        // تجاهل
+      }
+      return next;
+    });
+  }, []);
+
+  const handlePickModel = useCallback(
+    (id: ModelId) => {
+      setModel(id);
+      if (lockedModel && lockedModel !== id) {
+        showToast(t("toastModelLocked", { current: lockedModel, picked: id }));
+      }
+    },
+    [lockedModel, setModel, t]
+  );
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -210,6 +269,7 @@ export default function ChatShell() {
   const handleDeleteSession = async (id: string) => {
     try {
       await fetch(`/api/sessions/${id}`, { method: "DELETE" });
+      forgetSessionModel(id);
       const list = await refreshSessions();
       if (currentSessionId === id) {
         setCurrentSessionId(list.length > 0 ? list[0].id : null);
@@ -227,6 +287,12 @@ export default function ChatShell() {
       setCurrentSessionId(null);
       setMessages([]);
       setPanelOpen(false);
+      setSessionModels({});
+      try {
+        localStorage.removeItem(SESSION_MODELS_KEY);
+      } catch {
+        // تجاهل
+      }
     } catch {
       showToast(t("toastClearFail"));
     }
@@ -278,6 +344,12 @@ export default function ChatShell() {
         return;
       }
 
+      // الشات ده لسه مفيش موديل متثبت عليه؟ يبقى هيتثبت من دلوقتي على الموديل الحالي.
+      // لو متثبت بالفعل، لازم نفضل نستخدم نفسه بغض النظر عن أي اختيار جديد من القايمة،
+      // لحد ما يتفتح شات جديد.
+      const effectiveModel = sessionModels[sessionId] ?? model;
+      lockSessionModel(sessionId, effectiveModel);
+
       const optimisticUser: ChatMessage = {
         id: `tmp-${Date.now()}`,
         sessionId,
@@ -303,7 +375,7 @@ export default function ChatShell() {
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId, message: trimmed, uiLanguage: lang, model }),
+          body: JSON.stringify({ sessionId, message: trimmed, uiLanguage: lang, model: effectiveModel }),
           signal: controller.signal,
         });
 
@@ -347,7 +419,21 @@ export default function ChatShell() {
         }, 700);
       }
     },
-    [isGenerating, user, messages, lang, model, t, ensureSessionId, refreshMessages, refreshQuota, panelOpen, openPanelWithFiles]
+    [
+      isGenerating,
+      user,
+      messages,
+      lang,
+      model,
+      sessionModels,
+      lockSessionModel,
+      t,
+      ensureSessionId,
+      refreshMessages,
+      refreshQuota,
+      panelOpen,
+      openPanelWithFiles,
+    ]
   );
 
   const continueMessage = useCallback(
@@ -360,11 +446,21 @@ export default function ChatShell() {
       abortRef.current = controller;
       let accContent = "";
 
+      // الاستكمال (continue) دايمًا لازم يستخدم نفس الموديل المتثبت للشات ده (لو موجود)
+      const effectiveModel = currentSessionId
+        ? (sessionModels[currentSessionId] ?? model)
+        : model;
+
       try {
         const res = await fetch("/api/chat/continue", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: currentSessionId, messageId, uiLanguage: lang, model }),
+          body: JSON.stringify({
+            sessionId: currentSessionId,
+            messageId,
+            uiLanguage: lang,
+            model: effectiveModel,
+          }),
           signal: controller.signal,
         });
 
@@ -401,7 +497,18 @@ export default function ChatShell() {
         }, 700);
       }
     },
-    [user, currentSessionId, continuingMessageId, lang, model, t, refreshMessages, refreshQuota, panelOpen]
+    [
+      user,
+      currentSessionId,
+      continuingMessageId,
+      lang,
+      model,
+      sessionModels,
+      t,
+      refreshMessages,
+      refreshQuota,
+      panelOpen,
+    ]
   );
 
   const stopGeneration = () => {
@@ -457,6 +564,8 @@ export default function ChatShell() {
           onToggleDrawer={() => setDrawerOpen(true)}
           remainingTokens={remainingTokens}
           onOpenRunner={openRunnerDemo}
+          lockedModel={lockedModel}
+          onPickModel={handlePickModel}
         />
 
         <MessageList
