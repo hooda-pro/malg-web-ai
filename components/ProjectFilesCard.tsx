@@ -1,10 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown, ChevronUp, Download, FileCode2, FolderArchive } from "lucide-react";
+import { Download, FileCode2, FolderArchive } from "lucide-react";
 import type { ProjectFile } from "@/lib/parseContent";
 import { sanitizeFileName } from "@/lib/utils";
-import CodeBlock from "./CodeBlock";
 import { useSettings } from "./SettingsContext";
 
 function downloadTextFile(name: string, content: string) {
@@ -36,20 +34,20 @@ async function downloadZip(files: ProjectFile[], zipName: string) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * كارت الملفات جوا الرسالة — بيقدّم كل ملف باسمه وزر تحميل بس، من غير أي عرض للكود الخام.
+ * الكود عمره ما يتفتح أو يتعرض هنا؛ لو المستخدم عايز يشوفه شغال يستخدم زر «معاينة».
+ */
 export default function ProjectFilesCard({
   messageId,
   files,
-  onRunCode,
 }: {
   messageId: string;
   files: ProjectFile[];
-  onRunCode: (code: string, language: string) => void;
+  onRunCode?: (code: string, language: string) => void;
 }) {
-  const [openPath, setOpenPath] = useState<string | null>(files.length === 1 ? files[0].path : null);
   const isProject = files.length >= 2;
   const { t } = useSettings();
-
-  const langFromPath = (path: string) => path.split(".").pop() || "text";
 
   return (
     <div className="rounded-md border border-line2 bg-panel2 overflow-hidden">
@@ -71,38 +69,20 @@ export default function ProjectFilesCard({
       </div>
 
       <div className="divide-y divide-line2">
-        {files.map((f) => {
-          const isOpen = openPath === f.path;
-          return (
-            <div key={f.path}>
-              <button
-                onClick={() => setOpenPath(isOpen ? null : f.path)}
-                className="flex w-full items-center justify-between px-3 py-2 text-right hover:bg-white/[0.02]"
-              >
-                <span className="mono text-[12px] text-txt2 truncate" dir="ltr">
-                  {f.path}
-                </span>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      downloadTextFile(sanitizeFileName(f.path.split("/").pop() || f.path), f.content);
-                    }}
-                    className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-txt3 hover:text-green hover:bg-green/10"
-                  >
-                    <Download size={11} />
-                  </span>
-                  {isOpen ? <ChevronUp size={14} className="text-txt3" /> : <ChevronDown size={14} className="text-txt3" />}
-                </div>
-              </button>
-              {isOpen && (
-                <div className="px-2 pb-2">
-                  <CodeBlock language={langFromPath(f.path)} code={f.content} onRun={onRunCode} />
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {files.map((f) => (
+          <button
+            key={f.path}
+            onClick={() => downloadTextFile(sanitizeFileName(f.path.split("/").pop() || f.path), f.content)}
+            className="flex w-full items-center justify-between px-3 py-2 text-right hover:bg-white/[0.02]"
+          >
+            <span className="mono text-[12px] text-txt2 truncate" dir="ltr">
+              {f.path}
+            </span>
+            <span className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-txt3 hover:text-green hover:bg-green/10">
+              <Download size={12} />
+            </span>
+          </button>
+        ))}
       </div>
     </div>
   );

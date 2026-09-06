@@ -131,7 +131,7 @@ export default function MessageItem({
 
           {hasProjectFiles && (
             <div className="mb-2">
-              <ProjectFilesCard messageId={message.id} files={projectFiles} onRunCode={onRunCode} />
+              <ProjectFilesCard messageId={message.id} files={projectFiles} />
             </div>
           )}
 

@@ -82,14 +82,15 @@ export default function ChatShell() {
     setPanelOpen(true);
   }, []);
 
-  // زي Claude بالظبط: أول ما أي ملف يبدأ يتكتب أثناء البث — افتح اللوحة فورًا على الديسكتوب
-  // عشان المستخدم يشوف البناء حاصل في الخلفية مش نص خام في الشات
+  // أول ما ملف قابل للمعاينة (HTML/CSS/JS) يبدأ يتكتب أثناء البث — افتح لوحة المعاينة الحيّة
+  // فورًا على الديسكتوب، عشان المستخدم يشوف البناء حاصل في الخلفية مش نص خام في الشات.
+  // بنفتحها بس لو فيه حاجة تتعاين فعلاً — مفيش شاشة كود بديلة تتفتح.
   useEffect(() => {
     if (!isGenerating || !streamingContent) return;
     if (panelOpen) return;
     if (typeof window !== "undefined" && window.innerWidth < 1024) return;
     const files = extractProjectFiles(streamingContent);
-    if (files.length > 0) openPanelWithFiles(files);
+    if (hasPreviewableFiles(streamingContent) && files.length > 0) openPanelWithFiles(files);
   }, [streamingContent, isGenerating, panelOpen, openPanelWithFiles]);
 
   const refreshQuota = useCallback(async () => {
@@ -321,14 +322,12 @@ export default function ChatShell() {
       } finally {
         abortRef.current = null;
         setIsGenerating(false);
-        // لو الرد أنتج كود صفحة قابل للمعاينة — نبه المستخدم إنه يقدر يعاين قبل النشر
+        // لو الرد أنتج ملفات كود، الملفات نفسها بتتقدّم جوا الرسالة بزرار تحميل بس —
+        // من غير ما نفتح أي شاشة تلقائيًا. لو فيه حاجة قابلة للمعاينة فعلاً، اللوحة
+        // بتكون اتفتحت أصلاً وقت البث (useEffect فوق)؛ هنا بس ننبه لو لسه مقفولة.
         const producedFiles = accContent ? extractProjectFiles(accContent) : [];
-        if (producedFiles.length > 0) {
-          if (window.innerWidth >= 1024) {
-            openPanelWithFiles(producedFiles);
-          } else if (hasPreviewableFiles(accContent)) {
-            showToast(t("toastPreviewReady"));
-          }
+        if (producedFiles.length > 0 && hasPreviewableFiles(accContent) && !panelOpen) {
+          showToast(t("toastPreviewReady"));
         }
         setStreamingContent("");
         setStreamingReasoning("");
@@ -341,7 +340,7 @@ export default function ChatShell() {
         }, 700);
       }
     },
-    [isGenerating, user, messages, lang, t, ensureSessionId, refreshMessages, refreshQuota, openPanelWithFiles]
+    [isGenerating, user, messages, lang, t, ensureSessionId, refreshMessages, refreshQuota, panelOpen, openPanelWithFiles]
   );
 
   const continueMessage = useCallback(
@@ -383,12 +382,8 @@ export default function ChatShell() {
         abortRef.current = null;
         setContinuingMessageId(null);
         const producedFiles = accContent ? extractProjectFiles(accContent) : [];
-        if (producedFiles.length > 0) {
-          if (window.innerWidth >= 1024) {
-            openPanelWithFiles(producedFiles);
-          } else if (hasPreviewableFiles(accContent)) {
-            showToast(t("toastPreviewReady"));
-          }
+        if (producedFiles.length > 0 && hasPreviewableFiles(accContent) && !panelOpen) {
+          showToast(t("toastPreviewReady"));
         }
         setContinuationStreamingContent("");
         await refreshMessages(currentSessionId);
@@ -399,7 +394,7 @@ export default function ChatShell() {
         }, 700);
       }
     },
-    [user, currentSessionId, continuingMessageId, lang, t, refreshMessages, refreshQuota, openPanelWithFiles]
+    [user, currentSessionId, continuingMessageId, lang, t, refreshMessages, refreshQuota, panelOpen]
   );
 
   const stopGeneration = () => {
