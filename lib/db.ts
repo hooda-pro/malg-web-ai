@@ -1,3 +1,5 @@
+import bcrypt from "bcryptjs";
+import { randomUUID } from "crypto";
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 
 // مهم: ما بنعملش neon(...) على مستوى الملف مباشرة، عشان Next.js بيستورد
@@ -25,6 +27,37 @@ export const sql: NeonQueryFunction<false, false> = ((strings: TemplateStringsAr
   getClient()(strings, ...values)) as unknown as NeonQueryFunction<false, false>;
 
 let schemaReady: Promise<void> | null = null;
+
+/**
+ * بيتأكد إن فيه حساب أدمن واحد على الأقل في القاعدة — لو مفيش، بينشئ الحساب الافتراضي.
+ * الإيميل والباسورد بيتظبطوا من متغيرات البيئة ADMIN_EMAIL و ADMIN_PASSWORD
+ * (لو مش موجودين بيستخدم القيم الافتراضية اللي تحت).
+ */
+async function seedDefaultAdmin() {
+  try {
+    const existing = await sql`SELECT id FROM users WHERE is_admin = TRUE LIMIT 1`;
+    if (existing.length > 0) return;
+
+    const email = (process.env.ADMIN_EMAIL || "admin@mlag.ai").trim().toLowerCase();
+    const password = process.env.ADMIN_PASSWORD || "Mlag@Admin2026";
+    const passwordHash = await bcrypt.hash(password, 10);
+    const id = randomUUID();
+
+    await sql`
+      INSERT INTO users (id, email, password_hash, display_name, is_admin)
+      VALUES (${id}, ${email}, ${passwordHash}, 'Admin', TRUE)
+      ON CONFLICT (email) DO UPDATE SET is_admin = TRUE
+    `;
+    await sql`
+      INSERT INTO user_quota (user_id, total_allocated_tokens, used_tokens)
+      VALUES (${id}, 99000000, 0)
+      ON CONFLICT (user_id) DO NOTHING
+    `;
+    console.log(`[seed] تم إنشاء حساب الأدمن الافتراضي: ${email}`);
+  } catch (e) {
+    console.error("seedDefaultAdmin error", e);
+  }
+}
 
 /**
  * ينشئ الجداول لو مش موجودة (idempotent). بتتكرر النتيجة بأمان.
@@ -79,6 +112,26 @@ export function ensureSchema(): Promise<void> {
           updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )
       `;
+
+      // ——— الأدمن: أعمدة الحظر + سجل الإجراءات ———
+      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_banned BOOLEAN NOT NULL DEFAULT FALSE`;
+      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_at TIMESTAMPTZ`;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS admin_logs (
+          id TEXT PRIMARY KEY,
+          admin_id TEXT NOT NULL,
+          admin_email TEXT NOT NULL,
+          action TEXT NOT NULL,
+          target_user_id TEXT,
+          target_email TEXT,
+          details TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `;
+
+      // إنشاء حساب الأدمن الافتراضي لو مفيش أي أدمن في القاعدة
+      await seedDefaultAdmin();
     })();
   }
   return schemaReady;

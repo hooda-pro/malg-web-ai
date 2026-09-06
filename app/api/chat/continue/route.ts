@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureSchema } from "@/lib/db";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser, isUserBanned } from "@/lib/auth";
 import { checkAndMaybeRenewQuota, deductTokens } from "@/lib/quota";
 import { negotiateUpstream, estimateTokens, normalizeModelId, type ApiMessage } from "@/lib/ai";
 import { buildSystemPrompt } from "@/lib/systemPrompt";
@@ -28,6 +28,13 @@ export async function POST(req: NextRequest) {
   }
 
   await ensureSchema();
+
+  if (await isUserBanned(user.id)) {
+    return NextResponse.json(
+      { error: "تم حظر حسابك من إدارة المنصة — مش قادر تبعث رسايل حاليًا." },
+      { status: 403 }
+    );
+  }
 
   const sessionRows = await sql`
     SELECT id FROM chat_sessions WHERE id = ${sessionId} AND user_id = ${user.id}

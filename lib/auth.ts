@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
 import type { SessionUser } from "./types";
+import { sql } from "./db";
 
 export const COOKIE_NAME = "mlag_session";
 const SECRET = process.env.JWT_SECRET || "dev-insecure-secret-change-me";
@@ -35,3 +36,22 @@ export function getSessionUser(): SessionUser | null {
 }
 
 export const SESSION_COOKIE_MAX_AGE = MAX_AGE_SECONDS;
+
+/** بيرجع اليوزر لو أدمن، وإلا null — الحارس بتاع مسارات لوحة الأدمن. */
+export function getAdminUser(): SessionUser | null {
+  const user = getSessionUser();
+  return user && user.isAdmin ? user : null;
+}
+
+/**
+ * بيفحص من قاعدة البيانات هل الحساب متحظر ولا لأ — لأن التوكن (JWT) مش بيحمل
+ * حالة الحظر، فلازم نفحص من المصدر مباشرة قبل أي عملية شات.
+ */
+export async function isUserBanned(userId: string): Promise<boolean> {
+  try {
+    const rows = await sql`SELECT is_banned FROM users WHERE id = ${userId}`;
+    return Boolean(rows[0]?.is_banned);
+  } catch {
+    return false;
+  }
+}

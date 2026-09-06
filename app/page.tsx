@@ -1,10 +1,5 @@
-import ChatShell from "@/components/ChatShell";
-import { SettingsProvider } from "@/components/SettingsContext";
+import AppRouter from "@/components/AppRouter";
 
 export default function Home() {
-  return (
-    <SettingsProvider>
-      <ChatShell />
-    </SettingsProvider>
-  );
+  return <AppRouter />;
 }

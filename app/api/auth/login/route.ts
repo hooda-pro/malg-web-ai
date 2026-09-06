@@ -19,11 +19,11 @@ export async function POST(req: NextRequest) {
     await ensureSchema();
 
     const rows = await sql`
-      SELECT id, email, password_hash, display_name, is_admin
+      SELECT id, email, password_hash, display_name, is_admin, is_banned
       FROM users WHERE email = ${email}
     `;
     const row = rows[0] as
-      | { id: string; email: string; password_hash: string; display_name: string; is_admin: boolean }
+      | { id: string; email: string; password_hash: string; display_name: string; is_admin: boolean; is_banned: boolean }
       | undefined;
 
     if (!row) {
@@ -38,6 +38,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" },
         { status: 401 }
+      );
+    }
+
+    if (row.is_banned) {
+      return NextResponse.json(
+        { error: "تم حظر هذا الحساب من إدارة المنصة — مش قادر تسجل دخول بيه. تواصل مع الدعم لو عندك استفسار." },
+        { status: 403 }
       );
     }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { LogIn, LogOut, MessageCircle, Plus, Settings, ShieldCheck, Trash2, X } from "lucide-react";
+import { LogIn, LogOut, MessageCircle, Plus, Settings, ShieldCheck, Terminal, Trash2, X } from "lucide-react";
 import type { ChatSession, SessionUser } from "@/lib/types";
 import { formatTime } from "@/lib/utils";
 import { useSettings } from "./SettingsContext";
@@ -130,6 +130,15 @@ export default function ChatDrawer({
                 </div>
                 <Settings size={13} className="shrink-0 text-txt3" />
               </button>
+              {user.isAdmin && (
+                <a
+                  href="/#/admin"
+                  title="لوحة الأدمن"
+                  className="shrink-0 rounded p-1.5 text-txt3 transition-colors hover:text-green"
+                >
+                  <Terminal size={14} />
+                </a>
+              )}
               <button
                 onClick={onLogout}
                 title={t("logout")}
