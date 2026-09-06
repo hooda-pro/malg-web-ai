@@ -400,12 +400,7 @@ export default function ChatShell() {
         }
       } finally {
         abortRef.current = null;
-        setIsGenerating(false);
-        // لو الرد أنتج ملفات كود، لازم نحدّث لوحة الأرتيفاكت بالنسخة النهائية الكاملة
-        // من الملفات دلوقتي — عشان أثناء البث كانت بتتحدث "لايف" من liveStreamFiles،
-        // لكن ده كان بيرجع null أول ما البث يخلص (isGenerating بقت false)، فكانت
-        // اللوحة بترجع لأول نسخة جزئية اتفتحت بيها (panelFiles القديمة) بدل آخر
-        // نسخة كاملة — وده اللي كان بيبان إنه "الكود اتقطع/اختفى" بعد ما الذكاء يخلص.
+        // لو الرد أنتج ملفات كود، لازم نحدّث لوحة الأرتيفاكت بالنسخة النهائية الكاملة.
         const producedFiles = accContent ? extractProjectFiles(accContent) : [];
         if (producedFiles.length > 0) {
           if (!panelOpen && hasPreviewableFiles(accContent)) {
@@ -415,10 +410,21 @@ export default function ChatShell() {
             setPanelFiles(producedFiles);
           }
         }
-        setStreamingContent("");
-        setStreamingReasoning("");
+
+        // *** أهم سطر في الإصلاح ***
+        // لازم نجيب الرسالة النهائية المحفوظة من الداتابيز الأول، وبعدين وبعدين بس
+        // نطفي isGenerating ونمسح streamingContent. قبل كده كان الترتيب معكوس:
+        // isGenerating كانت بتتطفي فورًا (فبتختفي فقاعة الرد اللي كانت ظاهرة بالكامل
+        // أثناء البث)، وبعدين كان بيستنى refreshMessages يجيب نفس الرد من الداتابيز —
+        // وفي اللحظة (المسافة الزمنية) ما بين الاتنين، الشاشة كانت بتفضل فاضية تمامًا
+        // من غير أي رد ظاهر، وده بالظبط اللي كان حاسس المستخدم إن "الشات اتحذف"
+        // فجأة أول ما الذكاء يخلص. دلوقتي الرسالة بتوصل لـ messages الأول، وبعد كده
+        // بس بنشيل الفقاعة المؤقتة — فمفيش أي لحظة تختفي فيها الشاشة.
         await refreshMessages(sessionId);
         await refreshQuota();
+        setIsGenerating(false);
+        setStreamingContent("");
+        setStreamingReasoning("");
         // أمان إضافي ضد سباق الحفظ: تحديث تاني بعد لحظة — يضمن إن الرد ما يختفيش
         // حتى لو السيرفر اتأخر شوية في تسجيل الرسالة في الداتابيز
         setTimeout(() => {
@@ -495,7 +501,6 @@ export default function ChatShell() {
         // وإلا هنفقد أي ملف كان خلص كتابته قبل الاستكمال ويتفتح بنسخة ناقصة.
         const originalMsg = messages.find((m) => m.id === messageId);
         const mergedContent = (originalMsg?.content || "") + accContent;
-        setContinuingMessageId(null);
         const producedFiles = mergedContent ? extractProjectFiles(mergedContent) : [];
         if (producedFiles.length > 0) {
           if (!panelOpen && hasPreviewableFiles(mergedContent)) {
@@ -505,9 +510,14 @@ export default function ChatShell() {
             setPanelFiles(producedFiles);
           }
         }
-        setContinuationStreamingContent("");
+
+        // نفس إصلاح sendMessage: نجيب الرسالة المحدّثة من الداتابيز الأول،
+        // وبعدين بس نطفي continuingMessageId ونمسح continuationStreamingContent —
+        // عشان الرد ما يختفيش من الشاشة للحظة قبل ما يرجع تاني من refreshMessages.
         await refreshMessages(currentSessionId);
         await refreshQuota();
+        setContinuingMessageId(null);
+        setContinuationStreamingContent("");
         // أمان إضافي ضد سباق الحفظ — تحديث تاني بعد لحظة
         setTimeout(() => {
           void refreshMessages(currentSessionId);
