@@ -1,9 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Download, Maximize2, Minimize2, MonitorPlay, RefreshCw, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Check,
+  Code2,
+  Copy,
+  Download,
+  Eye,
+  Maximize2,
+  Minimize2,
+  RefreshCw,
+  X,
+} from "lucide-react";
 import type { ProjectFile } from "@/lib/parseContent";
 import { sanitizeFileName } from "@/lib/utils";
+import { highlightCode } from "@/lib/highlight";
 import { useSettings } from "./SettingsContext";
 
 const PREVIEWABLE_EXTS = new Set(["html", "htm", "css", "js"]);
@@ -101,27 +112,53 @@ ${js}
 }
 
 /**
- * لوحة المعاينة الجانبية — شاشة معاينة حيّة فقط، من غير أي تاب "كود".
- * الكود نفسه بيتقدّم للمستخدم كملف قابل للتحميل بس (في ProjectFilesCard جوا الرسالة)،
- * مش بيتعرض هنا أبدًا.
+ * لوحة الأرتيفاكت الجانبية — زي Claude Artifacts بالظبط:
+ * تابين فوق الشمال (عين = معاينة، أقواس كود = كود)، وفوق اليمين زرار نسخ وزرار
+ * تحديث وزرار ملء شاشة. تاب الكود بيوضح الملف باسمه مع تظليل الكود وزرار نسخ.
  */
 export default function ArtifactPanel({
   files,
+  focusPath,
   onClose,
 }: {
   files: ProjectFile[];
+  focusPath?: string;
   onClose: () => void;
 }) {
   const { t } = useSettings();
   const [fullscreen, setFullscreen] = useState(false);
   const [runKey, setRunKey] = useState(0);
+  const [copied, setCopied] = useState(false);
   const hasWeb = useMemo(
     () => files.some((f) => PREVIEWABLE_EXTS.has((f.path.split(".").pop() || "").toLowerCase())),
     [files]
   );
+  const [tab, setTab] = useState<"preview" | "code">(hasWeb ? "preview" : "code");
+  const [activePath, setActivePath] = useState<string>(focusPath || files[0]?.path || "");
+
+  // لما الملفات تتحدث (مثلاً أثناء البث) — ثبّت الملف المفتوح أو ارجع لأول ملف
+  useEffect(() => {
+    setActivePath((p) => (files.some((f) => f.path === p) ? p : focusPath || files[0]?.path || ""));
+  }, [files, focusPath]);
 
   const doc = useMemo(() => buildPreviewDoc(files), [files]);
+  const activeFile = files.find((f) => f.path === activePath) ?? files[0];
   const title = files.length === 1 ? files[0].path : t("previewFiles", { n: files.length });
+  const highlighted = useMemo(
+    () => (activeFile ? highlightCode(activeFile.content) : ""),
+    [activeFile]
+  );
+
+  const handleCopy = async () => {
+    if (!activeFile) return;
+    try {
+      await navigator.clipboard.writeText(activeFile.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // تجاهل لو الحافظة مش متاحة
+    }
+  };
 
   return (
     <div
@@ -131,19 +168,45 @@ export default function ArtifactPanel({
           : "fixed inset-0 z-[70] lg:static lg:z-auto lg:min-w-[430px] lg:w-[45%] lg:border-s lg:border-line"
       }`}
     >
-      {/* شريط العنوان */}
-      <div className="terminal-dots flex items-center justify-between border-b border-line bg-panel px-3 py-2.5">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="flex shrink-0 gap-1">
-            <span className="h-2 w-2 rounded-full bg-rose/70" />
-            <span className="h-2 w-2 rounded-full bg-amber/70" />
-            <span className="h-2 w-2 rounded-full bg-green/70" />
-          </span>
-          <MonitorPlay size={13} className="shrink-0 text-cyan" />
+      {/* شريط العنوان — زي Claude: تابات المعاينة/الكود على الشمال، والأزرار على اليمين */}
+      <div className="terminal-dots flex items-center justify-between gap-2 border-b border-line bg-panel px-2 py-2">
+        <div className="flex min-w-0 items-center gap-1">
+          <button
+            onClick={() => hasWeb && setTab("preview")}
+            disabled={!hasWeb}
+            title={t("previewTab")}
+            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] ${
+              tab === "preview"
+                ? "bg-cyan/10 text-cyan"
+                : "text-txt3 hover:text-txt2 disabled:opacity-30"
+            }`}
+          >
+            <Eye size={14} /> <span className="hidden sm:inline">{t("previewTab")}</span>
+          </button>
+          <button
+            onClick={() => setTab("code")}
+            title={t("runnerTabCode")}
+            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] ${
+              tab === "code" ? "bg-cyan/10 text-cyan" : "text-txt3 hover:text-txt2"
+            }`}
+          >
+            <Code2 size={14} /> <span className="hidden sm:inline">{t("runnerTabCode")}</span>
+          </button>
+        </div>
+
+        <div className="flex min-w-0 flex-1 items-center justify-center px-1">
           <span className="mono truncate text-[11px] text-txt3">{title}</span>
         </div>
+
         <div className="flex shrink-0 items-center gap-1">
-          {hasWeb && (
+          <button
+            onClick={handleCopy}
+            className="rounded-md p-1.5 text-txt2 hover:bg-white/5 hover:text-green"
+            title={copied ? t("copied") : t("copy")}
+          >
+            {copied ? <Check size={15} className="text-green" /> : <Copy size={15} />}
+          </button>
+          {tab === "preview" && hasWeb && (
             <button
               onClick={() => setRunKey((k) => k + 1)}
               className="rounded-md p-1.5 text-txt2 hover:bg-white/5 hover:text-green"
@@ -169,9 +232,9 @@ export default function ArtifactPanel({
         </div>
       </div>
 
-      {/* المحتوى — معاينة حيّة فقط، من غير أي تاب كود */}
+      {/* المحتوى */}
       <div className="min-h-0 flex-1 overflow-hidden">
-        {hasWeb ? (
+        {tab === "preview" && hasWeb ? (
           <iframe
             key={runKey}
             title="artifact-preview"
@@ -180,22 +243,51 @@ export default function ArtifactPanel({
             className="h-full w-full bg-white"
           />
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-            <p className="text-[12.5px] text-txt3">{t("noPreviewAvailable")}</p>
-            <div className="flex w-full max-w-xs flex-col gap-1.5">
-              {files.map((f) => (
-                <button
-                  key={f.path}
-                  onClick={() =>
-                    downloadTextFile(sanitizeFileName(f.path.split("/").pop() || f.path), f.content)
-                  }
-                  className="mono flex items-center justify-between gap-2 rounded-md border border-line2 bg-panel2 px-3 py-2 text-[11.5px] text-txt2 hover:border-green/50 hover:text-green"
-                  dir="ltr"
-                >
-                  <span className="truncate">{f.path}</span>
-                  <Download size={13} className="shrink-0" />
-                </button>
-              ))}
+          <div className="flex h-full min-h-0">
+            {/* قايمة الملفات — لو أكتر من ملف */}
+            {files.length > 1 && (
+              <div className="w-44 shrink-0 overflow-y-auto border-e border-line2 bg-panel2 p-1.5">
+                {files.map((f) => (
+                  <button
+                    key={f.path}
+                    onClick={() => setActivePath(f.path)}
+                    dir="ltr"
+                    className={`mono block w-full truncate rounded px-2 py-1.5 text-start text-[11px] ${
+                      f.path === activeFile?.path
+                        ? "bg-cyan/10 text-cyan"
+                        : "text-txt2 hover:bg-white/[0.03] hover:text-txt"
+                    }`}
+                  >
+                    {f.path}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="min-w-0 flex-1 overflow-y-auto">
+              {activeFile && (
+                <>
+                  <div className="flex items-center justify-between border-b border-line2 bg-panel2 px-3 py-1.5">
+                    <span className="mono text-[11px] text-txt3" dir="ltr">
+                      {activeFile.path}
+                    </span>
+                    <button
+                      onClick={() =>
+                        downloadTextFile(
+                          sanitizeFileName(activeFile.path.split("/").pop() || activeFile.path),
+                          activeFile.content
+                        )
+                      }
+                      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-txt3 hover:text-green hover:bg-green/10"
+                      title={t("filesCardDownloadAll")}
+                    >
+                      <Download size={12} />
+                    </button>
+                  </div>
+                  <pre className="mono overflow-x-auto p-3 text-[12.5px] leading-[1.6] text-txt" dir="ltr">
+                    <code dangerouslySetInnerHTML={{ __html: highlighted }} />
+                  </pre>
+                </>
+              )}
             </div>
           </div>
         )}

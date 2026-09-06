@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import {
   Check,
   Copy,
-  MonitorPlay,
   Play,
   Sparkles,
   User,
@@ -16,8 +15,6 @@ import { formatTime } from "@/lib/utils";
 import CodeBlock from "./CodeBlock";
 import ProjectFilesCard from "./ProjectFilesCard";
 import { useSettings } from "./SettingsContext";
-
-const PREVIEWABLE_EXTS = new Set(["html", "htm", "css", "js"]);
 
 export default function MessageItem({
   message,
@@ -32,7 +29,7 @@ export default function MessageItem({
   onContinue: () => void;
   isContinuing: boolean;
   continuationStreamingContent: string | null;
-  onPreviewFiles: (files: ProjectFile[]) => void;
+  onPreviewFiles: (files: ProjectFile[], focusPath?: string) => void;
 }) {
   const { t, showTime } = useSettings();
   const isUser = message.role === "user";
@@ -42,9 +39,6 @@ export default function MessageItem({
   const displayContent = message.content + (continuationStreamingContent || "");
   const projectFiles = useMemo(() => extractProjectFiles(displayContent), [displayContent]);
   const hasProjectFiles = !isUser && projectFiles.length > 0;
-  const canPreview =
-    hasProjectFiles &&
-    projectFiles.some((f) => PREVIEWABLE_EXTS.has((f.path.split(".").pop() || "").toLowerCase()));
   const segments = useMemo(() => parseMessageContent(displayContent), [displayContent]);
 
   const thinkingLabel = useMemo(() => {
@@ -120,18 +114,9 @@ export default function MessageItem({
               : "rounded-tr-lg rounded-br-lg rounded-bl-sm border-line2 bg-panel2"
           }`}
         >
-          {canPreview && (
-            <button
-              onClick={() => onPreviewFiles(projectFiles)}
-              className="mb-2 flex items-center gap-1.5 rounded-md border border-cyan/50 bg-cyan/10 px-2.5 py-1.5 text-[11.5px] font-medium text-cyan transition-colors hover:bg-cyan/15"
-            >
-              <MonitorPlay size={13} /> {t("previewPage")}
-            </button>
-          )}
-
           {hasProjectFiles && (
             <div className="mb-2">
-              <ProjectFilesCard messageId={message.id} files={projectFiles} />
+              <ProjectFilesCard messageId={message.id} files={projectFiles} onOpen={onPreviewFiles} />
             </div>
           )}
 

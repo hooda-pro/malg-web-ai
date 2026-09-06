@@ -1,15 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MonitorPlay, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import type { ChatMessage } from "@/lib/types";
 import type { ProjectFile } from "@/lib/parseContent";
-import { extractProjectFiles, parseStreamingContent } from "@/lib/parseContent";
+import { parseStreamingContent } from "@/lib/parseContent";
 import MessageItem from "./MessageItem";
 import WelcomeHero from "./WelcomeHero";
 import { useSettings } from "./SettingsContext";
-
-const PREVIEWABLE_EXTS = new Set(["html", "htm", "css", "js"]);
 
 export default function MessageList({
   messages,
@@ -36,7 +34,7 @@ export default function MessageList({
   onContinue: (messageId: string) => void;
   continuingMessageId: string | null;
   continuationStreamingContent: string;
-  onPreviewFiles: (files: ProjectFile[]) => void;
+  onPreviewFiles: (files: ProjectFile[], focusPath?: string) => void;
 }) {
   const { t } = useSettings();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -65,10 +63,6 @@ export default function MessageList({
   }
 
   const streamSegments = isGenerating ? parseStreamingContent(streamingContent) : [];
-  const streamFiles = isGenerating ? extractProjectFiles(streamingContent) : [];
-  const streamHasPreview = streamFiles.some((f) =>
-    PREVIEWABLE_EXTS.has((f.path.split(".").pop() || "").toLowerCase())
-  );
 
   return (
     <div className="flex-1 overflow-y-auto py-2">
@@ -163,14 +157,6 @@ export default function MessageList({
                       </span>
                     </div>
                   )
-                )}
-                {streamHasPreview && (
-                  <button
-                    onClick={() => onPreviewFiles(streamFiles)}
-                    className="mt-2 flex items-center gap-1.5 rounded-md border border-cyan/50 bg-cyan/10 px-2.5 py-1.5 text-[11px] font-medium text-cyan transition-colors hover:bg-cyan/15"
-                  >
-                    <MonitorPlay size={12} /> {t("previewPage")}
-                  </button>
                 )}
               </div>
             )}

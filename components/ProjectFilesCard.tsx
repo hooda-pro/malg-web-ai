@@ -35,16 +35,18 @@ async function downloadZip(files: ProjectFile[], zipName: string) {
 }
 
 /**
- * كارت الملفات جوا الرسالة — بيقدّم كل ملف باسمه وزر تحميل بس، من غير أي عرض للكود الخام.
- * الكود عمره ما يتفتح أو يتعرض هنا؛ لو المستخدم عايز يشوفه شغال يستخدم زر «معاينة».
+ * كارت الملفات جوا الرسالة — زي كارت الأرتيفاكت في Claude بالظبط:
+ * بتدوس على أي ملف فبتفتحله لوحة المعاينة/الكود الجانبية على طول (مش بيتفتح
+ * كود خام جوا الرسالة). زرار التحميل موجود كأيقونة صغيرة جنب كل ملف كمان.
  */
 export default function ProjectFilesCard({
   messageId,
   files,
+  onOpen,
 }: {
   messageId: string;
   files: ProjectFile[];
-  onRunCode?: (code: string, language: string) => void;
+  onOpen: (files: ProjectFile[], focusPath: string) => void;
 }) {
   const isProject = files.length >= 2;
   const { t } = useSettings();
@@ -72,13 +74,19 @@ export default function ProjectFilesCard({
         {files.map((f) => (
           <button
             key={f.path}
-            onClick={() => downloadTextFile(sanitizeFileName(f.path.split("/").pop() || f.path), f.content)}
+            onClick={() => onOpen(files, f.path)}
             className="flex w-full items-center justify-between px-3 py-2 text-right hover:bg-white/[0.02]"
           >
             <span className="mono text-[12px] text-txt2 truncate" dir="ltr">
               {f.path}
             </span>
-            <span className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-txt3 hover:text-green hover:bg-green/10">
+            <span
+              onClick={(e) => {
+                e.stopPropagation();
+                downloadTextFile(sanitizeFileName(f.path.split("/").pop() || f.path), f.content);
+              }}
+              className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-txt3 hover:text-green hover:bg-green/10"
+            >
               <Download size={12} />
             </span>
           </button>

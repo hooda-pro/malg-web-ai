@@ -67,6 +67,7 @@ export default function ChatShell() {
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelFiles, setPanelFiles] = useState<ProjectFile[]>([]);
+  const [panelFocusPath, setPanelFocusPath] = useState<string | undefined>(undefined);
   const [showSettings, setShowSettings] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
@@ -76,9 +77,10 @@ export default function ChatShell() {
     setTimeout(() => setToast((t) => (t === msg ? null : t)), 4500);
   };
 
-  const openPanelWithFiles = useCallback((files: ProjectFile[]) => {
+  const openPanelWithFiles = useCallback((files: ProjectFile[], focusPath?: string) => {
     if (!files.length) return;
     setPanelFiles(files);
+    setPanelFocusPath(focusPath);
     setPanelOpen(true);
   }, []);
 
@@ -480,6 +482,7 @@ export default function ChatShell() {
       {panelOpen && panelFiles.length > 0 && (
         <ArtifactPanel
           files={liveStreamFiles && liveStreamFiles.length > 0 ? liveStreamFiles : panelFiles}
+          focusPath={panelFocusPath}
           onClose={() => setPanelOpen(false)}
         />
       )}
