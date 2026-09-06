@@ -169,36 +169,43 @@ export default function ArtifactPanel({
       }`}
     >
       {/* شريط العنوان — زي Claude: تابات المعاينة/الكود على الشمال، والأزرار على اليمين */}
-      <div className="terminal-dots flex items-center justify-between gap-2 border-b border-line bg-panel px-2 py-2">
-        <div className="flex min-w-0 items-center gap-1">
-          <button
-            onClick={() => hasWeb && setTab("preview")}
-            disabled={!hasWeb}
-            title={t("previewTab")}
-            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] ${
-              tab === "preview"
-                ? "bg-cyan/10 text-cyan"
-                : "text-txt3 hover:text-txt2 disabled:opacity-30"
-            }`}
-          >
-            <Eye size={14} /> <span className="hidden sm:inline">{t("previewTab")}</span>
-          </button>
-          <button
-            onClick={() => setTab("code")}
-            title={t("runnerTabCode")}
-            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] ${
-              tab === "code" ? "bg-cyan/10 text-cyan" : "text-txt3 hover:text-txt2"
-            }`}
-          >
-            <Code2 size={14} /> <span className="hidden sm:inline">{t("runnerTabCode")}</span>
-          </button>
+      <div className="terminal-dots flex items-center justify-between gap-2 border-b border-line bg-panel px-2.5 py-2">
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="hidden gap-1 sm:flex">
+            <span className="h-2 w-2 rounded-full bg-rose/70" />
+            <span className="h-2 w-2 rounded-full bg-amber/70" />
+            <span className="h-2 w-2 rounded-full bg-green/70" />
+          </span>
+          <div className="flex items-center gap-1 rounded-lg bg-panel2 p-0.5">
+            <button
+              onClick={() => hasWeb && setTab("preview")}
+              disabled={!hasWeb}
+              title={t("previewTab")}
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] transition-colors ${
+                tab === "preview"
+                  ? "bg-panel text-cyan shadow-sm"
+                  : "text-txt3 hover:text-txt2 disabled:opacity-30"
+              }`}
+            >
+              <Eye size={13} /> <span className="hidden sm:inline">{t("previewTab")}</span>
+            </button>
+            <button
+              onClick={() => setTab("code")}
+              title={t("runnerTabCode")}
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] transition-colors ${
+                tab === "code" ? "bg-panel text-cyan shadow-sm" : "text-txt3 hover:text-txt2"
+              }`}
+            >
+              <Code2 size={13} /> <span className="hidden sm:inline">{t("runnerTabCode")}</span>
+            </button>
+          </div>
         </div>
 
         <div className="flex min-w-0 flex-1 items-center justify-center px-1">
           <span className="mono truncate text-[11px] text-txt3">{title}</span>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-0.5">
           <button
             onClick={handleCopy}
             className="rounded-md p-1.5 text-txt2 hover:bg-white/5 hover:text-green"
@@ -222,12 +229,13 @@ export default function ArtifactPanel({
           >
             {fullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
           </button>
+          <span className="mx-0.5 h-4 w-px bg-line2" />
           <button
             onClick={onClose}
-            className="text-txt3 hover:text-txt"
+            className="rounded-md p-1.5 text-txt3 hover:bg-white/5 hover:text-txt"
             title={t("artifactClose")}
           >
-            <X size={17} />
+            <X size={16} />
           </button>
         </div>
       </div>

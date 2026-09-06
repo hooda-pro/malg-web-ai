@@ -4,23 +4,33 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from "react";
 import { translate, type Lang } from "@/lib/i18n";
 
+export type ModelId = "malg-2" | "malg-2.1";
+
+export const AVAILABLE_MODELS: { id: ModelId; label: string; hint: string }[] = [
+  { id: "malg-2", label: "malg-2", hint: "الموديل الأساسي — سريع ومتوازن" },
+  { id: "malg-2.1", label: "malg-2.1", hint: "موديل تجريبي جديد" },
+];
+
 interface Settings {
   lang: Lang;
   animations: boolean;
   showTime: boolean;
+  model: ModelId;
 }
 
-const DEFAULTS: Settings = { lang: "ar", animations: true, showTime: true };
+const DEFAULTS: Settings = { lang: "ar", animations: true, showTime: true, model: "malg-2" };
 const STORAGE_KEY = "mlag-settings";
 
 interface SettingsValue {
   lang: Lang;
   animations: boolean;
   showTime: boolean;
+  model: ModelId;
   dir: "rtl" | "ltr";
   setLang: (lang: Lang) => void;
   setAnimations: (on: boolean) => void;
   setShowTime: (on: boolean) => void;
+  setModel: (model: ModelId) => void;
   /** ترجمة نص بمعاملات اختيارية: t("balance", { n: "500,000" }) */
   t: (key: string, params?: Record<string, string | number>) => string;
 }
@@ -62,6 +72,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const setLang = useCallback((lang: Lang) => setSettings((p) => ({ ...p, lang })), []);
   const setAnimations = useCallback((on: boolean) => setSettings((p) => ({ ...p, animations: on })), []);
   const setShowTime = useCallback((on: boolean) => setSettings((p) => ({ ...p, showTime: on })), []);
+  const setModel = useCallback((model: ModelId) => setSettings((p) => ({ ...p, model })), []);
 
   const t = useCallback(
     (key: string, params?: Record<string, string | number>) => translate(settings.lang, key, params),
@@ -73,13 +84,15 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       lang: settings.lang,
       animations: settings.animations,
       showTime: settings.showTime,
+      model: settings.model,
       dir: settings.lang === "ar" ? "rtl" : "ltr",
       setLang,
       setAnimations,
       setShowTime,
+      setModel,
       t,
     }),
-    [settings, setLang, setAnimations, setShowTime, t]
+    [settings, setLang, setAnimations, setShowTime, setModel, t]
   );
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
@@ -93,10 +106,12 @@ export function useSettings(): SettingsValue {
       lang: DEFAULTS.lang,
       animations: DEFAULTS.animations,
       showTime: DEFAULTS.showTime,
+      model: DEFAULTS.model,
       dir: "rtl",
       setLang: () => {},
       setAnimations: () => {},
       setShowTime: () => {},
+      setModel: () => {},
       t: (key, params) => translate(DEFAULTS.lang, key, params),
     };
   }

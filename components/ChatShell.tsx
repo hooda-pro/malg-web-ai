@@ -41,7 +41,7 @@ function isPreviewCommand(text: string): boolean {
 }
 
 export default function ChatShell() {
-  const { t, lang } = useSettings();
+  const { t, lang, model } = useSettings();
   const [authChecked, setAuthChecked] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -152,6 +152,7 @@ export default function ChatShell() {
       setCurrentSessionId(null);
       setMessages([]);
       setQuota(null);
+      setPanelOpen(false);
       return;
     }
     (async () => {
@@ -193,6 +194,7 @@ export default function ChatShell() {
         setCurrentSessionId(data.session.id);
         setMessages([]);
         setDrawerOpen(false);
+        setPanelOpen(false);
       }
     } catch {
       showToast(t("toastNewChatFail"));
@@ -202,6 +204,7 @@ export default function ChatShell() {
   const handleSelectSession = (id: string) => {
     setCurrentSessionId(id);
     setDrawerOpen(false);
+    setPanelOpen(false);
   };
 
   const handleDeleteSession = async (id: string) => {
@@ -210,6 +213,7 @@ export default function ChatShell() {
       const list = await refreshSessions();
       if (currentSessionId === id) {
         setCurrentSessionId(list.length > 0 ? list[0].id : null);
+        setPanelOpen(false);
       }
     } catch {
       showToast(t("toastDeleteFail"));
@@ -222,6 +226,7 @@ export default function ChatShell() {
       setSessions([]);
       setCurrentSessionId(null);
       setMessages([]);
+      setPanelOpen(false);
     } catch {
       showToast(t("toastClearFail"));
     }
@@ -298,7 +303,7 @@ export default function ChatShell() {
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId, message: trimmed, uiLanguage: lang }),
+          body: JSON.stringify({ sessionId, message: trimmed, uiLanguage: lang, model }),
           signal: controller.signal,
         });
 
@@ -342,7 +347,7 @@ export default function ChatShell() {
         }, 700);
       }
     },
-    [isGenerating, user, messages, lang, t, ensureSessionId, refreshMessages, refreshQuota, panelOpen, openPanelWithFiles]
+    [isGenerating, user, messages, lang, model, t, ensureSessionId, refreshMessages, refreshQuota, panelOpen, openPanelWithFiles]
   );
 
   const continueMessage = useCallback(
@@ -359,7 +364,7 @@ export default function ChatShell() {
         const res = await fetch("/api/chat/continue", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: currentSessionId, messageId, uiLanguage: lang }),
+          body: JSON.stringify({ sessionId: currentSessionId, messageId, uiLanguage: lang, model }),
           signal: controller.signal,
         });
 
@@ -396,7 +401,7 @@ export default function ChatShell() {
         }, 700);
       }
     },
-    [user, currentSessionId, continuingMessageId, lang, t, refreshMessages, refreshQuota, panelOpen]
+    [user, currentSessionId, continuingMessageId, lang, model, t, refreshMessages, refreshQuota, panelOpen]
   );
 
   const stopGeneration = () => {

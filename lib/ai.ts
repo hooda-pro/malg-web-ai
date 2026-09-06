@@ -1,6 +1,16 @@
 import { MODEL_GLM_45_FLASH, MODEL_GLM_47_FLASH } from "./systemPrompt";
 
-const BASE_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
+const GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
+const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_MODEL = "minimax/minimax-m3:free";
+
+/** الموديلات المتاحة للمستخدم من الواجهة — لازم تتطابق مع components/SettingsContext.tsx */
+export type ModelId = "malg-2" | "malg-2.1";
+export const DEFAULT_MODEL: ModelId = "malg-2";
+
+export function normalizeModelId(raw: unknown): ModelId {
+  return raw === "malg-2.1" ? "malg-2.1" : "malg-2";
+}
 
 export interface ApiMessage {
   role: string;
@@ -60,10 +70,7 @@ export type NegotiationResult =
  * 3) لو فشل، يعيد المحاولة بدون tools
  * 4) لو لسه فاشل، يجرب الموديل المجاني الاحتياطي glm-4.5-flash بدون tools
  */
-export async function negotiateUpstream(
-  apiMessages: ApiMessage[],
-  signal: AbortSignal
-): Promise<NegotiationResult> {
+async function negotiateGLM(apiMessages: ApiMessage[], signal: AbortSignal): Promise<NegotiationResult> {
   const apiKey = process.env.MLAG_API_KEY || "";
   const model = process.env.MLAG_MODEL?.trim() || MODEL_GLM_47_FLASH;
 
@@ -82,7 +89,7 @@ export async function negotiateUpstream(
     });
 
   const call = (m: string, useTools: boolean) =>
-    fetch(BASE_URL, {
+    fetch(GLM_BASE_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -138,4 +145,135 @@ export async function negotiateUpstream(
   }
 
   return { ok: true, response };
+}
+
+// ---------------------------------------------------------------------------
+// malg-2.1 — OpenRouter (minimax/minimax-m3:free) مع تدوير عدة مفاتيح API
+// ---------------------------------------------------------------------------
+
+/**
+ * بيقرأ كل مفاتيح OpenRouter من متغير بيئة واحد اسمه OPENROUTER_API_KEYS.
+ * تقدر تحط فيه أكتر من مفتاح مفصولين بفاصلة (,) أو سطر جديد أو فاصلة منقوطة (;) —
+ * كل مفتاح بيدي حصة توكنز منفصلة، فكل ما تضيف مفتاح، إجمالي التوكنز المتاحة للموديل بيزيد.
+ * مثال (في إعدادات Environment Variables على Vercel):
+ *   OPENROUTER_API_KEYS = sk-or-key-1,sk-or-key-2,sk-or-key-3,...,sk-or-key-10
+ * تقدر ترفع أكتر من 10 مفاتيح براحتك، مفيش حد أقصى في الكود.
+ */
+function getOpenRouterKeys(): string[] {
+  const raw = process.env.OPENROUTER_API_KEYS || process.env.OPENROUTER_API_KEY || "";
+  return raw
+    .split(/[\n,;]+/)
+    .map((k) => k.trim())
+    .filter(Boolean);
+}
+
+// عداد بسيط في الذاكرة لتدوير المفاتيح (Round Robin) بين الطلبات المختلفة —
+// كل طلب بيبدأ من مفتاح مختلف عن اللي قبله عشان الحمل يتوزع على كل المفاتيح بالتساوي.
+let openRouterCursor = 0;
+
+function parseOpenRouterError(httpCode: number, rawJson: string): string {
+  try {
+    if (httpCode === 401 || httpCode === 403) {
+      return "أحد مفاتيح OpenRouter غير صالح أو ملغي — تأكد من المفاتيح في إعدادات Vercel.";
+    }
+    if (httpCode === 402) {
+      return "رصيد أحد مفاتيح OpenRouter انتهى.";
+    }
+    if (httpCode === 429) {
+      return "تم الوصول لمعدل الطلبات المسموح على مفاتيح OpenRouter الحالية.";
+    }
+    return `خطأ من OpenRouter (${httpCode}): ${rawJson.slice(0, 300)}`;
+  } catch {
+    return `خطأ في الاتصال بـ OpenRouter (${httpCode})`;
+  }
+}
+
+/**
+ * يجرب موديل malg-2.1 (minimax/minimax-m3:free عبر OpenRouter):
+ * بيدور على المفاتيح المتاحة واحد ورا التاني (تدوير + تجاوز أي مفتاح فشل بسبب
+ * انتهاء رصيده أو معدل طلباته) لحد ما يلاقي مفتاح شغال أو يخلص كل المفاتيح.
+ */
+async function negotiateOpenRouter(
+  apiMessages: ApiMessage[],
+  signal: AbortSignal
+): Promise<NegotiationResult> {
+  const keys = getOpenRouterKeys();
+  if (keys.length === 0) {
+    return {
+      ok: false,
+      errorMessage: "موديل malg-2.1 محتاج مفتاح OpenRouter واحد على الأقل (OPENROUTER_API_KEYS).",
+    };
+  }
+
+  const call = (key: string) =>
+    fetch(OPENROUTER_BASE_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": process.env.OPENROUTER_SITE_URL || "https://mlag.ai",
+        "X-Title": "mlag AI",
+      },
+      body: JSON.stringify({
+        model: OPENROUTER_MODEL,
+        messages: apiMessages,
+        temperature: 0.7,
+        stream: true,
+      }),
+      signal,
+    });
+
+  let lastErrorCode = 0;
+  let lastErrorText = "";
+
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[(openRouterCursor + i) % keys.length];
+    let response: Response;
+    try {
+      response = await call(key);
+    } catch (e) {
+      if (signal.aborted) throw e;
+      continue; // مشكلة شبكة مؤقتة — جرّب المفتاح اللي بعده
+    }
+
+    if (response.ok) {
+      openRouterCursor = (openRouterCursor + i + 1) % keys.length;
+      return { ok: true, response };
+    }
+
+    lastErrorCode = response.status;
+    // 429 (تجاوز الحد) أو 402 (رصيد خلص) أو 401/403 (مفتاح لاغي) — جرّب المفتاح اللي بعده
+    if ([401, 402, 403, 429].includes(response.status)) {
+      try {
+        lastErrorText = await response.text();
+      } catch {
+        // تجاهل
+      }
+      continue;
+    }
+
+    // أي خطأ تاني (500 مثلاً) — سيبه ونجرب مفتاح تاني برضو، بس نسجله
+    try {
+      lastErrorText = await response.text();
+    } catch {
+      // تجاهل
+    }
+  }
+
+  return { ok: false, errorMessage: parseOpenRouterError(lastErrorCode || 502, lastErrorText) };
+}
+
+/**
+ * نقطة الدخول الموحدة: بتوجه الطلب لموديل malg-2 (GLM) أو malg-2.1 (OpenRouter)
+ * حسب اختيار المستخدم من قايمة الموديلات فوق في الواجهة.
+ */
+export async function negotiateUpstream(
+  apiMessages: ApiMessage[],
+  signal: AbortSignal,
+  modelId: ModelId = DEFAULT_MODEL
+): Promise<NegotiationResult> {
+  if (modelId === "malg-2.1") {
+    return negotiateOpenRouter(apiMessages, signal);
+  }
+  return negotiateGLM(apiMessages, signal);
 }

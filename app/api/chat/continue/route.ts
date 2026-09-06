@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureSchema } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
 import { checkAndMaybeRenewQuota, deductTokens } from "@/lib/quota";
-import { negotiateUpstream, estimateTokens, type ApiMessage } from "@/lib/ai";
+import { negotiateUpstream, estimateTokens, normalizeModelId, type ApiMessage } from "@/lib/ai";
 import { buildSystemPrompt } from "@/lib/systemPrompt";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
   const sessionId = String(body?.sessionId || "");
   const messageId = String(body?.messageId || "");
   const uiLanguage = typeof body?.uiLanguage === "string" ? body.uiLanguage.slice(0, 8) : null;
+  const model = normalizeModelId(body?.model);
   if (!sessionId || !messageId) {
     return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
   }
@@ -64,7 +65,7 @@ export async function POST(req: NextRequest) {
 
   let negotiated;
   try {
-    negotiated = await negotiateUpstream(apiMessages, controller.signal);
+    negotiated = await negotiateUpstream(apiMessages, controller.signal, model);
   } catch {
     return NextResponse.json({ error: "تم إلغاء الطلب" }, { status: 499 });
   }
