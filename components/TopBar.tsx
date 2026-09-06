@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Menu, Sparkles, Terminal, Zap } from "lucide-react";
+import { Check, ChevronDown, Coins, Menu, Sparkles, Terminal, Zap } from "lucide-react";
 import { formatTokens } from "@/lib/ai";
 import type { ModelId } from "./SettingsContext";
 import { AVAILABLE_MODELS, useSettings } from "./SettingsContext";
@@ -10,12 +10,15 @@ export default function TopBar({
   onToggleDrawer,
   remainingTokens,
   onOpenRunner,
+  onOpenRecharge,
   lockedModel,
   onPickModel,
 }: {
   onToggleDrawer: () => void;
   remainingTokens: number | null;
   onOpenRunner: () => void;
+  /** فتح مودال شحن الرصيد (الباقات + واتساب) */
+  onOpenRecharge: () => void;
   /** الموديل اللي الشات الحالي متثبت عليه (لو فيه رسايل اتبعتت فيه بالفعل) */
   lockedModel?: ModelId | null;
   /** اختيار موديل من القايمة — بيتعامل معاه ChatShell (تحديث + تحذير لو الشات متثبت) */
@@ -110,6 +113,14 @@ export default function TopBar({
             <span className="mono text-[10px] text-txt2">{formatTokens(remainingTokens)}</span>
           </div>
         )}
+        <button
+          onClick={onOpenRecharge}
+          title={t("topbarRecharge")}
+          className="flex items-center gap-1 rounded-full border border-amber/40 bg-amber/10 px-2 py-1 text-amber transition-colors hover:bg-amber/20"
+        >
+          <Coins size={11} />
+          <span className="mono text-[10px] font-bold">{t("topbarRechargeShort")}</span>
+        </button>
         <button
           onClick={onOpenRunner}
           className="rounded-md p-1.5 text-txt2 hover:bg-white/5 hover:text-green"

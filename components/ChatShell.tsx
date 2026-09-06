@@ -13,6 +13,7 @@ import AuthModal from "./AuthModal";
 import CodeRunnerModal from "./CodeRunnerModal";
 import ArtifactPanel from "./ArtifactPanel";
 import SettingsModal from "./SettingsModal";
+import RechargeModal from "./RechargeModal";
 import Toast from "./Toast";
 import type { ModelId } from "./SettingsContext";
 import { useSettings } from "./SettingsContext";
@@ -81,6 +82,7 @@ export default function ChatShell() {
   const [panelFiles, setPanelFiles] = useState<ProjectFile[]>([]);
   const [panelFocusPath, setPanelFocusPath] = useState<string | undefined>(undefined);
   const [showSettings, setShowSettings] = useState(false);
+  const [showRecharge, setShowRecharge] = useState(false);
 
   // كل شات (session) بيتثبت على أول موديل اتبعتله رسالة بيه، وبيفضل شغال بيه
   // لحد ما يتفتح شات جديد — الخريطة دي بتتحفظ على الجهاز عشان تفضل بعد الريفريش.
@@ -593,6 +595,7 @@ export default function ChatShell() {
           onToggleDrawer={() => setDrawerOpen(true)}
           remainingTokens={remainingTokens}
           onOpenRunner={openRunnerDemo}
+          onOpenRecharge={() => setShowRecharge(true)}
           lockedModel={lockedModel}
           onPickModel={handlePickModel}
         />
@@ -649,6 +652,8 @@ export default function ChatShell() {
           onNameUpdated={handleNameUpdated}
         />
       )}
+
+      {showRecharge && <RechargeModal user={user} onClose={() => setShowRecharge(false)} />}
 
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
     </div>
