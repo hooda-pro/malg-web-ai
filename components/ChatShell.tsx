@@ -401,12 +401,19 @@ export default function ChatShell() {
       } finally {
         abortRef.current = null;
         setIsGenerating(false);
-        // لو الرد أنتج ملفات كود، الملفات نفسها بتتقدّم جوا الرسالة بزرار تحميل بس —
-        // من غير ما نفتح أي شاشة تلقائيًا. لو فيه حاجة قابلة للمعاينة فعلاً، اللوحة
-        // بتكون اتفتحت أصلاً وقت البث (useEffect فوق)؛ هنا بس ننبه لو لسه مقفولة.
+        // لو الرد أنتج ملفات كود، لازم نحدّث لوحة الأرتيفاكت بالنسخة النهائية الكاملة
+        // من الملفات دلوقتي — عشان أثناء البث كانت بتتحدث "لايف" من liveStreamFiles،
+        // لكن ده كان بيرجع null أول ما البث يخلص (isGenerating بقت false)، فكانت
+        // اللوحة بترجع لأول نسخة جزئية اتفتحت بيها (panelFiles القديمة) بدل آخر
+        // نسخة كاملة — وده اللي كان بيبان إنه "الكود اتقطع/اختفى" بعد ما الذكاء يخلص.
         const producedFiles = accContent ? extractProjectFiles(accContent) : [];
-        if (producedFiles.length > 0 && hasPreviewableFiles(accContent) && !panelOpen) {
-          showToast(t("toastPreviewReady"));
+        if (producedFiles.length > 0) {
+          if (!panelOpen && hasPreviewableFiles(accContent)) {
+            openPanelWithFiles(producedFiles);
+            showToast(t("toastPreviewReady"));
+          } else {
+            setPanelFiles(producedFiles);
+          }
         }
         setStreamingContent("");
         setStreamingReasoning("");
@@ -483,10 +490,20 @@ export default function ChatShell() {
         }
       } finally {
         abortRef.current = null;
+        // الاستكمال بيدمج مع محتوى الرسالة الأصلية على السيرفر (existing.content + accContent)،
+        // فلازم نستخرج الملفات من نفس الدمج هنا كمان، مش بس من accContent لوحدها —
+        // وإلا هنفقد أي ملف كان خلص كتابته قبل الاستكمال ويتفتح بنسخة ناقصة.
+        const originalMsg = messages.find((m) => m.id === messageId);
+        const mergedContent = (originalMsg?.content || "") + accContent;
         setContinuingMessageId(null);
-        const producedFiles = accContent ? extractProjectFiles(accContent) : [];
-        if (producedFiles.length > 0 && hasPreviewableFiles(accContent) && !panelOpen) {
-          showToast(t("toastPreviewReady"));
+        const producedFiles = mergedContent ? extractProjectFiles(mergedContent) : [];
+        if (producedFiles.length > 0) {
+          if (!panelOpen && hasPreviewableFiles(mergedContent)) {
+            openPanelWithFiles(producedFiles);
+            showToast(t("toastPreviewReady"));
+          } else {
+            setPanelFiles(producedFiles);
+          }
         }
         setContinuationStreamingContent("");
         await refreshMessages(currentSessionId);
@@ -501,6 +518,7 @@ export default function ChatShell() {
       user,
       currentSessionId,
       continuingMessageId,
+      messages,
       lang,
       model,
       sessionModels,
@@ -508,6 +526,7 @@ export default function ChatShell() {
       refreshMessages,
       refreshQuota,
       panelOpen,
+      openPanelWithFiles,
     ]
   );
 

@@ -3,6 +3,11 @@ import { MODEL_GLM_45_FLASH, MODEL_GLM_47_FLASH } from "./systemPrompt";
 const GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions";
 const OPENROUTER_MODEL = "minimax/minimax-m3:free";
+// من غير max_tokens صريح، بعض مزوّدي OpenRouter (خصوصاً على المسارات المجانية)
+// بيرجعوا لحد افتراضي واطي جداً (زي 4096) فبيقطعوا الكود في نص الملف — ده كان
+// سبب رئيسي في ظهور أكواد ناقصة/مكسورة من موديل malg-2.1. الموديل بيدعم مخرجات
+// لغاية 262K توكن فعليًا، فبنطلب حد أعلى بأمان (32K) يغطي أي صفحة/مشروع عادي.
+const OPENROUTER_MAX_TOKENS = 32000;
 
 /** الموديلات المتاحة للمستخدم من الواجهة — لازم تتطابق مع components/SettingsContext.tsx */
 export type ModelId = "malg-2" | "malg-2.1";
@@ -82,7 +87,7 @@ async function negotiateGLM(apiMessages: ApiMessage[], signal: AbortSignal): Pro
     JSON.stringify({
       model: m,
       messages: apiMessages,
-      temperature: 0.7,
+      temperature: 0.4,
       max_tokens: 96000,
       stream: true,
       ...(useTools ? { tools } : {}),
@@ -246,7 +251,8 @@ async function negotiateOpenRouter(
       body: JSON.stringify({
         model: OPENROUTER_MODEL,
         messages: apiMessages,
-        temperature: 0.7,
+        temperature: 0.4,
+        max_tokens: OPENROUTER_MAX_TOKENS,
         stream: true,
       }),
       signal,
