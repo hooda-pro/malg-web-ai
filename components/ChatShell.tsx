@@ -199,7 +199,7 @@ export default function ChatShell() {
         const res = await fetch("/api/auth/me");
         const data = await res.json();
         setUser(data.user || null);
-        if (!data.user) setShowAuthModal(true);
+        if (!data.user || data.user.profileComplete === false) setShowAuthModal(true);
       } finally {
         setAuthChecked(true);
       }
@@ -634,7 +634,11 @@ export default function ChatShell() {
       )}
 
       {showAuthModal && (
-        <AuthModal onClose={() => setShowAuthModal(false)} onAuthenticated={handleAuthenticated} />
+        <AuthModal
+          pendingUser={user && user.profileComplete === false ? user : null}
+          onClose={() => setShowAuthModal(false)}
+          onAuthenticated={handleAuthenticated}
+        />
       )}
 
       {runnerOpen && (

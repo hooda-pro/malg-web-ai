@@ -70,12 +70,20 @@ export function ensureSchema(): Promise<void> {
         CREATE TABLE IF NOT EXISTS users (
           id TEXT PRIMARY KEY,
           email TEXT UNIQUE NOT NULL,
-          password_hash TEXT NOT NULL,
+          password_hash TEXT,
           display_name TEXT NOT NULL,
           is_admin BOOLEAN NOT NULL DEFAULT FALSE,
           created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )
       `;
+
+      // ——— تسجيل الدخول بجوجل (Firebase Auth): مفيش باسورد للحسابات دي ———
+      await sql`ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL`;
+      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uid TEXT`;
+      await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_firebase_uid ON users(firebase_uid) WHERE firebase_uid IS NOT NULL`;
+      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER`;
+      // الحسابات القديمة (بريد/باسورد) تعتبر بياناتها مكتملة افتراضيًا
+      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_complete BOOLEAN NOT NULL DEFAULT TRUE`;
 
       await sql`
         CREATE TABLE IF NOT EXISTS chat_sessions (

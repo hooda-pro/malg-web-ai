@@ -3,6 +3,9 @@ export interface SessionUser {
   email: string;
   displayName: string;
   isAdmin: boolean;
+  /** لسه محتاج يكمل بياناته (الاسم + العمر) بعد أول تسجيل بجوجل */
+  profileComplete: boolean;
+  age?: number | null;
 }
 
 export interface ChatSession {

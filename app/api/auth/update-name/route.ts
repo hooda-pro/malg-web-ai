@@ -44,6 +44,8 @@ export async function POST(req: NextRequest) {
     email: user.email,
     displayName: name,
     isAdmin: user.isAdmin,
+    profileComplete: user.profileComplete ?? true,
+    age: user.age ?? null,
   };
   const token = signSession(updatedUser);
 

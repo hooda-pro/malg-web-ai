@@ -19,14 +19,23 @@ export async function POST(req: NextRequest) {
     await ensureSchema();
 
     const rows = await sql`
-      SELECT id, email, password_hash, display_name, is_admin, is_banned
+      SELECT id, email, password_hash, display_name, is_admin, is_banned, age, profile_complete
       FROM users WHERE email = ${email}
     `;
     const row = rows[0] as
-      | { id: string; email: string; password_hash: string; display_name: string; is_admin: boolean; is_banned: boolean }
+      | {
+          id: string;
+          email: string;
+          password_hash: string | null;
+          display_name: string;
+          is_admin: boolean;
+          is_banned: boolean;
+          age: number | null;
+          profile_complete: boolean;
+        }
       | undefined;
 
-    if (!row) {
+    if (!row || !row.password_hash) {
       return NextResponse.json(
         { error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" },
         { status: 401 }
@@ -53,6 +62,8 @@ export async function POST(req: NextRequest) {
       email: row.email,
       displayName: row.display_name,
       isAdmin: row.is_admin,
+      profileComplete: row.profile_complete,
+      age: row.age,
     };
     const token = signSession(user);
 

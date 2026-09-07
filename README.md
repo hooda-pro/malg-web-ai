@@ -20,9 +20,42 @@
 | `ADMIN_EMAIL` | (اختياري) بريد حساب الأدمن، افتراضيًا `admin@mlag.ai` |
 | `ADMIN_PASSWORD` | (اختياري) كلمة مرور الأدمن، افتراضيًا `Mlag@Admin2026` |
 | `NEXT_PUBLIC_WHATSAPP_USERNAME` | (اختياري) يوزر واتساب الدعم لزر الشحن، افتراضيًا `GM-Y16` |
+| `NEXT_PUBLIC_FIREBASE_API_KEY` | من إعدادات مشروع Firebase (Web app SDK config) |
+| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | نفس الشيء |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | نفس الشيء |
+| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | نفس الشيء |
+| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | نفس الشيء |
+| `NEXT_PUBLIC_FIREBASE_APP_ID` | نفس الشيء |
+| `FIREBASE_PROJECT_ID` | من ملف الـ Service Account (سيرفر فقط) |
+| `FIREBASE_CLIENT_EMAIL` | من ملف الـ Service Account (سيرفر فقط) |
+| `FIREBASE_PRIVATE_KEY` | من ملف الـ Service Account (سيرفر فقط، مع الحفاظ على `\n`) |
 
 الجداول بتتنشئ تلقائيًا في أول طلب يوصل للسيرفر (مفيش سكريبت لازم تشغّله يدويًا)،
 وحساب الأدمن بيتعمل تلقائيًا لو مفيش أي أدمن في القاعدة.
+
+## تسجيل الدخول بجوجل (Firebase Authentication)
+
+تسجيل حسابات المستخدمين بقى عن طريق **جوجل بس** (مفيش بريد/كلمة مرور). خطوات الإعداد:
+
+1. روح على **[console.firebase.google.com](https://console.firebase.google.com/)** واعمل مشروع جديد
+   (أو استخدم مشروع موجود عندك).
+2. من القائمة الجانبية: **Build > Authentication > Sign-in method** → فعّل مزوّد **Google**.
+3. **Authentication > Settings > Authorized domains** → ضيف الدومين بتاعك
+   (مثلاً `malg-ai.vercel.app`) و `localhost` (موجود افتراضيًا) عشان نافذة تسجيل الدخول تشتغل.
+4. **Project settings (⚙️) > General > Your apps** → أنشئ **Web app** وانسخ الإعدادات
+   (`apiKey`, `authDomain`, `projectId`, ...) وحطها في متغيرات `NEXT_PUBLIC_FIREBASE_*`.
+5. **Project settings > Service accounts** → **Generate new private key** (بينزل ملف JSON) →
+   خد منه `project_id` و `client_email` و `private_key` وحطهم في `FIREBASE_PROJECT_ID` /
+   `FIREBASE_CLIENT_EMAIL` / `FIREBASE_PRIVATE_KEY`.
+6. (اختياري بس متوصى بيه) **Build > Firestore Database > Create database** — عشان تتخزن نسخة
+   من بيانات كل مستخدم (الاسم والعمر) في مجموعة `users` جوه Firestore، بالإضافة لتخزينها
+   في قاعدة بيانات Neon اللي بيعتمد عليها باقي التطبيق (المحادثات، الكوتة، لوحة الأدمن).
+
+أول مرة أي حد يسجل دخول بجوجل، هيتسجل حسابه تلقائيًا وهيتطلب منه بعد كده يكتب
+**اسمه وعمره** لاستكمال الحساب. المرات الجاية هيدخل على طول من غير أي خطوة زيادة.
+
+> ملحوظة: لوحة الأدمن (`/#/admin`) لسه بتستخدم تسجيل الدخول بالبريد/كلمة المرور القديم —
+> ده مقصود ومنفصل تمامًا عن حسابات المستخدمين العاديين.
 
 ## لوحة الأدمن (`/#/admin`)
 
