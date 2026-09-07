@@ -100,9 +100,9 @@ export default function MessageItem({
             </button>
             {reasoningOpen && (
               <div className="reasoning-box animate-fadeIn mt-1.5 max-h-[200px] w-[320px] max-w-full overflow-y-auto rounded-md border border-line2 bg-panel3 px-2.5 py-2">
-                <p className="whitespace-pre-wrap text-[11px] leading-5 text-txt2">
-                  {message.reasoning}
-                </p>
+                <div className="text-[11px] leading-5 text-txt2">
+                  {renderFormattedText(message.reasoning, `${message.id}-reasoning`)}
+                </div>
               </div>
             )}
           </div>

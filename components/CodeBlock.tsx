@@ -20,6 +20,11 @@ export default function CodeBlock({
   const [copied, setCopied] = useState(false);
   const html = useMemo(() => highlightCode(code), [code]);
   const canRun = RUNNABLE_LANGS.has((language || "").toLowerCase()) && !!onRun;
+  const lineCount = useMemo(() => code.split("\n").length, [code]);
+  const lineNumbers = useMemo(
+    () => Array.from({ length: lineCount }, (_, i) => i + 1).join("\n"),
+    [lineCount]
+  );
 
   const handleCopy = async () => {
     try {
@@ -56,8 +61,17 @@ export default function CodeBlock({
           </button>
         </div>
       </div>
-      <pre className="mono overflow-x-auto p-3 text-[12.5px] leading-[1.6] text-txt">
-        <code dangerouslySetInnerHTML={{ __html: html }} />
+      <pre className="mono flex overflow-x-auto p-3 text-[12.5px] leading-[1.6] text-txt">
+        {lineCount > 1 && (
+          <code
+            aria-hidden="true"
+            className="select-none pe-3 text-end text-txt3/40"
+            style={{ minWidth: `${String(lineCount).length + 1}ch` }}
+          >
+            {lineNumbers}
+          </code>
+        )}
+        <code className="flex-1" dangerouslySetInnerHTML={{ __html: html }} />
       </pre>
     </div>
   );

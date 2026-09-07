@@ -332,6 +332,12 @@ function parseOpenRouterError(httpCode: number, rawJson: string): string {
   // بهوية mlag للمستخدم من غير أي اسم مزوّد خارجي.
   console.error("[mlag upstream error - provider A]", httpCode, rawJson.slice(0, 500));
   try {
+    // سقف يومي (مش لحظي) — "استنى ثانيتين" هنا رسالة غلط ومضللة، لازم نوضح
+    // إنه سقف يومي وإن أفضل حل فوري هو موديل تاني، مش إعادة المحاولة بعد شوية.
+    const isDailyLimit = /limit_rpd|daily limit/i.test(rawJson);
+    if (httpCode === 429 && isDailyLimit) {
+      return "موديل mlag-2.1 وصل للحد اليومي المجاني بتاعه دلوقتي — بنحولّك تلقائيًا لموديل تاني عشان تكمل عادي، وممكن تختار mlag-2.1 تاني بكرة لما السقف يترفع.";
+    }
     if (httpCode === 401 || httpCode === 403) {
       return "حصلت مشكلة مؤقتة في الاتصال بالخدمة — جرب تاني بعد شوية أو اختار موديل تاني.";
     }
@@ -560,6 +566,16 @@ async function negotiateXkiro(apiMessages: ApiMessage[], signal: AbortSignal): P
 /**
  * نقطة الدخول الموحدة: بتوجه الطلب لموديل malg-2 (GLM) أو malg-2.1 (OpenRouter)
  * أو malg-2.2 (xKiro) حسب اختيار المستخدم من قايمة الموديلات فوق في الواجهة.
+ *
+ * ملحوظة مهمة (السبب الحقيقي وراء "malg-2.1 بطل يكتب" اللي ظهر في اللوج):
+ * minimax-m3:free على OpenRouter ليه سقف طلبات يومي (limit_rpd) مش لحظي —
+ * لما السقف اليومي يخلص، كل مفاتيحنا بترجع 429 مهما جربنا نعيد المحاولة أو
+ * ندور مفاتيح، والمستخدم كان بياخد رسالة خطأ ويقف بلا رد خالص. بما إن هوية
+ * "mlag" اللي المستخدم بيتكلم معاها واحدة بغض النظر عن المزوّد الحقيقي تحتها
+ * (شوف lib/systemPrompt.ts)، لما malg-2.1 أو malg-2.2 يفشلوا فشل كامل (كل
+ * المفاتيح خلصت/اتقفلت)، بنرجع تلقائيًا لموديل malg-2 (GLM) — اللي فيه أصلاً
+ * منطق fallback داخلي لنفسه — عشان المستخدم ياخد رد فعلي دايمًا بدل ما يوصله
+ * خطأ من غير أي تفسير واضح.
  */
 export async function negotiateUpstream(
   apiMessages: ApiMessage[],
@@ -567,10 +583,16 @@ export async function negotiateUpstream(
   modelId: ModelId = DEFAULT_MODEL
 ): Promise<NegotiationResult> {
   if (modelId === "malg-2.1") {
-    return negotiateOpenRouter(apiMessages, signal);
+    const result = await negotiateOpenRouter(apiMessages, signal);
+    if (result.ok) return result;
+    console.error("[mlag] malg-2.1 (provider A) فشل بالكامل — رجعنا لـ malg-2:", result.errorMessage);
+    return negotiateGLM(apiMessages, signal);
   }
   if (modelId === "malg-2.2") {
-    return negotiateXkiro(apiMessages, signal);
+    const result = await negotiateXkiro(apiMessages, signal);
+    if (result.ok) return result;
+    console.error("[mlag] malg-2.2 (provider C) فشل بالكامل — رجعنا لـ malg-2:", result.errorMessage);
+    return negotiateGLM(apiMessages, signal);
   }
   return negotiateGLM(apiMessages, signal);
 }

@@ -1,16 +1,16 @@
 import type { ReactNode } from "react";
 
 /**
- * تنسيق Markdown خفيف للرد النهائي (بعد ما يخلص الستريم) — من غير أي مكتبة
- * خارجية، عشان نغطي أكتر حاجة بيكتبها الموديل فعليًا في ردوده:
- * العناوين (# ## ###)، **Bold**، *Italic*، `inline code`، قوائم نقطية/مرقّمة،
- * اقتباس (>)، خط فاصل (---)، وروابط Markdown [نص](رابط).
+ * تنسيق Markdown خفيف للرد النهائي وللبث الحي — من غير أي مكتبة خارجية.
+ * بيغطي: العناوين (# ## ###)، **Bold**، *Italic*، ~~Strikethrough~~،
+ * `inline code`، قوائم نقطية/مرقّمة (وقوائم تشيك بوكس - [ ] / - [x])،
+ * جداول Markdown، اقتباس (>)، خط فاصل (---)، وروابط [نص](رابط).
  *
- * قبل كده كان كل رد بيتعرض كنص خام (whitespace-pre-wrap) من غير أي تنسيق —
- * النجوم والهاشات كانت بتطلع زي ما هي بدل ما تتحول لـ Bold/عناوين حقيقية.
- * الملف ده بيستبدل المستخدم القديم lib/renderInlineLinks.tsx (لسه موجود
- * ومستخدم في عرض الستريم الحي لأسباب أداء/استقرار وقت الكتابة اللحظية).
+ * قبل كده كل رد كان بيتعرض كنص خام (whitespace-pre-wrap) — النجوم والهاشات
+ * والجداول كانت بتطلع زي ما هي من غير أي تحويل بصري.
  */
+
+type TableBlock = { type: "table"; header: string[]; rows: string[][] };
 
 type Block =
   | { type: "heading"; level: 1 | 2 | 3 | 4; text: string }
@@ -18,6 +18,7 @@ type Block =
   | { type: "quote"; text: string }
   | { type: "ul"; items: string[] }
   | { type: "ol"; items: string[] }
+  | TableBlock
   | { type: "p"; text: string };
 
 const HEADING_RE = /^(#{1,4})\s+(.*)$/;
@@ -25,6 +26,14 @@ const HR_RE = /^\s*([-*_])\1{2,}\s*$/;
 const QUOTE_RE = /^\s*>\s?(.*)$/;
 const UL_RE = /^\s*[-*]\s+(.*)$/;
 const OL_RE = /^\s*\d+[.)]\s+(.*)$/;
+const TABLE_ROW_RE = /^\s*\|(.+)\|\s*$/;
+const TABLE_SEP_RE = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/;
+const CHECKBOX_RE = /^\[( |x|X)\]\s+(.*)$/;
+
+function splitTableRow(line: string): string[] {
+  const trimmed = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+  return trimmed.split("|").map((c) => c.trim());
+}
 
 function parseBlocks(text: string): Block[] {
   const lines = text.split("\n");
@@ -49,6 +58,18 @@ function parseBlocks(text: string): Block[] {
     if (HR_RE.test(line)) {
       blocks.push({ type: "hr" });
       i++;
+      continue;
+    }
+
+    if (TABLE_ROW_RE.test(line) && i + 1 < lines.length && TABLE_SEP_RE.test(lines[i + 1])) {
+      const header = splitTableRow(line);
+      i += 2;
+      const rows: string[][] = [];
+      while (i < lines.length && TABLE_ROW_RE.test(lines[i])) {
+        rows.push(splitTableRow(lines[i]));
+        i++;
+      }
+      blocks.push({ type: "table", header, rows });
       continue;
     }
 
@@ -90,7 +111,8 @@ function parseBlocks(text: string): Block[] {
       !HR_RE.test(lines[i]) &&
       !QUOTE_RE.test(lines[i]) &&
       !UL_RE.test(lines[i]) &&
-      !OL_RE.test(lines[i])
+      !OL_RE.test(lines[i]) &&
+      !(TABLE_ROW_RE.test(lines[i]) && i + 1 < lines.length && TABLE_SEP_RE.test(lines[i + 1]))
     ) {
       paraLines.push(lines[i]);
       i++;
@@ -103,7 +125,7 @@ function parseBlocks(text: string): Block[] {
 
 // ترتيب الأولوية مهم: رابط/كود الأول عشان النجوم اللي جواهم ما تتفسرش كـ Bold غلط
 const INLINE_RE =
-  /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|`([^`\n]+)`|\*\*([^*\n]+)\*\*|__([^_\n]+)__|\*([^*\n]+)\*|_([^_\n]+)_/g;
+  /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|`([^`\n]+)`|\*\*([^*\n]+)\*\*|__([^_\n]+)__|~~([^~\n]+)~~|\*([^*\n]+)\*|_([^_\n]+)_/g;
 
 function parseInline(text: string, keyPrefix: string): ReactNode[] {
   const nodes: ReactNode[] = [];
@@ -114,7 +136,7 @@ function parseInline(text: string, keyPrefix: string): ReactNode[] {
 
   while ((match = regex.exec(text)) !== null) {
     if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index));
-    const [full, linkLabel, linkUrl, code, bold1, bold2, italic1, italic2] = match;
+    const [full, linkLabel, linkUrl, code, bold1, bold2, strike, italic1, italic2] = match;
     const key = `${keyPrefix}-i${i++}`;
 
     if (linkLabel && linkUrl) {
@@ -141,6 +163,12 @@ function parseInline(text: string, keyPrefix: string): ReactNode[] {
           {bold1 || bold2}
         </strong>
       );
+    } else if (strike) {
+      nodes.push(
+        <span key={key} className="text-txt3 line-through">
+          {strike}
+        </span>
+      );
     } else if (italic1 || italic2) {
       nodes.push(
         <em key={key} className="italic text-txt">
@@ -164,7 +192,21 @@ const HEADING_SIZE: Record<1 | 2 | 3 | 4, string> = {
   4: "text-[13.5px]",
 };
 
-/** بيحوّل نص Markdown كامل لعناصر React منسّقة — استخدمها لأي رد نهائي (مش أثناء الستريم الحي). */
+function renderListItem(item: string, key: string): ReactNode {
+  const checkbox = item.match(CHECKBOX_RE);
+  if (checkbox) {
+    const checked = checkbox[1].toLowerCase() === "x";
+    return (
+      <span className={`flex items-start gap-1.5 ${checked ? "text-txt3" : "text-txt"}`}>
+        <input type="checkbox" checked={checked} readOnly disabled className="mt-1 accent-cyan" />
+        <span className={checked ? "line-through" : ""}>{parseInline(checkbox[2], key)}</span>
+      </span>
+    );
+  }
+  return parseInline(item, key);
+}
+
+/** بيحوّل نص Markdown كامل لعناصر React منسّقة — يشتغل بأمان مع نص لسه بيتكتب (streaming). */
 export function renderFormattedText(text: string, keyPrefix: string): ReactNode {
   const blocks = parseBlocks(text);
 
@@ -198,8 +240,11 @@ export function renderFormattedText(text: string, keyPrefix: string): ReactNode 
             return (
               <ul key={key} className="my-1.5 ms-4 list-disc space-y-1">
                 {block.items.map((item, ii) => (
-                  <li key={`${key}-${ii}`} className="text-[13.5px] leading-6 text-txt">
-                    {parseInline(item, `${key}-${ii}`)}
+                  <li
+                    key={`${key}-${ii}`}
+                    className={`text-[13.5px] leading-6 text-txt ${CHECKBOX_RE.test(item) ? "list-none -ms-4" : ""}`}
+                  >
+                    {renderListItem(item, `${key}-${ii}`)}
                   </li>
                 ))}
               </ul>
@@ -213,6 +258,36 @@ export function renderFormattedText(text: string, keyPrefix: string): ReactNode 
                   </li>
                 ))}
               </ol>
+            );
+          case "table":
+            return (
+              <div key={key} className="my-2 overflow-x-auto rounded-md border border-line2">
+                <table className="w-full border-collapse text-[12.5px]">
+                  <thead>
+                    <tr className="bg-panel3">
+                      {block.header.map((cell, ci) => (
+                        <th
+                          key={`${key}-h${ci}`}
+                          className="border-b border-line2 px-2.5 py-1.5 text-start font-bold text-txt"
+                        >
+                          {parseInline(cell, `${key}-h${ci}`)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {block.rows.map((row, ri) => (
+                      <tr key={`${key}-r${ri}`} className={ri % 2 === 1 ? "bg-panel3/40" : ""}>
+                        {row.map((cell, ci) => (
+                          <td key={`${key}-r${ri}-c${ci}`} className="border-b border-line2/60 px-2.5 py-1.5 text-txt2">
+                            {parseInline(cell, `${key}-r${ri}-c${ci}`)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             );
           default:
             return (

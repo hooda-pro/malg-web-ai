@@ -5,7 +5,7 @@ import { Sparkles } from "lucide-react";
 import type { ChatMessage } from "@/lib/types";
 import type { ProjectFile } from "@/lib/parseContent";
 import { parseStreamingContent } from "@/lib/parseContent";
-import { renderInlineLinks } from "@/lib/renderInlineLinks";
+import { renderFormattedText } from "@/lib/markdown";
 import MessageItem from "./MessageItem";
 import WelcomeHero from "./WelcomeHero";
 import { useSettings } from "./SettingsContext";
@@ -118,9 +118,11 @@ export default function MessageList({
                     ref={thinkBoxRef}
                     className="reasoning-box animate-fadeIn mt-1.5 max-h-[180px] w-[320px] max-w-full overflow-y-auto rounded-md border border-line2 bg-panel3 px-2.5 py-2"
                   >
-                    <p className="whitespace-pre-wrap text-[11px] leading-5 text-txt2">
-                      {streamingReasoning || "..."}
-                    </p>
+                    <div className="text-[11px] leading-5 text-txt2">
+                      {streamingReasoning
+                        ? renderFormattedText(streamingReasoning, "stream-reasoning")
+                        : "..."}
+                    </div>
                   </div>
                 )}
               </div>
@@ -141,10 +143,10 @@ export default function MessageList({
               <div className="rounded-lg rounded-bl-sm border border-line2 bg-panel2 px-3 py-2">
                 {streamSegments.map((seg, i) =>
                   seg.type === "prose" ? (
-                    <p key={i} className="whitespace-pre-wrap break-words text-[13.5px] leading-6 text-txt">
-                      {renderInlineLinks(seg.text, `stream-${i}`)}
+                    <div key={i} className="relative">
+                      {renderFormattedText(seg.text, `stream-${i}`)}
                       {i === streamSegments.length - 1 && <span className="term-caret" />}
-                    </p>
+                    </div>
                   ) : (
                     <div
                       key={i}
