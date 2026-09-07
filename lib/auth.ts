@@ -4,7 +4,23 @@ import type { SessionUser } from "./types";
 import { sql } from "./db";
 
 export const COOKIE_NAME = "mlag_session";
-const SECRET = process.env.JWT_SECRET || "dev-insecure-secret-change-me";
+
+// ثغرة أمنية اتصلحت: لو JWT_SECRET مش متظبط، كان بيستخدم قيمة ثابتة معروفة
+// في الكود ("dev-insecure-secret-change-me") — يعني أي حد شاف السورس كان
+// يقدر يوقّع توكن جلسة مزور لأي يوزر (حتى أدمن) ويدخل بيه. دلوقتي: في
+// production لازم JWT_SECRET يكون متظبط، وإلا السيرفر يرفض يوقّع/يتحقق من
+// أي جلسة بدل ما يشتغل بمفتاح ضعيف معروف.
+const SECRET = (() => {
+  const fromEnv = process.env.JWT_SECRET;
+  if (fromEnv && fromEnv.length >= 16) return fromEnv;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "JWT_SECRET مش متظبط (أو قصير جدًا) في متغيرات البيئة — ده مطلوب في الإنتاج. " +
+        "ضيف قيمة عشوائية طويلة (32+ حرف) في Vercel Project Settings > Environment Variables."
+    );
+  }
+  return "dev-only-insecure-secret-do-not-use-in-production";
+})();
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 يوم
 
 export function signSession(user: SessionUser): string {

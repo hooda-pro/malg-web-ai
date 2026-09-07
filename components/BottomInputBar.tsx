@@ -41,7 +41,7 @@ export default function BottomInputBar({
   };
 
   return (
-    <div className="border-t border-line bg-panel/95 backdrop-blur px-3 py-1.5">
+    <div className="safe-bottom border-t border-line bg-panel/95 backdrop-blur px-3 py-1.5">
       <div className="flex items-end gap-2 rounded-lg border border-line2 bg-panel2 px-2.5 py-1.5 focus-within:border-green/50">
         <span className="mono select-none pb-1.5 text-sm text-green">{">"}</span>
         <textarea

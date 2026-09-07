@@ -58,7 +58,7 @@ export default function AdminPanel({
   }, []);
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-[100dvh] overflow-hidden">
       {/* ——— القايمة الجانبية ——— */}
       <aside className="flex w-16 shrink-0 flex-col border-l border-line bg-panel md:w-60">
         <div className="flex items-center justify-center gap-2 border-b border-line px-3 py-4 md:justify-start md:px-4">

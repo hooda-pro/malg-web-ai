@@ -72,7 +72,7 @@ export default function SettingsModal({
 
   return (
     <div className="animate-fadeIn fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
-      <div className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-lg border border-line2 bg-panel glow-green">
+      <div className="max-h-[90dvh] w-full max-w-sm overflow-y-auto rounded-lg border border-line2 bg-panel glow-green">
         <div className="terminal-dots flex items-center justify-between border-b border-line px-3 py-2.5">
           <div className="flex items-center gap-2">
             <span className="flex gap-1">

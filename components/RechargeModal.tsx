@@ -58,7 +58,7 @@ export default function RechargeModal({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4 py-6">
-      <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-lg border border-line2 bg-panel glow-green animate-slideUp">
+      <div className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-lg border border-line2 bg-panel glow-green animate-slideUp">
         {/* الهيدر */}
         <div className="terminal-dots sticky top-0 z-10 flex items-center justify-between border-b border-line bg-panel px-3 py-2.5">
           <div className="flex items-center gap-2">

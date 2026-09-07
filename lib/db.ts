@@ -38,8 +38,30 @@ async function seedDefaultAdmin() {
     const existing = await sql`SELECT id FROM users WHERE is_admin = TRUE LIMIT 1`;
     if (existing.length > 0) return;
 
-    const email = (process.env.ADMIN_EMAIL || "admin@mlag.ai").trim().toLowerCase();
-    const password = process.env.ADMIN_PASSWORD || "Mlag@Admin2026";
+    const email = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+    let password = process.env.ADMIN_PASSWORD || "";
+
+    if (!email || !password) {
+      // ثغرة أمنية اتصلحت: كان فيه إيميل/باسورد افتراضي ثابت في الكود
+      // (admin@mlag.ai / Mlag@Admin2026) بيتعمل بيه حساب أدمن تلقائي لو
+      // ADMIN_EMAIL/ADMIN_PASSWORD مش متظبطين — يعني أي حد شاف الكود (أو
+      // النسخة دي) كان يقدر يدخل لوحة الأدمن مباشرة. دلوقتي: لازم تظبط
+      // الاتنين في متغيرات البيئة، وإلا مفيش حساب أدمن هيتعمل خالص.
+      console.error(
+        "[seed] ADMIN_EMAIL و/أو ADMIN_PASSWORD مش متظبطين في متغيرات البيئة — " +
+          "مفيش حساب أدمن هيتعمل تلقائيًا لأسباب أمنية. ضيفهم في Vercel Project " +
+          "Settings > Environment Variables (باسورد قوي وطويل) وأعد النشر."
+      );
+      return;
+    }
+
+    if (password.length < 12) {
+      console.error(
+        "[seed] ADMIN_PASSWORD قصير جدًا (أقل من 12 حرف) — اختار باسورد أقوى وأعد النشر. مفيش حساب أدمن هيتعمل دلوقتي."
+      );
+      return;
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
     const id = randomUUID();
 

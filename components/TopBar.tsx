@@ -51,7 +51,7 @@ export default function TopBar({
   const currentModel = AVAILABLE_MODELS.find((m) => m.id === displayModelId) ?? AVAILABLE_MODELS[0];
 
   return (
-    <header className="relative z-30 flex items-center justify-between border-b border-line bg-panel/90 px-3 py-2.5 backdrop-blur">
+    <header className="safe-top relative z-30 flex items-center justify-between border-b border-line bg-panel/90 px-3 py-2.5 backdrop-blur">
       <button
         onClick={onToggleDrawer}
         className="rounded-md p-1.5 text-txt2 hover:bg-white/5 hover:text-txt lg:hidden"

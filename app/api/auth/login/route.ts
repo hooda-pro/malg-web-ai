@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { sql, ensureSchema } from "@/lib/db";
 import { COOKIE_NAME, SESSION_COOKIE_MAX_AGE, signSession } from "@/lib/auth";
+import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,6 +14,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "يرجى إدخال بريد إلكتروني صحيح وكلمة مرور من 6 أحرف على الأقل" },
         { status: 400 }
+      );
+    }
+
+    // ثغرة أمنية اتصلحت: المسار ده كان من غير أي حد لعدد المحاولات، يعني
+    // كان ممكن حد يجرب باسوردات كتير جدًا بسرعة (Brute force) خصوصًا على
+    // حساب الأدمن. دلوقتي بنحد المحاولات لكل IP ولكل (IP + إيميل).
+    const ip = getClientIp(req);
+    const ipLimit = checkRateLimit(`login:ip:${ip}`, { maxAttempts: 15, windowMs: 5 * 60 * 1000, blockMs: 10 * 60 * 1000 });
+    if (!ipLimit.allowed) {
+      return NextResponse.json(
+        { error: "محاولات كتير جدًا في وقت قصير — حاول تاني بعد شوية." },
+        { status: 429, headers: { "Retry-After": String(ipLimit.retryAfterSeconds ?? 300) } }
+      );
+    }
+    const emailLimit = checkRateLimit(`login:email:${email}`, { maxAttempts: 6, windowMs: 5 * 60 * 1000, blockMs: 10 * 60 * 1000 });
+    if (!emailLimit.allowed) {
+      return NextResponse.json(
+        { error: "محاولات كتير جدًا على الحساب ده — حاول تاني بعد شوية." },
+        { status: 429, headers: { "Retry-After": String(emailLimit.retryAfterSeconds ?? 300) } }
       );
     }
 

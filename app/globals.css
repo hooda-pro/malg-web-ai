@@ -123,3 +123,26 @@ html.no-anim *::after {
   scrollbar-width: thin;
   scrollbar-color: #26382f transparent;
 }
+
+/* مساحات الأمان بتاعة آيفون (النوتش من فوق وخط الهوم من تحت) — كانت
+   ناقصة تمامًا قبل كده، فعلى آيفون X وما بعده الشريط العلوي (TopBar) كان
+   ممكن يتغطى جزء منه بالنوتش، وشريط الكتابة السفلي (BottomInputBar) كان
+   بيلزق في خط الهوم بار من غير مساحة. لازم viewport-fit=cover في
+   app/layout.tsx عشان env(safe-area-inset-*) تشتغل أصلًا. */
+.safe-top {
+  padding-top: max(0px, env(safe-area-inset-top));
+}
+.safe-bottom {
+  padding-bottom: max(0px, env(safe-area-inset-bottom));
+}
+.safe-left {
+  padding-left: max(0px, env(safe-area-inset-left));
+}
+.safe-right {
+  padding-right: max(0px, env(safe-area-inset-right));
+}
+
+/* منع تكبير الصفحة تلقائي على آيفون عند الضغط على أي input/textarea —
+   سفاري بيكبّر الصفحة تلقائي لو حجم خط حقل الإدخال أقل من 16px. الحل
+   الصحيح هو خط 16px فعلي على الموبايل (متطبق بالفعل في BottomInputBar
+   عبر text-base)، مش تعطيل الزوم اللي بيضر إمكانية الوصول. */
