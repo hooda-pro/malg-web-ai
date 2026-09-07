@@ -62,14 +62,19 @@ export default function AuthModal({
         setError(data.error || t("errGeneric"));
         return;
       }
-      if (data.needsProfile) {
+            if (data.needsProfile) {
         setName(data.user.displayName || "");
         setStep("profile");
       } else {
         onAuthenticated(data.user);
       }
-    } catch {
-      setError(t("errGoogle"));
+    } catch (err) {
+      // بنطبع السبب الحقيقي في الكونسول + بنوريه للمستخدم عشان نقدر نشخّص أي مشكلة بسرعة
+      // (Firebase بيرجع code زي auth/unauthorized-domain, auth/popup-blocked, auth/invalid-api-key...)
+      console.error("Google sign-in error:", err);
+      const code = (err as { code?: string })?.code;
+      const message = err instanceof Error ? err.message : String(err);
+      setError(`${t("errGoogle")}${code ? ` (${code})` : ""} — ${message}`);
     } finally {
       setLoading(false);
     }
