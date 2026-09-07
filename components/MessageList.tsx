@@ -5,6 +5,7 @@ import { Sparkles } from "lucide-react";
 import type { ChatMessage } from "@/lib/types";
 import type { ProjectFile } from "@/lib/parseContent";
 import { parseStreamingContent } from "@/lib/parseContent";
+import { renderInlineLinks } from "@/lib/renderInlineLinks";
 import MessageItem from "./MessageItem";
 import WelcomeHero from "./WelcomeHero";
 import { useSettings } from "./SettingsContext";
@@ -141,7 +142,7 @@ export default function MessageList({
                 {streamSegments.map((seg, i) =>
                   seg.type === "prose" ? (
                     <p key={i} className="whitespace-pre-wrap break-words text-[13.5px] leading-6 text-txt">
-                      {seg.text}
+                      {renderInlineLinks(seg.text, `stream-${i}`)}
                       {i === streamSegments.length - 1 && <span className="term-caret" />}
                     </p>
                   ) : (
