@@ -30,29 +30,31 @@ export interface ApiMessage {
 }
 
 export function parseErrorMessage(httpCode: number, rawJson: string): string {
+  // ملحوظة أمان/خصوصية مهمة: كانت الدالة دي بترجع نص الخطأ الخام والمعرّف
+  // للمزوّد الحقيقي (GLM) مباشرة لواجهة المستخدم — يعني أي حد كان يقدر
+  // يعرف إن mlag شغال فوق موديل خارجي بس من رسالة الخطأ. دلوقتي: بنسجل
+  // التفاصيل الكاملة في الـ server logs بس (console.error) ونرجّع للمستخدم
+  // رسالة عامة بهوية mlag بس، من غير أي اسم مزوّد أو كود داخلي أو JSON خام.
+  console.error("[mlag upstream error]", httpCode, rawJson.slice(0, 500));
   try {
-    if (rawJson.includes("1302") || rawJson.includes("速率限制")) {
-      return "تم الوصول لمعدل الطلبات المسموح (Rate Limit): النموذج المجاني GLM-4.7-Flash يتيح طلباً واحداً متزامناً (1 Concurrency). يُرجى الانتظار 2-3 ثوانٍ فقط وإعادة المحاولة وسيعمل فوراً!";
+    if (rawJson.includes("1302") || rawJson.includes("速率限制") || httpCode === 429) {
+      return "الخدمة مزدحمة شوية دلوقتي — استنى ثانيتين وابعت تاني وهيشتغل.";
     }
-    if (rawJson.includes("1113") || rawJson.includes("余额不足")) {
-      return "خطأ 1113 (رصيد الحساب): تم اختيار نموذج مدفوع يحتاج رصيداً. يرجى اختيار النموذج المجاني GLM-4.7-Flash.";
+    if (rawJson.includes("1113") || rawJson.includes("余额不足") || httpCode === 402) {
+      return "في مشكلة مؤقتة في تشغيل الرد دلوقتي — جرب تاني كمان شوية.";
     }
     if (rawJson.includes("1211") || rawJson.includes("模型不存在")) {
-      return "خطأ 1211: كود النموذج غير صالح. استخدم النموذج المجاني GLM-4.7-Flash.";
+      return "حصلت مشكلة تقنية داخلية — فريق mlag شغال على حلها، جرب موديل تاني أو حاول تاني بعد شوية.";
     }
-    if (
-      rawJson.includes("1001") ||
-      rawJson.includes("1002") ||
-      rawJson.includes("未收到Authorization")
-    ) {
-      return "خطأ في مفتاح API: المفتاح المدخل غير مصرح به أو تم إلغاؤه من المنصة.";
+    if (rawJson.includes("1001") || rawJson.includes("1002") || rawJson.includes("未收到Authorization")) {
+      return "حصلت مشكلة في الاتصال بالخدمة دلوقتي — جرب تاني بعد شوية.";
     }
     if (rawJson.includes("1301") || rawJson.includes("并发")) {
-      return "خطأ ضغط على السيرفر (Concurrency Limit): يُرجى الانتظار ثانية واحدة وإعادة الإرسال.";
+      return "في ضغط على الخدمة دلوقتي — استنى ثانية واحدة وابعت تاني.";
     }
-    return `خطأ من الخادم (${httpCode}): ${rawJson.slice(0, 300)}`;
+    return "حصل خطأ غير متوقع أثناء توليد الرد — جرب تاني، ولو المشكلة استمرت جرب موديل تاني من القايمة.";
   } catch {
-    return `خطأ في الاتصال بالخادم (${httpCode})`;
+    return "حصلت مشكلة في الاتصال بالخدمة — جرب تاني.";
   }
 }
 
@@ -232,19 +234,22 @@ function getOpenRouterKeys(): string[] {
 let openRouterCursor = 0;
 
 function parseOpenRouterError(httpCode: number, rawJson: string): string {
+  // نفس مبدأ التصحيح فوق: نسجل التفاصيل في السيرفر بس، ونرجع رسالة عامة
+  // بهوية mlag للمستخدم من غير أي اسم مزوّد خارجي.
+  console.error("[mlag upstream error - provider A]", httpCode, rawJson.slice(0, 500));
   try {
     if (httpCode === 401 || httpCode === 403) {
-      return "أحد مفاتيح OpenRouter غير صالح أو ملغي — تأكد من المفاتيح في إعدادات Vercel.";
+      return "حصلت مشكلة مؤقتة في الاتصال بالخدمة — جرب تاني بعد شوية أو اختار موديل تاني.";
     }
     if (httpCode === 402) {
-      return "رصيد أحد مفاتيح OpenRouter انتهى.";
+      return "الخدمة مش متاحة مؤقتًا دلوقتي — جرب موديل تاني من القايمة.";
     }
     if (httpCode === 429) {
-      return "تم الوصول لمعدل الطلبات المسموح على مفاتيح OpenRouter الحالية.";
+      return "الخدمة مزدحمة شوية دلوقتي — استنى ثانيتين وابعت تاني.";
     }
-    return `خطأ من OpenRouter (${httpCode}): ${rawJson.slice(0, 300)}`;
+    return "حصل خطأ غير متوقع أثناء توليد الرد — جرب تاني، ولو المشكلة استمرت جرب موديل تاني من القايمة.";
   } catch {
-    return `خطأ في الاتصال بـ OpenRouter (${httpCode})`;
+    return "حصلت مشكلة في الاتصال بالخدمة — جرب تاني.";
   }
 }
 
@@ -259,10 +264,13 @@ async function negotiateOpenRouter(
 ): Promise<NegotiationResult> {
   const keys = getOpenRouterKeys();
   if (keys.length === 0) {
+    // ملحوظة: الرسالة القديمة كانت بتقول للمستخدم النهائي اسم المزوّد
+    // الخارجي (OpenRouter) واسم متغيرات البيئة — دي معلومة لصاحب الموقع بس
+    // مش للمستخدم. بنسجلها في اللوج ونرجع رسالة عامة للمستخدم.
+    console.error("[mlag config] provider B keys missing — set OPENROUTER_API_KEYS in env");
     return {
       ok: false,
-      errorMessage:
-        "موديل malg-2.1 محتاج مفتاح OpenRouter واحد على الأقل — ضيف OPENROUTER_API_KEYS1 (وهكذا) أو OPENROUTER_API_KEYS في إعدادات Vercel.",
+      errorMessage: "موديل mlag-2.1 مش متاح حاليًا — جرب موديل تاني من القايمة.",
     };
   }
 
@@ -361,19 +369,20 @@ function getXkiroKeys(): string[] {
 let xkiroCursor = 0;
 
 function parseXkiroError(httpCode: number, rawJson: string): string {
+  console.error("[mlag upstream error - provider C]", httpCode, rawJson.slice(0, 500));
   try {
     if (httpCode === 401 || httpCode === 403) {
-      return "أحد مفاتيح xKiro غير صالح أو ملغي — تأكد من المفاتيح في إعدادات Vercel.";
+      return "حصلت مشكلة مؤقتة في الاتصال بالخدمة — جرب تاني بعد شوية أو اختار موديل تاني.";
     }
     if (httpCode === 402) {
-      return "رصيد أحد مفاتيح xKiro انتهى.";
+      return "الخدمة مش متاحة مؤقتًا دلوقتي — جرب موديل تاني من القايمة.";
     }
     if (httpCode === 429) {
-      return "تم الوصول لمعدل الطلبات المسموح على مفاتيح xKiro الحالية.";
+      return "الخدمة مزدحمة شوية دلوقتي — استنى ثانيتين وابعت تاني.";
     }
-    return `خطأ من xKiro (${httpCode}): ${rawJson.slice(0, 300)}`;
+    return "حصل خطأ غير متوقع أثناء توليد الرد — جرب تاني، ولو المشكلة استمرت جرب موديل تاني من القايمة.";
   } catch {
-    return `خطأ في الاتصال بـ xKiro (${httpCode})`;
+    return "حصلت مشكلة في الاتصال بالخدمة — جرب تاني.";
   }
 }
 
@@ -392,10 +401,10 @@ function parseXkiroError(httpCode: number, rawJson: string): string {
 async function negotiateXkiro(apiMessages: ApiMessage[], signal: AbortSignal): Promise<NegotiationResult> {
   const keys = getXkiroKeys();
   if (keys.length === 0) {
+    console.error("[mlag config] provider C keys missing — set XKIRO_API_KEYS in env");
     return {
       ok: false,
-      errorMessage:
-        "موديل malg-2.2 محتاج مفتاح xKiro واحد على الأقل — ضيف XKIRO_API_KEYS1 (وهكذا) أو XKIRO_API_KEYS في إعدادات Vercel.",
+      errorMessage: "موديل mlag-2.2 مش متاح حاليًا — جرب موديل تاني من القايمة.",
     };
   }
 

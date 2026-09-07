@@ -9,7 +9,7 @@ export type ModelId = "malg-2" | "malg-2.1" | "malg-2.2";
 export const AVAILABLE_MODELS: { id: ModelId; label: string; hint: string }[] = [
   { id: "malg-2", label: "malg-2", hint: "الموديل الأساسي — سريع ومتوازن" },
   { id: "malg-2.1", label: "malg-2.1", hint: "موديل تجريبي جديد" },
-  { id: "malg-2.2", label: "malg-2.2", hint: "Qwen3.8 Max — تجريبي" },
+  { id: "malg-2.2", label: "malg-2.2", hint: "موديل تجريبي — أداء أقوى في مهام معينة" },
 ];
 
 interface Settings {

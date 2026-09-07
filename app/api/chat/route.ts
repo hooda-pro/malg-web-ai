@@ -5,6 +5,7 @@ import { getSessionUser, isUserBanned } from "@/lib/auth";
 import { checkAndMaybeRenewQuota, deductTokens } from "@/lib/quota";
 import { negotiateUpstream, estimateTokens, normalizeModelId, type ApiMessage } from "@/lib/ai";
 import { buildSystemPrompt, REGISTERED_TOKEN_QUOTA } from "@/lib/systemPrompt";
+import { runDeepSearch } from "@/lib/webSearch";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -74,16 +75,24 @@ export async function POST(req: NextRequest) {
   const totalAllocated = Number(quotaRows[0]?.total_allocated_tokens ?? REGISTERED_TOKEN_QUOTA);
   const usedTokensCount = Number(quotaRows[0]?.used_tokens ?? 0);
 
+  // 2.5) بحث عميق حقيقي (مش مجرد تعليمة للموديل) — لو الرسالة محتاجة معلومة
+  // حديثة/متغيرة وفيه مفتاح بحث متظبط، بنعمل أكتر من استعلام حقيقي بالتوازي
+  // ونحط النتايج جوه الـ system prompt قبل ما نكلم الموديل. ده بيدي فعليًا
+  // قدرة بحث لموديل malg-2.2 اللي مالوش أي أداة بحث من عنده أصلًا، وبيعمق
+  // البحث لباقي الموديلات بدل ما نسيب القرار كله لأداة البحث المدمجة عندهم
+  // (صندوق أسود مش متحكمين فيه).
+  const deepSearch = await runDeepSearch(userPrompt);
+
+  const systemPromptContent =
+    buildSystemPrompt({
+      userName: user.displayName,
+      totalTokens: totalAllocated,
+      remainingTokens: Math.max(totalAllocated - usedTokensCount, 0),
+      uiLanguage,
+    }) + (deepSearch.performed && deepSearch.contextBlock ? `\n\n${deepSearch.contextBlock}` : "");
+
   const apiMessages: ApiMessage[] = [
-    {
-      role: "system",
-      content: buildSystemPrompt({
-        userName: user.displayName,
-        totalTokens: totalAllocated,
-        remainingTokens: Math.max(totalAllocated - usedTokensCount, 0),
-        uiLanguage,
-      }),
-    },
+    { role: "system", content: systemPromptContent },
     ...existing.slice(-10).map((m) => ({ role: m.role, content: m.content })),
   ];
 
