@@ -160,6 +160,46 @@ export function ensureSchema(): Promise<void> {
         )
       `;
 
+      // ——— API للمطورين: مفاتيح API + رصيد منفصل تمامًا عن رصيد الشات + لوج استخدام ———
+      await sql`
+        CREATE TABLE IF NOT EXISTS api_keys (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          label TEXT NOT NULL DEFAULT 'مفتاح API',
+          key_prefix TEXT NOT NULL,
+          key_hash TEXT NOT NULL UNIQUE,
+          model_id TEXT NOT NULL,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          last_used_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id)`;
+
+      // رصيد الـ API — منفصل تمامًا عن user_quota، يبدأ بصفر (عكس رصيد الشات
+      // اللي بيبدأ برصيد مجاني) ومفيش تجديد أسبوعي تلقائي زيه، لأنه رصيد مدفوع.
+      await sql`
+        CREATE TABLE IF NOT EXISTS user_api_quota (
+          user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          total_allocated_tokens BIGINT NOT NULL DEFAULT 0,
+          used_tokens BIGINT NOT NULL DEFAULT 0,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `;
+
+      // لوج استخدام لكل استدعاء API — يفيد الأدمن يشوف مين بيستهلك إيه وعلى أي موديل
+      await sql`
+        CREATE TABLE IF NOT EXISTS api_usage_logs (
+          id TEXT PRIMARY KEY,
+          api_key_id TEXT NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL,
+          model_id TEXT NOT NULL,
+          tokens_used INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS idx_api_usage_user ON api_usage_logs(user_id)`;
+
       // إنشاء حساب الأدمن الافتراضي لو مفيش أي أدمن في القاعدة
       await seedDefaultAdmin();
     })();

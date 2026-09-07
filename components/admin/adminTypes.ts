@@ -36,6 +36,9 @@ export interface AdminMessageRow {
 
 export interface AdminUserDetail extends AdminUserRow {
   quotaUpdatedAt: string | null;
+  /** رصيد الـ API — منفصل تمامًا عن رصيد الشات (totalAllocatedTokens/usedTokens أعلاه) */
+  apiTotalAllocatedTokens: number;
+  apiUsedTokens: number;
 }
 
 export interface AdminStats {
@@ -82,6 +85,9 @@ export const ACTION_LABELS: Record<string, string> = {
   set_tokens: "تعيين رصيد",
   reset_usage: "تصفير استهلاك",
   change_password: "تغيير كلمة المرور",
+  recharge_api_tokens: "شحن رصيد API",
+  set_api_tokens: "تعيين رصيد API",
+  reset_api_usage: "تصفير استهلاك API",
 };
 
 /** لون كل إجراء في السجل */
@@ -93,4 +99,7 @@ export const ACTION_COLORS: Record<string, string> = {
   set_tokens: "text-cyan bg-cyan/10 border-cyan/30",
   reset_usage: "text-purple bg-purple/10 border-purple/30",
   change_password: "text-txt2 bg-panel3 border-line2",
+  recharge_api_tokens: "text-cyan bg-cyan/10 border-cyan/30",
+  set_api_tokens: "text-cyan bg-cyan/10 border-cyan/30",
+  reset_api_usage: "text-purple bg-purple/10 border-purple/30",
 };

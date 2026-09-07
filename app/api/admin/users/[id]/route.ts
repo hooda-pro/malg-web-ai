@@ -13,9 +13,11 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   const userRows = (await sql`
     SELECT u.id, u.email, u.display_name, u.is_admin, u.is_banned, u.banned_at, u.created_at,
-           q.total_allocated_tokens, q.used_tokens, q.quota_exhausted_at, q.updated_at AS quota_updated_at
+           q.total_allocated_tokens, q.used_tokens, q.quota_exhausted_at, q.updated_at AS quota_updated_at,
+           aq.total_allocated_tokens AS api_total_allocated_tokens, aq.used_tokens AS api_used_tokens
     FROM users u
     LEFT JOIN user_quota q ON q.user_id = u.id
+    LEFT JOIN user_api_quota aq ON aq.user_id = u.id
     WHERE u.id = ${params.id}
   `) as {
     id: string;
@@ -29,6 +31,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     used_tokens: unknown;
     quota_exhausted_at: string | null;
     quota_updated_at: string | null;
+    api_total_allocated_tokens: unknown;
+    api_used_tokens: unknown;
   }[];
 
   const row = userRows[0];
@@ -89,6 +93,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       usedTokens: Number(row.used_tokens ?? 0),
       quotaExhaustedAt: row.quota_exhausted_at,
       quotaUpdatedAt: row.quota_updated_at,
+      apiTotalAllocatedTokens: Number(row.api_total_allocated_tokens ?? 0),
+      apiUsedTokens: Number(row.api_used_tokens ?? 0),
       sessionsCount: Number(totals?.sessions_count ?? 0),
       messagesCount: Number(totals?.messages_count ?? 0),
     },

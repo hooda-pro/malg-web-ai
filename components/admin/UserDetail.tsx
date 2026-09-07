@@ -9,6 +9,7 @@ import {
   Copy,
   Fingerprint,
   Hash,
+  KeyRound,
   Loader2,
   Mail,
   MessageCircle,
@@ -26,6 +27,7 @@ import type { AdminMessageRow, AdminSessionRow, AdminUserDetail } from "./adminT
 import { formatDateTime, initialOf, timeAgo, truncate, usagePercent } from "./helpers";
 import ConfirmModal from "./ConfirmModal";
 import TokenRechargeModal from "./TokenRechargeModal";
+import ApiTokenRechargeModal from "./ApiTokenRechargeModal";
 
 type NotifyFn = (type: "ok" | "err", text: string) => void;
 
@@ -50,6 +52,7 @@ export default function UserDetail({
   const [showBanModal, setShowBanModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showRechargeModal, setShowRechargeModal] = useState(false);
+  const [showApiRechargeModal, setShowApiRechargeModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
   const load = useCallback(async () => {
@@ -166,6 +169,7 @@ export default function UserDetail({
 
   const remaining = Math.max(user.totalAllocatedTokens - user.usedTokens, 0);
   const pct = usagePercent(user.usedTokens, user.totalAllocatedTokens);
+  const apiRemaining = Math.max(user.apiTotalAllocatedTokens - user.apiUsedTokens, 0);
 
   return (
     <div className="space-y-4">
@@ -286,6 +290,41 @@ export default function UserDetail({
         )}
       </div>
 
+      {/* بطاقة رصيد الـ API — منفصلة تمامًا عن رصيد الشات فوق، وبتقرأ من نفس
+          المصدر اللي صفحة API بتاعة المستخدم بتعرضه، فأي شحن هنا بيظهر عنده فورًا */}
+      <div className="rounded-lg border border-line bg-panel p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <KeyRound size={15} className="text-green" />
+            <h3 className="text-[13px] font-bold text-txt">رصيد الـ API (منفصل عن رصيد الشات)</h3>
+          </div>
+          <span
+            className={`mono rounded px-2 py-0.5 text-[11px] font-bold ${
+              apiRemaining === 0 ? "bg-rose/15 text-rose" : "bg-green/15 text-green"
+            }`}
+          >
+            متبقي: {formatTokens(apiRemaining)}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-3">
+          <div className="rounded-md border border-line bg-panel2 px-2 py-2">
+            <p className="mono text-[13px] font-bold text-amber">{formatTokens(user.apiUsedTokens)}</p>
+            <p className="text-[10px] text-txt3">مستهلك</p>
+          </div>
+          <div className="rounded-md border border-line bg-panel2 px-2 py-2">
+            <p className="mono text-[13px] font-bold text-cyan">
+              {formatTokens(user.apiTotalAllocatedTokens)}
+            </p>
+            <p className="text-[10px] text-txt3">إجمالي الرصيد</p>
+          </div>
+          <div className="rounded-md border border-line bg-panel2 px-2 py-2 sm:block">
+            <p className="mono text-[13px] font-bold text-green">{formatTokens(apiRemaining)}</p>
+            <p className="text-[10px] text-txt3">متبقي</p>
+          </div>
+        </div>
+      </div>
+
       {/* أزرار الإجراءات */}
       <div className="flex flex-wrap gap-2">
         <button
@@ -294,6 +333,14 @@ export default function UserDetail({
         >
           <Zap size={14} />
           شحن توكنز
+        </button>
+
+        <button
+          onClick={() => setShowApiRechargeModal(true)}
+          className="flex items-center gap-1.5 rounded-md bg-green/15 px-3.5 py-2.5 text-[12px] font-bold text-green transition-colors hover:bg-green/25"
+        >
+          <KeyRound size={14} />
+          شحن رصيد API
         </button>
 
         {user.isBanned ? (
@@ -413,6 +460,18 @@ export default function UserDetail({
           onDone={() => {
             setShowRechargeModal(false);
             notify("ok", "تم تحديث رصيد التوكنز بنجاح ✓");
+            load();
+          }}
+        />
+      )}
+
+      {showApiRechargeModal && (
+        <ApiTokenRechargeModal
+          user={user}
+          onClose={() => setShowApiRechargeModal(false)}
+          onDone={() => {
+            setShowApiRechargeModal(false);
+            notify("ok", "تم تحديث رصيد الـ API بنجاح ✓");
             load();
           }}
         />

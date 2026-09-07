@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Coins, Menu, Sparkles, Terminal, Zap } from "lucide-react";
+import { Check, ChevronDown, Coins, KeyRound, Menu, Sparkles, Terminal, Zap } from "lucide-react";
 import { formatTokens } from "@/lib/ai";
 import type { ModelId } from "./SettingsContext";
 import { AVAILABLE_MODELS, useSettings } from "./SettingsContext";
@@ -121,6 +121,14 @@ export default function TopBar({
           <Coins size={11} />
           <span className="mono text-[10px] font-bold">{t("topbarRechargeShort")}</span>
         </button>
+        {/* صفحة API للمطورين — مسار كامل جديد (#/api)، مش مودال، فبنستخدم رابط عادي */}
+        <a
+          href="/#/api"
+          title={t("topbarApi")}
+          className="rounded-md p-1.5 text-txt2 hover:bg-white/5 hover:text-cyan"
+        >
+          <KeyRound size={17} />
+        </a>
         <button
           onClick={onOpenRunner}
           className="rounded-md p-1.5 text-txt2 hover:bg-white/5 hover:text-green"

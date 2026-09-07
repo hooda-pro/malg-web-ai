@@ -86,3 +86,41 @@ export function buildRechargeMessage(
   lines.push("", "محتاج أأكد الشحن وطرق الدفع ✨");
   return lines.join("\n");
 }
+
+/** السعر المرجعي لرصيد الـ API: 1,000,000 توكن = 300 جنيه مصري */
+export const API_TOKEN_PRICE_PER_MILLION = 300;
+
+/**
+ * رسالة واتساب جاهزة لطلب شحن رصيد الـ API (رصيد المطورين) — منفصلة تمامًا
+ * عن buildRechargeMessage الخاصة برصيد الشات، وبتوضح للدعم إن الطلب لرصيد
+ * API مش شات عادي، عشان مايتلخبطش في مصدر الرصيد اللي هيتم شحنه.
+ */
+export function buildApiRechargeMessage(
+  tokens: number | null,
+  user?: { displayName?: string | null; email?: string | null } | null
+): string {
+  const lines = ["مرحباً 👋", "عايز أشحن رصيد الـ API (رصيد المطورين) في موقع mlag AI:"];
+
+  if (tokens && tokens > 0) {
+    const price = Math.round((tokens / 1_000_000) * API_TOKEN_PRICE_PER_MILLION);
+    lines.push(
+      "",
+      `🔢 الكمية: ${formatTokens(tokens)} توكن`,
+      `💰 السعر التقريبي: ${formatTokens(price)} جنيه (بسعر ${API_TOKEN_PRICE_PER_MILLION} جنيه/مليون توكن)`
+    );
+  } else {
+    lines.push("", "🛒 عايز أستفسر عن كمية مخصصة لرصيد الـ API");
+  }
+
+  if (user?.displayName || user?.email) {
+    lines.push("", `👤 حسابي: ${user.displayName || "—"}${user.email ? ` (${user.email})` : ""}`);
+  }
+
+  lines.push(
+    "",
+    "ملحوظة: ده رصيد API منفصل تمامًا عن رصيد الشات العادي بتاعي.",
+    "",
+    "محتاج أأكد الشحن وطرق الدفع ✨"
+  );
+  return lines.join("\n");
+}
