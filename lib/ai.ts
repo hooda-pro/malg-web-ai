@@ -9,12 +9,19 @@ const OPENROUTER_MODEL = "minimax/minimax-m3:free";
 // لغاية 262K توكن فعليًا، فبنطلب حد أعلى بأمان (32K) يغطي أي صفحة/مشروع عادي.
 const OPENROUTER_MAX_TOKENS = 32000;
 
+// malg-2.2 — Qwen3.8 Max (مجاني) عبر بوابة xKiro (متوافقة مع صيغة OpenAI)
+const XKIRO_BASE_URL = "https://api.xkiro.com/v1/chat/completions";
+const XKIRO_MODEL = "qwen/qwen3.8-max:free";
+const XKIRO_MAX_TOKENS = 32000;
+
 /** الموديلات المتاحة للمستخدم من الواجهة — لازم تتطابق مع components/SettingsContext.tsx */
-export type ModelId = "malg-2" | "malg-2.1";
+export type ModelId = "malg-2" | "malg-2.1" | "malg-2.2";
 export const DEFAULT_MODEL: ModelId = "malg-2";
 
 export function normalizeModelId(raw: unknown): ModelId {
-  return raw === "malg-2.1" ? "malg-2.1" : "malg-2";
+  if (raw === "malg-2.1") return "malg-2.1";
+  if (raw === "malg-2.2") return "malg-2.2";
+  return "malg-2";
 }
 
 export interface ApiMessage {
@@ -153,29 +160,29 @@ async function negotiateGLM(apiMessages: ApiMessage[], signal: AbortSignal): Pro
 }
 
 // ---------------------------------------------------------------------------
-// malg-2.1 — OpenRouter (minimax/minimax-m3:free) مع تدوير عدة مفاتيح API
+// قارئ عام لمفاتيح API (مشترك بين malg-2.1 و malg-2.2)
 // ---------------------------------------------------------------------------
 
 /**
- * بيقرأ كل مفاتيح OpenRouter بطريقتين — استخدم أي واحدة تريحك أو اخلطهم مع بعض:
+ * قارئ عام لمفاتيح API بيدعم أي عدد من المفاتيح لأي مزوّد — استخدمه أي مكان
+ * محتاج فيه تدوير مفاتيح، بنفس الطريقتين اللي شرحناها فوق لـ OpenRouter:
  *
  * 1) متغيرات مرقمة منفصلة (الأسهل لو عايز تضيف/تشيل مفتاح لوحده من غير ما تلمس الباقي):
- *      OPENROUTER_API_KEYS1 = sk-or-key-1
- *      OPENROUTER_API_KEYS2 = sk-or-key-2
- *      OPENROUTER_API_KEYS3 = sk-or-key-3
- *      ... لحد أي رقم عايزه (مفيش حد أقصى)
- *    (بيقبل برضو الصيغة اللي فيها underscore زي OPENROUTER_API_KEYS_1)
+ *      <PREFIX>1 = key-1
+ *      <PREFIX>2 = key-2
+ *      ... لحد أي رقم عايزه (مفيش حد أقصى)، وبيقبل صيغة الـ underscore زي <PREFIX>_1 برضو
  *
- * 2) أو متغير واحد فيه كل المفاتيح مفصولة بفاصلة/سطر جديد:
- *      OPENROUTER_API_KEYS = sk-or-key-1,sk-or-key-2,sk-or-key-3
+ * 2) أو متغير واحد فيه كل المفاتيح مفصولة بفاصلة/سطر جديد/فاصلة منقوطة:
+ *      <PREFIX> = key-1,key-2,key-3
  *
- * الكود بيجمع الاتنين مع بعض لو موجودين، وبيشيل أي تكرار.
+ * @param numberedPrefix جزء الـ regex لاسم المتغير قبل الرقم، مثلاً "OPENROUTER_API_KEYS?"
+ *   (الـ "?" بعد الـ S بتخليه يقبل الصيغتين KEY و KEYS) أو "XKIRO_API_KEYS?"
+ * @param bulkVarNames أسماء المتغيرات اللي ممكن تحتوي على كل المفاتيح مع بعض (بالترتيب)
  */
-function getOpenRouterKeys(): string[] {
+function collectApiKeys(numberedPrefix: string, ...bulkVarNames: string[]): string[] {
   const keys: string[] = [];
 
-  // (1) متغيرات مرقمة: OPENROUTER_API_KEYS1, OPENROUTER_API_KEYS2, OPENROUTER_API_KEYS_3, ...
-  const numberedPattern = /^OPENROUTER_API_KEYS?_?(\d+)$/i;
+  const numberedPattern = new RegExp(`^${numberedPrefix}_?(\\d+)$`, "i");
   const numberedEntries = Object.keys(process.env)
     .map((name) => {
       const match = name.match(numberedPattern);
@@ -189,15 +196,35 @@ function getOpenRouterKeys(): string[] {
     if (val && val.trim()) keys.push(val.trim());
   }
 
-  // (2) متغير واحد فيه كل المفاتيح مفصولة بفاصلة/سطر جديد/فاصلة منقوطة
-  const bulk = process.env.OPENROUTER_API_KEYS || process.env.OPENROUTER_API_KEY || "";
-  for (const k of bulk.split(/[\n,;]+/)) {
-    const trimmed = k.trim();
-    if (trimmed) keys.push(trimmed);
+  for (const varName of bulkVarNames) {
+    const bulk = process.env[varName] || "";
+    for (const k of bulk.split(/[\n,;]+/)) {
+      const trimmed = k.trim();
+      if (trimmed) keys.push(trimmed);
+    }
   }
 
   // شيل أي تكرار مع الحفاظ على الترتيب
   return [...new Set(keys)];
+}
+
+// ---------------------------------------------------------------------------
+// malg-2.1 — OpenRouter (minimax/minimax-m3:free) مع تدوير عدة مفاتيح API
+// ---------------------------------------------------------------------------
+
+/**
+ * بيقرأ كل مفاتيح OpenRouter — أضف واحد أو أكتر بأي من الطريقتين:
+ *
+ *      OPENROUTER_API_KEYS1 = sk-or-key-1
+ *      OPENROUTER_API_KEYS2 = sk-or-key-2
+ *      OPENROUTER_API_KEYS3 = sk-or-key-3
+ *      ... أو
+ *      OPENROUTER_API_KEYS  = sk-or-key-1,sk-or-key-2,sk-or-key-3
+ *
+ * الكود بيجمع الاتنين مع بعض لو موجودين، وبيشيل أي تكرار.
+ */
+function getOpenRouterKeys(): string[] {
+  return collectApiKeys("OPENROUTER_API_KEYS?", "OPENROUTER_API_KEYS", "OPENROUTER_API_KEY");
 }
 
 // عداد بسيط في الذاكرة لتدوير المفاتيح (Round Robin) بين الطلبات المختلفة —
@@ -239,7 +266,7 @@ async function negotiateOpenRouter(
     };
   }
 
-  const call = (key: string) =>
+  const call = (key: string, useTools: boolean) =>
     fetch(OPENROUTER_BASE_URL, {
       method: "POST",
       headers: {
@@ -254,6 +281,10 @@ async function negotiateOpenRouter(
         temperature: 0.4,
         max_tokens: OPENROUTER_MAX_TOKENS,
         stream: true,
+        // أداة بحث الإنترنت المدمجة في OpenRouter نفسه (server-side): الموديل هو
+        // اللي بيقرر لو محتاج يبحث ولا لأ، والبحث بيتنفذ عند OpenRouter مباشرة —
+        // مفيش حاجة إضافية لازم نعملها هنا، النتيجة بترجع جوه نفس الستريم العادي.
+        ...(useTools ? { tools: [{ type: "openrouter:web_search" }] } : {}),
       }),
       signal,
     });
@@ -265,10 +296,21 @@ async function negotiateOpenRouter(
     const key = keys[(openRouterCursor + i) % keys.length];
     let response: Response;
     try {
-      response = await call(key);
+      response = await call(key, true);
     } catch (e) {
       if (signal.aborted) throw e;
       continue; // مشكلة شبكة مؤقتة — جرّب المفتاح اللي بعده
+    }
+
+    // لو الخطأ مش بسبب المفتاح نفسه (401/402/403/429)، جرب نفس المفتاح تاني
+    // بدون أداة البحث، تحسبًا إن أداة البحث (لسه beta) مش مدعومة على المسار ده
+    if (!response.ok && ![401, 402, 403, 429].includes(response.status)) {
+      try {
+        const retryResp = await call(key, false);
+        if (retryResp.ok) response = retryResp;
+      } catch (e) {
+        if (signal.aborted) throw e;
+      }
     }
 
     if (response.ok) {
@@ -298,9 +340,123 @@ async function negotiateOpenRouter(
   return { ok: false, errorMessage: parseOpenRouterError(lastErrorCode || 502, lastErrorText) };
 }
 
+// ---------------------------------------------------------------------------
+// malg-2.2 — Qwen3.8 Max (مجاني) عبر بوابة xKiro، مع تدوير عدة مفاتيح API
+// ---------------------------------------------------------------------------
+
+/**
+ * بيقرأ كل مفاتيح xKiro — أضف واحد أو أكتر بأي من الطريقتين (زي بالظبط OpenRouter فوق):
+ *
+ *      XKIRO_API_KEYS1 = sk-xt-key-1
+ *      XKIRO_API_KEYS2 = sk-xt-key-2
+ *      XKIRO_API_KEYS3 = sk-xt-key-3
+ *      ... أو
+ *      XKIRO_API_KEYS  = sk-xt-key-1,sk-xt-key-2,sk-xt-key-3
+ */
+function getXkiroKeys(): string[] {
+  return collectApiKeys("XKIRO_API_KEYS?", "XKIRO_API_KEYS", "XKIRO_API_KEY");
+}
+
+// عداد تدوير منفصل عن OpenRouter — كل موديل بيدور على مفاتيحه لوحده
+let xkiroCursor = 0;
+
+function parseXkiroError(httpCode: number, rawJson: string): string {
+  try {
+    if (httpCode === 401 || httpCode === 403) {
+      return "أحد مفاتيح xKiro غير صالح أو ملغي — تأكد من المفاتيح في إعدادات Vercel.";
+    }
+    if (httpCode === 402) {
+      return "رصيد أحد مفاتيح xKiro انتهى.";
+    }
+    if (httpCode === 429) {
+      return "تم الوصول لمعدل الطلبات المسموح على مفاتيح xKiro الحالية.";
+    }
+    return `خطأ من xKiro (${httpCode}): ${rawJson.slice(0, 300)}`;
+  } catch {
+    return `خطأ في الاتصال بـ xKiro (${httpCode})`;
+  }
+}
+
+/**
+ * يجرب موديل malg-2.2 (qwen/qwen3.8-max:free عبر xKiro):
+ * نفس منطق تدوير المفاتيح بتاع malg-2.1 بالظبط.
+ *
+ * ملحوظة عن البحث في الإنترنت: على عكس malg-2 (GLM) و malg-2.1 (OpenRouter)،
+ * بوابة xKiro مالهاش أداة بحث جاهزة تشتغل من عندها هي — بتدعم بس "function calling"
+ * عادي (يعني إنت اللي تجيب دالة وتنفذها بنفسك لما الموديل يطلبها). عشان Qwen هنا
+ * يبحث فعليًا في الإنترنت، لازم نضيف مزوّد بحث خارجي (زي Tavily أو Serper) ونعمل
+ * دورة كاملة: نبعت الدالة، الموديل يطلبها، إحنا ننفذ البحث الحقيقي، وبعدين نرجعله
+ * النتيجة في طلب تاني. ده أكبر من مجرد "فلاج" زي الموديلين التانيين، فسبناه لتحديث
+ * لاحق لو حابب تضيفه.
+ */
+async function negotiateXkiro(apiMessages: ApiMessage[], signal: AbortSignal): Promise<NegotiationResult> {
+  const keys = getXkiroKeys();
+  if (keys.length === 0) {
+    return {
+      ok: false,
+      errorMessage:
+        "موديل malg-2.2 محتاج مفتاح xKiro واحد على الأقل — ضيف XKIRO_API_KEYS1 (وهكذا) أو XKIRO_API_KEYS في إعدادات Vercel.",
+    };
+  }
+
+  const call = (key: string) =>
+    fetch(XKIRO_BASE_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: XKIRO_MODEL,
+        messages: apiMessages,
+        temperature: 0.4,
+        max_tokens: XKIRO_MAX_TOKENS,
+        stream: true,
+      }),
+      signal,
+    });
+
+  let lastErrorCode = 0;
+  let lastErrorText = "";
+
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[(xkiroCursor + i) % keys.length];
+    let response: Response;
+    try {
+      response = await call(key);
+    } catch (e) {
+      if (signal.aborted) throw e;
+      continue; // مشكلة شبكة مؤقتة — جرّب المفتاح اللي بعده
+    }
+
+    if (response.ok) {
+      xkiroCursor = (xkiroCursor + i + 1) % keys.length;
+      return { ok: true, response };
+    }
+
+    lastErrorCode = response.status;
+    if ([401, 402, 403, 429].includes(response.status)) {
+      try {
+        lastErrorText = await response.text();
+      } catch {
+        // تجاهل
+      }
+      continue;
+    }
+
+    try {
+      lastErrorText = await response.text();
+    } catch {
+      // تجاهل
+    }
+  }
+
+  return { ok: false, errorMessage: parseXkiroError(lastErrorCode || 502, lastErrorText) };
+}
+
 /**
  * نقطة الدخول الموحدة: بتوجه الطلب لموديل malg-2 (GLM) أو malg-2.1 (OpenRouter)
- * حسب اختيار المستخدم من قايمة الموديلات فوق في الواجهة.
+ * أو malg-2.2 (xKiro) حسب اختيار المستخدم من قايمة الموديلات فوق في الواجهة.
  */
 export async function negotiateUpstream(
   apiMessages: ApiMessage[],
@@ -309,6 +465,9 @@ export async function negotiateUpstream(
 ): Promise<NegotiationResult> {
   if (modelId === "malg-2.1") {
     return negotiateOpenRouter(apiMessages, signal);
+  }
+  if (modelId === "malg-2.2") {
+    return negotiateXkiro(apiMessages, signal);
   }
   return negotiateGLM(apiMessages, signal);
 }
