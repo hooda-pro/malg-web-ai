@@ -57,7 +57,7 @@ export function isDeepSearchEnabled(): boolean {
 }
 
 /** بحث واحد حقيقي، بيدور على المفاتيح المتاحة لو أول واحد فشل. */
-async function searchOnce(query: string, maxResults = 5): Promise<WebSearchResult[]> {
+async function searchOnce(query: string, maxResults = 8): Promise<WebSearchResult[]> {
   const keys = getTavilyKeys();
   if (keys.length === 0) return [];
 
@@ -95,24 +95,31 @@ async function searchOnce(query: string, maxResults = 5): Promise<WebSearchResul
 }
 
 /**
- * هل الرسالة محتاجة بحث فعلي في الإنترنت؟ (كلمات دالة على معلومة حديثة/متغيرة
- * بالعربي والإنجليزي). ده فلتر بسيط بس فعّال — الهدف نتجنب بحث من غير داعي
- * على أي رسالة عادية (تحية، سؤال برمجي عام، محادثة إنسانية) عشان نوفر وقت
- * ومصاريف الاستعلامات.
+ * هل الرسالة تستاهل بحث فعلي؟ — بعد التحديث ده، البحث بقى الوضع الافتراضي
+ * لأي رسالة فيها محتوى حقيقي محتاج معلومة (مش مقتصر على كلمات مفتاحية زي
+ * "اليوم"/"سعر"/"latest" بس زي قبل كده). بنستثني بس الرسائل القصيرة اللي
+ * هي كلام مجاملة/محادثة بحتة (تحية، شكر، موافقة) عشان مفيش داعي نستهلك
+ * استعلامات بحث عليها، وأي سؤال برمجي/إبداعي بحت ما فيهوش أي مطلب معلومة
+ * واقعية (زي "اكتب لي كود لفرز مصفوفة").
  */
 export function shouldDeepSearch(userMessage: string): boolean {
-  const text = userMessage.toLowerCase();
-  const triggers = [
-    // عربي
-    "اليوم", "دلوقتي", "الآن", "حاليا", "حالياً", "آخر", "أحدث", "احدث",
-    "سعر", "أسعار", "اسعار", "جديد", "أخبار", "اخبار", "نتيجة", "مباراة",
-    "متى", "امتى", "إيه أخبار", "تحديث", "إصدار", "نسخة جديدة",
-    // إنجليزي
-    "today", "now", "current", "currently", "latest", "recent", "price",
-    "news", "update", "release", "score", "result", "who is the", "when is",
-    "this year", "2025", "2026",
-  ];
-  return triggers.some((t) => text.includes(t));
+  const text = userMessage.trim().toLowerCase();
+  if (text.length < 2) return false;
+
+  const wordCount = text.split(/\s+/).filter(Boolean).length;
+
+  // كلام مجاملة/محادثة قصير بحت — مفيش أي فايدة من بحث عليه
+  const chitchatOnly =
+    /^(?:hi|hey|hello|thanks|thank you|ok|okay|yes|no|sure|bye|good\s?(morning|night|evening)|مرحبا|أهلا|اهلا|هاي|صباح الخير|مساء الخير|شكرا|شكراً|تمام|ماشي|أوكي|اوكي|أيوه|ايوه|لا شكرا|تسلم|ربنا يخليك|إزيك|ازيك|كيف الحال|عامل ايه|عامل إيه)[\s!.،؟?]*$/i;
+  if (wordCount <= 3 && chitchatOnly.test(text)) return false;
+
+  // طلب كود/إبداع بحت من غير أي إشارة لمعلومة واقعية خارجية — سيبه للموديل
+  // من غير بحث (البحث هنا مش هيضيف حاجة، والاستعلام ممكن يجيب نتايج مضللة)
+  const pureCodeOrCreative =
+    /^(اكتب|صمم|ولد|generate|write|design)\s+(لي|لى)?\s*(كود|code|قصة|story|قصيدة|شعر|مقال إبداعي)/i;
+  if (pureCodeOrCreative.test(text) && wordCount < 12) return false;
+
+  return true;
 }
 
 /**
@@ -152,7 +159,7 @@ export async function runDeepSearch(userMessage: string): Promise<DeepSearchOutc
     }
 
     const queries = buildQueries(userMessage);
-    const resultsPerQuery = await Promise.all(queries.map((q) => searchOnce(q, 5)));
+    const resultsPerQuery = await Promise.all(queries.map((q) => searchOnce(q, 8)));
 
     const seen = new Set<string>();
     const merged: WebSearchResult[] = [];
@@ -161,9 +168,9 @@ export async function runDeepSearch(userMessage: string): Promise<DeepSearchOutc
         if (!r.url || seen.has(r.url)) continue;
         seen.add(r.url);
         merged.push(r);
-        if (merged.length >= 8) break;
+        if (merged.length >= 16) break;
       }
-      if (merged.length >= 8) break;
+      if (merged.length >= 16) break;
     }
 
     if (merged.length === 0) {
