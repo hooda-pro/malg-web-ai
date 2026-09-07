@@ -87,7 +87,7 @@ export default function ChatDrawer({
                   e.stopPropagation();
                   onDeleteSession(s.id);
                 }}
-                className="shrink-0 rounded p-1 text-txt3 opacity-0 hover:text-rose group-hover:opacity-100"
+                className="shrink-0 rounded p-1 text-txt3 opacity-100 hover:text-rose lg:opacity-0 lg:group-hover:opacity-100"
               >
                 <Trash2 size={12} />
               </span>

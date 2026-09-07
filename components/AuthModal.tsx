@@ -62,19 +62,14 @@ export default function AuthModal({
         setError(data.error || t("errGeneric"));
         return;
       }
-            if (data.needsProfile) {
+      if (data.needsProfile) {
         setName(data.user.displayName || "");
         setStep("profile");
       } else {
         onAuthenticated(data.user);
       }
-    } catch (err) {
-      // بنطبع السبب الحقيقي في الكونسول + بنوريه للمستخدم عشان نقدر نشخّص أي مشكلة بسرعة
-      // (Firebase بيرجع code زي auth/unauthorized-domain, auth/popup-blocked, auth/invalid-api-key...)
-      console.error("Google sign-in error:", err);
-      const code = (err as { code?: string })?.code;
-      const message = err instanceof Error ? err.message : String(err);
-      setError(`${t("errGoogle")}${code ? ` (${code})` : ""} — ${message}`);
+    } catch {
+      setError(t("errGoogle"));
     } finally {
       setLoading(false);
     }
@@ -113,7 +108,7 @@ export default function AuthModal({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
-      <div className="w-full max-w-sm overflow-hidden rounded-lg border border-line2 bg-panel glow-green">
+      <div className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-lg border border-line2 bg-panel glow-green">
         <div className="terminal-dots flex items-center justify-between border-b border-line px-3 py-2.5">
           <div className="flex items-center gap-2">
             <span className="flex gap-1">
@@ -162,7 +157,7 @@ export default function AuthModal({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder={t("phName")}
-                  className="flex-1 bg-transparent text-[12.5px] text-txt placeholder:text-txt3 focus:outline-none"
+                  className="flex-1 bg-transparent text-base text-txt placeholder:text-txt3 focus:outline-none sm:text-[12.5px]"
                 />
               </div>
               <div className="flex items-center gap-2 rounded-md border border-line2 bg-panel2 px-2.5 py-2">
@@ -174,7 +169,7 @@ export default function AuthModal({
                   inputMode="numeric"
                   placeholder={t("phAge")}
                   dir="ltr"
-                  className="flex-1 bg-transparent text-[12.5px] text-txt placeholder:text-txt3 focus:outline-none"
+                  className="flex-1 bg-transparent text-base text-txt placeholder:text-txt3 focus:outline-none sm:text-[12.5px]"
                   onKeyDown={(e) => e.key === "Enter" && submitProfile()}
                 />
               </div>

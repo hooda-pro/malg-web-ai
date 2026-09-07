@@ -99,7 +99,7 @@ export default function CodeRunnerModal({
         >
           <Play size={13} /> {t("runnerTabPreview")}
         </button>
-        <div className="mr-auto flex items-center gap-2 px-3">
+        <div className="ms-auto flex items-center gap-2 px-3">
           <select
             value={language}
             onChange={(e) => setLanguage(e.target.value)}
@@ -128,7 +128,7 @@ export default function CodeRunnerModal({
             onChange={(e) => setCode(e.target.value)}
             dir="ltr"
             spellCheck={false}
-            className="mono h-full w-full resize-none bg-[#040504] p-3 text-[12.5px] leading-6 text-txt focus:outline-none"
+            className="mono h-full w-full resize-none bg-[#040504] p-3 text-base leading-6 text-txt focus:outline-none sm:text-[12.5px]"
           />
         ) : supported ? (
           <iframe

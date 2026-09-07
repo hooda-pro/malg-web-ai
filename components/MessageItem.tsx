@@ -124,7 +124,7 @@ export default function MessageItem({
             seg.type === "text" ? (
               <p
                 key={i}
-                className="whitespace-pre-wrap text-[13.5px] leading-6 text-txt"
+                className="whitespace-pre-wrap break-words text-[13.5px] leading-6 text-txt"
               >
                 {seg.text.trim()}
               </p>

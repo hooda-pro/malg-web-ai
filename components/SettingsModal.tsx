@@ -72,7 +72,7 @@ export default function SettingsModal({
 
   return (
     <div className="animate-fadeIn fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
-      <div className="w-full max-w-sm overflow-hidden rounded-lg border border-line2 bg-panel glow-green">
+      <div className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-lg border border-line2 bg-panel glow-green">
         <div className="terminal-dots flex items-center justify-between border-b border-line px-3 py-2.5">
           <div className="flex items-center gap-2">
             <span className="flex gap-1">
@@ -120,7 +120,7 @@ export default function SettingsModal({
                     onKeyDown={(e) => e.key === "Enter" && saveName()}
                     placeholder={t("phName")}
                     maxLength={40}
-                    className="min-w-0 flex-1 rounded border border-line2 bg-panel px-2 py-1.5 text-[12px] text-txt placeholder:text-txt3 focus:border-green/50 focus:outline-none"
+                    className="min-w-0 flex-1 rounded border border-line2 bg-panel px-2 py-1.5 text-base text-txt placeholder:text-txt3 focus:border-green/50 focus:outline-none sm:text-[12px]"
                   />
                   <button
                     onClick={saveName}

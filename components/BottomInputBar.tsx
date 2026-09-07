@@ -34,7 +34,7 @@ export default function BottomInputBar({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSend();
     }
@@ -52,7 +52,7 @@ export default function BottomInputBar({
           rows={1}
           placeholder={t("placeholder")}
           disabled={disabled}
-          className="max-h-[88px] flex-1 resize-none bg-transparent text-[13px] text-txt placeholder:text-txt3 focus:outline-none disabled:opacity-50"
+          className="max-h-[88px] flex-1 resize-none bg-transparent text-base text-txt placeholder:text-txt3 focus:outline-none disabled:opacity-50 sm:text-[13px]"
         />
         {isGenerating ? (
           <button

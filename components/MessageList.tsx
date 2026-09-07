@@ -140,7 +140,7 @@ export default function MessageList({
               <div className="rounded-lg rounded-bl-sm border border-line2 bg-panel2 px-3 py-2">
                 {streamSegments.map((seg, i) =>
                   seg.type === "prose" ? (
-                    <p key={i} className="whitespace-pre-wrap text-[13.5px] leading-6 text-txt">
+                    <p key={i} className="whitespace-pre-wrap break-words text-[13.5px] leading-6 text-txt">
                       {seg.text}
                       {i === streamSegments.length - 1 && <span className="term-caret" />}
                     </p>
