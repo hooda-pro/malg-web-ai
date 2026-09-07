@@ -12,7 +12,7 @@ import type { ChatMessage } from "@/lib/types";
 import type { ProjectFile } from "@/lib/parseContent";
 import { extractProjectFiles, parseMessageContent } from "@/lib/parseContent";
 import { formatTime } from "@/lib/utils";
-import { renderInlineLinks } from "@/lib/renderInlineLinks";
+import { renderFormattedText } from "@/lib/markdown";
 import CodeBlock from "./CodeBlock";
 import ProjectFilesCard from "./ProjectFilesCard";
 import { useSettings } from "./SettingsContext";
@@ -123,12 +123,16 @@ export default function MessageItem({
 
           {segments.map((seg, i) =>
             seg.type === "text" ? (
-              <p
-                key={i}
-                className="whitespace-pre-wrap break-words text-[13.5px] leading-6 text-txt"
-              >
-                {isUser ? seg.text.trim() : renderInlineLinks(seg.text.trim(), `${message.id}-${i}`)}
-              </p>
+              isUser ? (
+                <p
+                  key={i}
+                  className="whitespace-pre-wrap break-words text-[13.5px] leading-6 text-txt"
+                >
+                  {seg.text.trim()}
+                </p>
+              ) : (
+                <div key={i}>{renderFormattedText(seg.text.trim(), `${message.id}-${i}`)}</div>
+              )
             ) : hasProjectFiles ? null : (
               <CodeBlock key={i} language={seg.language} code={seg.code} onRun={onRunCode} />
             )

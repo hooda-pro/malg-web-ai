@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureSchema } from "@/lib/db";
 import { getSessionUser, isUserBanned } from "@/lib/auth";
 import { checkAndMaybeRenewQuota, deductTokens } from "@/lib/quota";
-import { negotiateUpstream, estimateTokens, normalizeModelId, type ApiMessage } from "@/lib/ai";
+import {
+  negotiateUpstream,
+  estimateTokens,
+  normalizeModelId,
+  readUpstreamStream,
+  EMPTY_RESPONSE_FALLBACK_MESSAGE,
+  type ApiMessage,
+} from "@/lib/ai";
 import { buildSystemPrompt } from "@/lib/systemPrompt";
 
 export const dynamic = "force-dynamic";
@@ -85,93 +92,82 @@ export async function POST(req: NextRequest) {
 
   const stream = new ReadableStream<Uint8Array>({
     async start(streamController) {
-      const reader = upstreamResponse.body!.getReader();
-      const decoder = new TextDecoder();
       const encoder = new TextEncoder();
 
-      let buffer = "";
-      let accumulatedContent = "";
-      let accumulatedReasoning = "";
-      let finishReason: string | null = null;
-      let stoppedByUser = false;
-
-      const onAbort = () => {
-        stoppedByUser = true;
+      const emit = (kind: "content" | "reasoning", text: string) => {
+        const payload =
+          kind === "content"
+            ? { choices: [{ delta: { content: text } }] }
+            : { choices: [{ delta: { reasoning_content: text } }] };
         try {
-          reader.cancel();
+          streamController.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
         } catch {
-          // تجاهل
-        }
-      };
-      req.signal.addEventListener("abort", onAbort);
-
-      const processLine = (rawLine: string) => {
-        const line = rawLine.trim();
-        if (!line || line.startsWith(":")) return;
-        if (!line.startsWith("data:")) return;
-        const data = line.slice(5).trim();
-        if (data === "[DONE]") return;
-        try {
-          const json = JSON.parse(data);
-          const choice = json?.choices?.[0];
-          if (choice?.finish_reason) finishReason = choice.finish_reason;
-          const delta = choice?.delta;
-          if (delta?.reasoning_content) accumulatedReasoning += delta.reasoning_content;
-          if (delta?.content) accumulatedContent += delta.content;
-        } catch {
-          // تجاهل سطر غير صالح
+          // القناة مقفولة بالفعل — تجاهل
         }
       };
 
+      let result = await readUpstreamStream(upstreamResponse, req.signal, emit);
+
+      // نفس إصلاح /api/chat: لو الموديل رجّع استجابة فاضية (مشكلة معروفة في
+      // الموديلات المجانية زي malg-2.1)، نجرب مرة تانية تلقائيًا قبل ما نسيب
+      // زرار "أكمل" من غير أي أثر واضح للمستخدم.
+      if (!result.content.trim() && !result.stoppedByUser) {
+        const retryNegotiated = await negotiateUpstream(apiMessages, controller.signal, model).catch(
+          () => null
+        );
+        if (retryNegotiated?.ok) {
+          const retryResult = await readUpstreamStream(retryNegotiated.response, req.signal, emit);
+          result = {
+            content: result.content + retryResult.content,
+            reasoning: retryResult.reasoning
+              ? result.reasoning
+                ? `${result.reasoning}\n\n${retryResult.reasoning}`
+                : retryResult.reasoning
+              : result.reasoning,
+            finishReason: retryResult.finishReason ?? result.finishReason,
+            stoppedByUser: retryResult.stoppedByUser,
+          };
+        }
+      }
+
+      let usedFallback = false;
+      if (!result.content.trim() && !result.reasoning.trim() && !result.stoppedByUser) {
+        usedFallback = true;
+        emit("content", EMPTY_RESPONSE_FALLBACK_MESSAGE);
+      }
+
+      if (result.content.trim() || result.reasoning.trim() || usedFallback) {
+        const addedContent = usedFallback ? EMPTY_RESPONSE_FALLBACK_MESSAGE : result.content;
+        const mergedContent = existing.content + addedContent;
+        const mergedReasoning = existing.reasoning
+          ? result.reasoning
+            ? existing.reasoning + "\n\n" + result.reasoning
+            : existing.reasoning
+          : result.reasoning || null;
+        const addedTokens = usedFallback ? 0 : estimateTokens(result.content, result.reasoning);
+        const newTokensUsed = existing.tokens_used + addedTokens;
+        const isTruncated = !usedFallback && !result.stoppedByUser && result.finishReason === "length";
+
+        try {
+          await sql`
+            UPDATE chat_messages
+            SET content = ${mergedContent}, reasoning = ${mergedReasoning},
+                tokens_used = ${newTokensUsed}, is_truncated = ${isTruncated}
+            WHERE id = ${messageId}
+          `;
+          if (addedTokens > 0) await deductTokens(user.id, addedTokens);
+        } catch (e) {
+          console.error("failed to persist continued message", e);
+        }
+      }
+
+      // مهم: الحفظ في الداتابيز الأول، وبعدين إشارة [MLAG_SAVED] وقفل القناة
+      // — يمنع العميل يعمل refresh قبل الحفظ فيختفي الرد.
       try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          buffer += chunk;
-          streamController.enqueue(encoder.encode(chunk));
-
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-          for (const line of lines) processLine(line);
-        }
+        streamController.enqueue(encoder.encode("data: [MLAG_SAVED]\n\n"));
+        streamController.close();
       } catch {
-        // تم الإيقاف من المستخدم أو خطأ اتصال
-      } finally {
-        req.signal.removeEventListener("abort", onAbort);
-
-        if (accumulatedContent || accumulatedReasoning) {
-          const mergedContent = existing.content + accumulatedContent;
-          const mergedReasoning = existing.reasoning
-            ? accumulatedReasoning
-              ? existing.reasoning + "\n\n" + accumulatedReasoning
-              : existing.reasoning
-            : accumulatedReasoning || null;
-          const addedTokens = estimateTokens(accumulatedContent, accumulatedReasoning);
-          const newTokensUsed = existing.tokens_used + addedTokens;
-          const isTruncated = !stoppedByUser && finishReason === "length";
-
-          try {
-            await sql`
-              UPDATE chat_messages
-              SET content = ${mergedContent}, reasoning = ${mergedReasoning},
-                  tokens_used = ${newTokensUsed}, is_truncated = ${isTruncated}
-              WHERE id = ${messageId}
-            `;
-            await deductTokens(user.id, addedTokens);
-          } catch (e) {
-            console.error("failed to persist continued message", e);
-          }
-        }
-
-        // مهم: الحفظ في الداتابيز الأول، وبعدين إشارة [MLAG_SAVED] وقفل القناة
-        // — يمنع العميل يعمل refresh قبل الحفظ فيختفي الرد.
-        try {
-          streamController.enqueue(encoder.encode("data: [MLAG_SAVED]\n\n"));
-          streamController.close();
-        } catch {
-          // العميل قطع الاتصال أو القناة مقفولة بالفعل
-        }
+        // العميل قطع الاتصال أو القناة مقفولة بالفعل
       }
     },
   });

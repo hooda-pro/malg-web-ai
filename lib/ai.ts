@@ -29,6 +29,100 @@ export interface ApiMessage {
   content: string;
 }
 
+// ---------------------------------------------------------------------------
+// قارئ ستريم موحّد (مشترك بين /api/chat و /api/chat/continue)
+// ---------------------------------------------------------------------------
+
+export interface UpstreamStreamResult {
+  content: string;
+  reasoning: string;
+  finishReason: string | null;
+  stoppedByUser: boolean;
+}
+
+/**
+ * يقرأ ستريم SSE من أي مزوّد (GLM / OpenRouter / xKiro) ويجمّع الـ content و
+ * الـ reasoning تدريجيًا، مع استدعاء onDelta لحظيًا لكل جزء يوصل (عشان نقدر
+ * نبعته للعميل فورًا زي ما كنا بنعمل بالـ passthrough الخام قديمًا).
+ *
+ * ملحوظة مهمة (سبب رئيسي لمشكلة "malg-2.1 معتش بيكتب كود"): الموديلات
+ * المجانية زي minimax-m3:free بترجع أحيانًا استجابة HTTP سليمة (200) لكن
+ * الستريم نفسه بيوصل فاضي تمامًا (من غير content ولا حتى reasoning) — ده مش
+ * خطأ شبكة، فالكود القديم كان بيعتبره "نجاح" ويحفظ رسالة وهمية "تمت المعالجة
+ * بنجاح" من غير أي محتوى حقيقي، فالمستخدم يحس إن الموديل "بطل يكتب" من غير أي
+ * تفسير. الدالة دي بترجع stoppedByUser بشكل منفصل عشان نفرّق بين إيقاف
+ * المستخدم المتعمد وبين استجابة فاضية فعلاً محتاجة إعادة محاولة.
+ */
+export async function readUpstreamStream(
+  response: Response,
+  signal: AbortSignal,
+  onDelta: (kind: "content" | "reasoning", text: string) => void
+): Promise<UpstreamStreamResult> {
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+
+  let buffer = "";
+  let content = "";
+  let reasoning = "";
+  let finishReason: string | null = null;
+  let stoppedByUser = false;
+
+  const onAbort = () => {
+    stoppedByUser = true;
+    try {
+      reader.cancel();
+    } catch {
+      // تجاهل
+    }
+  };
+  signal.addEventListener("abort", onAbort);
+
+  const processLine = (rawLine: string) => {
+    const line = rawLine.trim();
+    if (!line || line.startsWith(":") || !line.startsWith("data:")) return;
+    const data = line.slice(5).trim();
+    if (data === "[DONE]") return;
+    try {
+      const json = JSON.parse(data);
+      const choice = json?.choices?.[0];
+      if (choice?.finish_reason) finishReason = choice.finish_reason;
+      const delta = choice?.delta;
+      if (delta?.reasoning_content) {
+        reasoning += delta.reasoning_content;
+        onDelta("reasoning", delta.reasoning_content);
+      }
+      if (delta?.content) {
+        content += delta.content;
+        onDelta("content", delta.content);
+      }
+    } catch {
+      // سطر غير صالح كـ JSON — تجاهله
+    }
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) processLine(line);
+    }
+  } catch {
+    // انقطاع أثناء القراءة (إيقاف المستخدم أو خطأ اتصال مؤقت)
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+  }
+
+  return { content, reasoning, finishReason, stoppedByUser };
+}
+
+/** رسالة صادقة تتكتب للمستخدم لو الموديل رجّع استجابة فاضية بعد كل المحاولات
+ * — بدل ما نكذب ونقول "تمت المعالجة بنجاح" من غير أي محتوى فعلي. */
+export const EMPTY_RESPONSE_FALLBACK_MESSAGE =
+  "معنديش رد فعلي أقدر أكتبهولك دلوقتي 🙏 — الموديل مارجعش أي محتوى بعد أكتر من محاولة (مشكلة مؤقتة في المزوّد الخارجي، مش في سؤالك). جرب تبعت رسالتك تاني كمان شوية، أو اختار موديل تاني من القايمة لو الموضوع مستعجل.";
+
 export function parseErrorMessage(httpCode: number, rawJson: string): string {
   // ملحوظة أمان/خصوصية مهمة: كانت الدالة دي بترجع نص الخطأ الخام والمعرّف
   // للمزوّد الحقيقي (GLM) مباشرة لواجهة المستخدم — يعني أي حد كان يقدر

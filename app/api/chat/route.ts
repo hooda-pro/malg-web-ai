@@ -3,7 +3,14 @@ import { randomUUID } from "crypto";
 import { sql, ensureSchema } from "@/lib/db";
 import { getSessionUser, isUserBanned } from "@/lib/auth";
 import { checkAndMaybeRenewQuota, deductTokens } from "@/lib/quota";
-import { negotiateUpstream, estimateTokens, normalizeModelId, type ApiMessage } from "@/lib/ai";
+import {
+  negotiateUpstream,
+  estimateTokens,
+  normalizeModelId,
+  readUpstreamStream,
+  EMPTY_RESPONSE_FALLBACK_MESSAGE,
+  type ApiMessage,
+} from "@/lib/ai";
 import { buildSystemPrompt, REGISTERED_TOKEN_QUOTA } from "@/lib/systemPrompt";
 import { runDeepSearch } from "@/lib/webSearch";
 
@@ -116,103 +123,102 @@ export async function POST(req: NextRequest) {
 
   const stream = new ReadableStream<Uint8Array>({
     async start(streamController) {
-      const reader = upstreamResponse.body!.getReader();
-      const decoder = new TextDecoder();
       const encoder = new TextEncoder();
-
-      let buffer = "";
-      let accumulatedContent = "";
-      let accumulatedReasoning = "";
-      let finishReason: string | null = null;
       let contentStartTime: number | null = null;
-      let stoppedByUser = false;
 
-      const onAbort = () => {
-        stoppedByUser = true;
+      // بنبعت للعميل نسخة موحّدة من الـ delta (بدل الـ passthrough الخام)
+      // عشان نقدر نتحكم في التوقيت ونعمل إعادة محاولة شفافة لو الاستجابة رجعت فاضية،
+      // من غير ما نغيّر أي حاجة في شكل البيانات اللي lib/streamClient.ts بيستهلكها.
+      const emit = (kind: "content" | "reasoning", text: string) => {
+        if (kind === "content" && contentStartTime === null) contentStartTime = Date.now();
+        const payload =
+          kind === "content"
+            ? { choices: [{ delta: { content: text } }] }
+            : { choices: [{ delta: { reasoning_content: text } }] };
         try {
-          reader.cancel();
+          streamController.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
         } catch {
-          // تجاهل
-        }
-      };
-      req.signal.addEventListener("abort", onAbort);
-
-      const processLine = (rawLine: string) => {
-        const line = rawLine.trim();
-        if (!line || line.startsWith(":")) return;
-        if (!line.startsWith("data:")) return;
-        const data = line.slice(5).trim();
-        if (data === "[DONE]") return;
-        try {
-          const json = JSON.parse(data);
-          const choice = json?.choices?.[0];
-          if (choice?.finish_reason) finishReason = choice.finish_reason;
-          const delta = choice?.delta;
-          if (delta?.reasoning_content) {
-            accumulatedReasoning += delta.reasoning_content;
-          }
-          if (delta?.content) {
-            if (contentStartTime === null) contentStartTime = Date.now();
-            accumulatedContent += delta.content;
-          }
-        } catch {
-          // سطر غير صالح كـ JSON — تجاهله
+          // القناة مقفولة بالفعل — تجاهل
         }
       };
 
+      let result = await readUpstreamStream(upstreamResponse, req.signal, emit);
+
+      // *** الإصلاح الأساسي ***
+      // لو الاستجابة رجعت فاضية تمامًا (من غير محتوى) ومكانش المستخدم هو اللي وقف،
+      // ده أغلب الوقت عطل مؤقت في الموديل المجاني (زي malg-2.1) مش رفض فعلي —
+      // نجرب مرة تانية تلقائيًا قبل ما نستسلم، بدل ما نسيب المستخدم من غير رد ولا تفسير.
+      if (!result.content.trim() && !result.stoppedByUser) {
+        const retryNegotiated = await negotiateUpstream(apiMessages, controller.signal, model).catch(
+          () => null
+        );
+        if (retryNegotiated?.ok) {
+          const retryResult = await readUpstreamStream(retryNegotiated.response, req.signal, emit);
+          result = {
+            content: result.content + retryResult.content,
+            reasoning: retryResult.reasoning
+              ? result.reasoning
+                ? `${result.reasoning}\n\n${retryResult.reasoning}`
+                : retryResult.reasoning
+              : result.reasoning,
+            finishReason: retryResult.finishReason ?? result.finishReason,
+            stoppedByUser: retryResult.stoppedByUser,
+          };
+        }
+      }
+
+      let finalContent = result.content.trim();
+      const finalReasoning = result.reasoning.trim() || null;
+      let usedFallback = false;
+
+      // لسه فاضية بعد إعادة المحاولة، والمستخدم مش هو اللي وقفها — بدل ما نحفظ
+      // رسالة كذب زي "تمت المعالجة بنجاح"، نبعت للمستخدم رسالة صادقة توضح إن
+      // في مشكلة مؤقتة في المزوّد، ومنخصمش عليه توكنز على رد ماتكتبش أصلاً.
+      if (!finalContent && !result.stoppedByUser) {
+        usedFallback = true;
+        emit("content", EMPTY_RESPONSE_FALLBACK_MESSAGE);
+        finalContent = EMPTY_RESPONSE_FALLBACK_MESSAGE;
+      }
+
+      const thinkingDurationMs = finalReasoning
+        ? (contentStartTime ?? Date.now()) - streamStart
+        : null;
+
+      // حالة إيقاف المستخدم من غير أي محتوى ولا تفكير — نسجّلها بوضوح إنها إيقاف
+      // متعمد، مش "نجاح"، عشان ما نضللش أي مراجعة لاحقة للمحادثة.
+      const placeholderIfEmpty = result.stoppedByUser ? "تم إيقاف الرد بواسطتك." : "";
+
+      if (finalContent || finalReasoning || result.stoppedByUser) {
+        const totalTokens = usedFallback
+          ? 0
+          : estimateTokens(userPrompt, finalContent, finalReasoning ?? "");
+        const assistantId = randomUUID();
+        try {
+          await sql`
+            INSERT INTO chat_messages
+              (id, session_id, role, content, reasoning, thinking_duration_ms, is_truncated, tokens_used)
+            VALUES (
+              ${assistantId}, ${sessionId}, 'assistant',
+              ${finalContent || placeholderIfEmpty},
+              ${finalReasoning}, ${thinkingDurationMs},
+              ${!usedFallback && !result.stoppedByUser && result.finishReason === "length"},
+              ${totalTokens}
+            )
+          `;
+          if (totalTokens > 0) await deductTokens(user.id, totalTokens);
+        } catch (e) {
+          console.error("failed to persist assistant message", e);
+        }
+      }
+
+      // مهم جداً: نحفظ في الداتابيز الأول (فوق)، وبعدين نرسل إشارة [MLAG_SAVED]
+      // وبعد كده نقفل القناة. لو قفلنا القناة قبل الحفظ، العميل يعمل refresh
+      // ويلاقي الرسايل لسه متسجلتش — فيختفي الرد من الواجهة رغم إنه اتحفظ بعدها.
       try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          buffer += chunk;
-          streamController.enqueue(encoder.encode(chunk));
-
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-          for (const line of lines) processLine(line);
-        }
+        streamController.enqueue(encoder.encode("data: [MLAG_SAVED]\n\n"));
+        streamController.close();
       } catch {
-        // انقطاع أثناء القراءة — لو المستخدم هو اللي وقف، هنحفظ اللي وصلنا لحد دلوقتي
-      } finally {
-        req.signal.removeEventListener("abort", onAbort);
-
-        const finalContent = accumulatedContent.trim();
-        const finalReasoning = accumulatedReasoning.trim() || null;
-        const thinkingDurationMs = finalReasoning
-          ? (contentStartTime ?? Date.now()) - streamStart
-          : null;
-
-        if (finalContent || finalReasoning || stoppedByUser) {
-          const totalTokens = estimateTokens(userPrompt, finalContent, finalReasoning ?? "");
-          const assistantId = randomUUID();
-          try {
-            await sql`
-              INSERT INTO chat_messages
-                (id, session_id, role, content, reasoning, thinking_duration_ms, is_truncated, tokens_used)
-              VALUES (
-                ${assistantId}, ${sessionId}, 'assistant',
-                ${finalContent || "تمت معالجة السؤال بنجاح."},
-                ${finalReasoning}, ${thinkingDurationMs},
-                ${!stoppedByUser && finishReason === "length"},
-                ${totalTokens}
-              )
-            `;
-            await deductTokens(user.id, totalTokens);
-          } catch (e) {
-            console.error("failed to persist assistant message", e);
-          }
-        }
-
-        // مهم جداً: نحفظ في الداتابيز الأول (فوق)، وبعدين نرسل إشارة [MLAG_SAVED]
-        // وبعد كده نقفل القناة. لو قفلنا القناة قبل الحفظ، العميل يعمل refresh
-        // ويلاقي الرسايل لسه متسجلتش — فيختفي الرد من الواجهة رغم إنه اتحفظ بعدها.
-        try {
-          streamController.enqueue(encoder.encode("data: [MLAG_SAVED]\n\n"));
-          streamController.close();
-        } catch {
-          // العميل قطع الاتصال أو القناة مقفولة بالفعل
-        }
+        // العميل قطع الاتصال أو القناة مقفولة بالفعل
       }
     },
   });
