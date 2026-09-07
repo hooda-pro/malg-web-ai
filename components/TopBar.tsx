@@ -121,13 +121,15 @@ export default function TopBar({
           <Coins size={11} />
           <span className="mono text-[10px] font-bold">{t("topbarRechargeShort")}</span>
         </button>
-        {/* صفحة API للمطورين — مسار كامل جديد (#/api)، مش مودال، فبنستخدم رابط عادي */}
+        {/* صفحة API للمطورين — مسار كامل جديد (#/api)، مش مودال، فبنستخدم رابط عادي.
+            فقاعة زي زرار الشحن بالظبط، بس بحدود سماوي وكلمة API واضحة. */}
         <a
           href="/#/api"
           title={t("topbarApi")}
-          className="rounded-md p-1.5 text-txt2 hover:bg-white/5 hover:text-cyan"
+          className="flex items-center gap-1 rounded-full border border-cyan/40 bg-cyan/10 px-2 py-1 text-cyan transition-colors hover:bg-cyan/20"
         >
-          <KeyRound size={17} />
+          <KeyRound size={11} />
+          <span className="mono text-[10px] font-bold">API</span>
         </a>
         <button
           onClick={onOpenRunner}

@@ -31,10 +31,32 @@ interface ApiKeyLookupRow {
   is_banned: boolean;
 }
 
+/** بعد أي رد (streaming أو لأ): خصم التوكنز، تحديث آخر استخدام، تسجيل اللوج. */
+async function recordUsage(params: {
+  keyId: string;
+  userId: string;
+  modelId: string;
+  totalTokens: number;
+}) {
+  const { keyId, userId, modelId, totalTokens } = params;
+  await deductApiTokens(userId, totalTokens);
+  try {
+    await sql`
+      INSERT INTO api_usage_logs (id, api_key_id, user_id, model_id, tokens_used)
+      VALUES (${randomUUID()}, ${keyId}, ${userId}, ${modelId}, ${totalTokens})
+    `;
+    await sql`UPDATE api_keys SET last_used_at = now() WHERE id = ${keyId}`;
+  } catch (e) {
+    console.error("failed to log api usage", e);
+  }
+}
+
 /**
  * نقطة الـ API العامة للمطورين — بيستخدمها المستخدم في تطبيقاته/كوده الخاص
  * (خارج الموقع) بنفس فكرة OpenAI / OpenRouter. المصادقة بمفتاح API في هيدر
- * Authorization، مش بكوكي جلسة المتصفح.
+ * Authorization، مش بكوكي جلسة المتصفح. بتدعم وضعين: رد كامل دفعة واحدة
+ * (الافتراضي)، أو streaming حقيقي بصيغة OpenAI SSE (`"stream": true`) —
+ * ده اللي محتاجينه أدوات زي Cline / OpenCode / Codex CLI عشان تشتغل معاها.
  */
 export async function POST(req: NextRequest) {
   await ensureSchema();
@@ -124,6 +146,11 @@ export async function POST(req: NextRequest) {
     apiMessages.push({ role, content });
   }
 
+  // ملحوظة توافق: بنقرأ body.model لو موجودة بس عشان مانرجعش خطأ لأدوات
+  // زي Cline/OpenCode/Codex اللي بتبعت الحقل ده دايمًا — بنتجاهل قيمته تمامًا،
+  // لأن الموديل محدد فعليًا من المفتاح نفسه وقت إنشائه.
+  const wantsStream = body?.stream === true;
+
   // 5) استدعِ negotiateUpstream الموجودة بالفعل — من غير أي منطق اتصال جديد،
   // نفس الدالة اللي يستخدمها /api/chat حاليًا (بكل منطق إعادة المحاولة والتراجع بتاعها)
   const controller = new AbortController();
@@ -139,11 +166,112 @@ export async function POST(req: NextRequest) {
   if (!negotiated.ok) {
     return NextResponse.json({ error: negotiated.errorMessage }, { status: 502 });
   }
+  const upstreamResponse = negotiated.response;
 
-  let result = await readUpstreamStream(negotiated.response, controller.signal, () => {});
+  const completionId = `chatcmpl-${randomUUID()}`;
+  const createdAt = Math.floor(Date.now() / 1000);
 
-  // نفس منطق إعادة المحاولة الموجود في /api/chat: لو الاستجابة رجعت فاضية
-  // تمامًا (عطل مؤقت شائع في الموديلات المجانية)، جرب مرة تانية قبل ما نرجّع خطأ.
+  // ————————————————————————————————————————————————————————————
+  // وضع الـ streaming: SSE بصيغة OpenAI chat.completion.chunk قياسية —
+  // مطلوب عشان أدوات زي Cline اللي مابتشتغلش أصلًا مع رد غير-stream.
+  // ————————————————————————————————————————————————————————————
+  if (wantsStream) {
+    const encoder = new TextEncoder();
+
+    const stream = new ReadableStream<Uint8Array>({
+      async start(streamController) {
+        const chunkBase = {
+          id: completionId,
+          object: "chat.completion.chunk",
+          created: createdAt,
+          model: modelId,
+        };
+
+        const send = (obj: unknown) => {
+          try {
+            streamController.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+          } catch {
+            // القناة مقفولة (العميل قطع الاتصال) — تجاهل
+          }
+        };
+
+        let announced = false;
+        const onDelta = (kind: "content" | "reasoning", text: string) => {
+          // ما بنبعتش الـ reasoning/thinking للمطورين في الـ API العامة —
+          // بس المحتوى النهائي، عشان يفضل متوافق مع أي parser عادي لصيغة OpenAI.
+          if (kind !== "content") return;
+          if (!announced) {
+            send({ ...chunkBase, choices: [{ index: 0, delta: { role: "assistant", content: "" }, finish_reason: null }] });
+            announced = true;
+          }
+          send({ ...chunkBase, choices: [{ index: 0, delta: { content: text }, finish_reason: null }] });
+        };
+
+        let result = await readUpstreamStream(upstreamResponse, controller.signal, onDelta);
+
+        // نفس منطق إعادة المحاولة الموجود في /api/chat: لو الاستجابة رجعت فاضية
+        // تمامًا (عطل مؤقت شائع في الموديلات المجانية)، جرب مرة تانية. آمن هنا
+        // لأن onDelta لسه ما اتنادتش خالص لو المحتوى فاضي، يعني ماتبعتش أي بايت للعميل.
+        if (!result.content.trim() && !result.stoppedByUser) {
+          const retryNegotiated = await negotiateUpstream(apiMessages, controller.signal, modelId).catch(
+            () => null
+          );
+          if (retryNegotiated?.ok) {
+            const retryResult = await readUpstreamStream(retryNegotiated.response, controller.signal, onDelta);
+            result = {
+              content: result.content + retryResult.content,
+              reasoning: result.reasoning || retryResult.reasoning,
+              finishReason: retryResult.finishReason ?? result.finishReason,
+              stoppedByUser: retryResult.stoppedByUser,
+            };
+          }
+        }
+
+        const finalContent = result.content.trim();
+
+        if (!finalContent) {
+          // من غير خصم أي توكنز على رد ماتكتبش أصلاً
+          send({ error: { message: GENERIC_UPSTREAM_ERROR, type: "upstream_error" } });
+          try {
+            streamController.close();
+          } catch {
+            // تجاهل
+          }
+          return;
+        }
+
+        const promptText = apiMessages.map((m) => m.content).join("\n");
+        const totalTokens = estimateTokens(promptText, finalContent);
+        await recordUsage({ keyId: keyRow.id, userId: keyRow.user_id, modelId, totalTokens });
+
+        send({
+          ...chunkBase,
+          choices: [{ index: 0, delta: {}, finish_reason: result.finishReason === "length" ? "length" : "stop" }],
+        });
+        try {
+          streamController.enqueue(encoder.encode("data: [DONE]\n\n"));
+          streamController.close();
+        } catch {
+          // تجاهل
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
+      },
+    });
+  }
+
+  // ————————————————————————————————————————————————————————————
+  // الوضع الافتراضي: رد كامل دفعة واحدة (JSON عادي)
+  // ————————————————————————————————————————————————————————————
+  let result = await readUpstreamStream(upstreamResponse, controller.signal, () => {});
+
   if (!result.content.trim() && !result.stoppedByUser) {
     const retryNegotiated = await negotiateUpstream(apiMessages, controller.signal, modelId).catch(
       () => null
@@ -164,29 +292,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: GENERIC_UPSTREAM_ERROR }, { status: 502 });
   }
 
-  // بعد الرد: تقدير التوكنز، خصمها من رصيد الـ API، تحديث آخر استخدام، وتسجيل اللوج
   const promptText = apiMessages.map((m) => m.content).join("\n");
   const promptTokens = estimateTokens(promptText);
   const totalTokens = estimateTokens(promptText, finalContent);
   const completionTokens = Math.max(totalTokens - promptTokens, 0);
 
-  await deductApiTokens(keyRow.user_id, totalTokens);
-
-  const usageId = randomUUID();
-  try {
-    await sql`
-      INSERT INTO api_usage_logs (id, api_key_id, user_id, model_id, tokens_used)
-      VALUES (${usageId}, ${keyRow.id}, ${keyRow.user_id}, ${modelId}, ${totalTokens})
-    `;
-    await sql`UPDATE api_keys SET last_used_at = now() WHERE id = ${keyRow.id}`;
-  } catch (e) {
-    console.error("failed to log api usage", e);
-  }
+  await recordUsage({ keyId: keyRow.id, userId: keyRow.user_id, modelId, totalTokens });
 
   return NextResponse.json({
-    id: `chatcmpl-${usageId}`,
+    id: completionId,
     object: "chat.completion",
-    created: Math.floor(Date.now() / 1000),
+    created: createdAt,
     model: modelId,
     choices: [
       {

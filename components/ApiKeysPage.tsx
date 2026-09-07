@@ -47,6 +47,16 @@ interface ApiQuota {
 /** كميات سريعة لشحن رصيد الـ API — بنفس السعر المرجعي (300 جنيه/مليون) */
 const QUICK_AMOUNTS = [1_000_000, 5_000_000, 10_000_000];
 
+type ToolId = "cline" | "opencode" | "codex" | "claude-code" | "generic";
+
+const TOOL_TABS: { id: ToolId; label: string }[] = [
+  { id: "cline", label: "Cline" },
+  { id: "opencode", label: "OpenCode" },
+  { id: "codex", label: "Codex CLI" },
+  { id: "claude-code", label: "Claude Code" },
+  { id: "generic", label: "أداة تانية" },
+];
+
 function priceFor(tokens: number): number {
   return Math.round((tokens / 1_000_000) * API_TOKEN_PRICE_PER_MILLION);
 }
@@ -66,6 +76,7 @@ export default function ApiKeysPage() {
   const [quota, setQuota] = useState<ApiQuota | null>(null);
 
   const [origin, setOrigin] = useState("");
+  const [selectedTool, setSelectedTool] = useState<ToolId>("cline");
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newLabel, setNewLabel] = useState("");
@@ -418,9 +429,168 @@ Content-Type: application/json
 { "messages": [{ "role": "user", "content": "أهلاً" }] }`}
           </pre>
           <p className="mt-2 text-[11px] leading-5 text-txt3">
-            الموديل بيتحدد أوتوماتيك من المفتاح نفسه — مش لازم تبعته في الـ body، والرد بيرجع كامل
-            (من غير streaming) في شكل قريب من صيغة OpenAI المعتادة.
+            الموديل بيتحدد أوتوماتيك من المفتاح نفسه — مش لازم تبعته في الـ body. الرد بيرجع دفعة
+            واحدة بالشكل ده افتراضيًا، أو ضيف <code className="mono text-cyan">&quot;stream&quot;: true</code> في
+            الطلب عشان تستقبله على هيئة أجزاء (SSE بصيغة OpenAI القياسية) — ده اللي أدوات الأكواد
+            زي Cline محتاجاه عشان تشتغل.
           </p>
+        </section>
+
+        {/* ربط أداة برمجة بالذكاء الاصطناعي (Cline / OpenCode / Codex CLI / Claude Code) */}
+        <section className="rounded-lg border border-line bg-panel p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Terminal size={15} className="text-purple" />
+            <h2 className="text-[13px] font-bold text-txt">وصله بأداة برمجة بالذكاء الاصطناعي</h2>
+          </div>
+
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {TOOL_TABS.map((tool) => (
+              <button
+                key={tool.id}
+                onClick={() => setSelectedTool(tool.id)}
+                className={`rounded-full border px-3 py-1.5 text-[11px] font-bold transition-colors ${
+                  selectedTool === tool.id
+                    ? "border-purple/50 bg-purple/15 text-purple"
+                    : "border-line2 text-txt3 hover:text-txt2"
+                }`}
+              >
+                {tool.label}
+              </button>
+            ))}
+          </div>
+
+          {selectedTool === "cline" && (
+            <div className="space-y-2">
+              <p className="text-[11.5px] leading-5 text-txt2">
+                من إعدادات Cline (VS Code أو JetBrains): API Provider ={" "}
+                <span className="mono text-txt">OpenAI Compatible</span>، واملأ:
+              </p>
+              <div className="space-y-1.5 rounded-md border border-line2 bg-panel2 p-3 text-[11px]">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-txt3">Base URL</span>
+                  <span className="mono text-cyan" dir="ltr">
+                    {origin || "https://<الدومين>"}/api/malg/v1
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-txt3">API Key</span>
+                  <span className="mono text-green">مفتاحك اللي عملته فوق</span>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-txt3">Model ID</span>
+                  <span className="mono text-txt">أي اسم — مش بيتقرا فعليًا</span>
+                </div>
+              </div>
+              <p className="text-[10.5px] leading-5 text-txt3">
+                الموديل محدد أصلًا من المفتاح نفسه، فاسم الـ Model ID اللي هتكتبه هنا شكلي بس.
+              </p>
+            </div>
+          )}
+
+          {selectedTool === "opencode" && (
+            <div className="space-y-2">
+              <p className="text-[11.5px] leading-5 text-txt2">
+                ضيف في <span className="mono text-txt">opencode.json</span> (في جذر المشروع أو
+                الإعدادات العامة):
+              </p>
+              <pre
+                className="mono overflow-x-auto rounded-md border border-line2 bg-panel2 p-3 text-[10.5px] leading-5 text-txt2"
+                dir="ltr"
+              >
+{`{
+  "provider": {
+    "mlag": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "mlag AI",
+      "options": { "baseURL": "${origin || "https://<الدومين>"}/api/malg/v1" },
+      "models": { "malg-2": {} }
+    }
+  }
+}`}
+              </pre>
+              <p className="text-[11.5px] leading-5 text-txt2">
+                بعدين شغّل <span className="mono text-txt">opencode auth login</span> → اختار{" "}
+                <span className="mono text-txt">Other</span> → اكتب provider id{" "}
+                <span className="mono text-txt">mlag</span> → الصق مفتاحك. وبعدين{" "}
+                <span className="mono text-txt">/models</span> واختار mlag/malg-2.
+              </p>
+            </div>
+          )}
+
+          {selectedTool === "codex" && (
+            <div className="space-y-2">
+              <p className="text-[11.5px] leading-5 text-txt2">
+                ضيف في <span className="mono text-txt">~/.codex/config.toml</span>:
+              </p>
+              <pre
+                className="mono overflow-x-auto rounded-md border border-line2 bg-panel2 p-3 text-[10.5px] leading-5 text-txt2"
+                dir="ltr"
+              >
+{`model = "malg-2"
+model_provider = "mlag"
+
+[model_providers.mlag]
+name = "mlag AI"
+base_url = "${origin || "https://<الدومين>"}/api/malg/v1"
+env_key = "MLAG_API_KEY"
+wire_api = "chat"`}
+              </pre>
+              <p className="text-[11.5px] leading-5 text-txt2">
+                وحط المفتاح في متغير بيئة:{" "}
+                <span className="mono text-txt" dir="ltr">
+                  export MLAG_API_KEY=&quot;مفتاحك&quot;
+                </span>
+              </p>
+              <p className="rounded-md border border-amber/30 bg-amber/10 px-3 py-2 text-[10.5px] leading-5 text-amber">
+                ملحوظة: بعض إصدارات Codex الحديثة بتدعم بس{" "}
+                <span className="mono">wire_api = &quot;responses&quot;</span> (صيغة مختلفة تمامًا
+                عن اللي واجهة mlag شغالة بيها). لو ظهرلك خطأ برفض{" "}
+                <span className="mono">&quot;chat&quot;</span>، معناها إصدارك بقى مايدعمش الصيغة
+                دي مباشرة — جرب Cline أو OpenCode بدالها.
+              </p>
+            </div>
+          )}
+
+          {selectedTool === "claude-code" && (
+            <div className="space-y-2">
+              <p className="rounded-md border border-rose/30 bg-rose/10 px-3 py-2 text-[11.5px] leading-5 text-rose">
+                Claude Code بيكلم بروتوكول Anthropic (Messages API) بس — مش نفس صيغة OpenAI اللي
+                واجهة mlag شغالة بيها، فمينفعش توصله بيها مباشرة بمفتاح mlag.
+              </p>
+              <p className="text-[11.5px] leading-5 text-txt2">
+                لو محتاج فعلاً توصل mlag بـ Claude Code، الطريقة الوحيدة إنك تحط جسر ترجمة بينهم
+                (زي LiteLLM) شغال محليًا عندك، بيحوّل من صيغة Anthropic لصيغة OpenAI اللي واجهتنا
+                فاهماها، وتوجّه <span className="mono text-txt">ANTHROPIC_BASE_URL</span> عليه.
+                غير كده، Cline أو OpenCode أسهل بكتير مع mlag.
+              </p>
+            </div>
+          )}
+
+          {selectedTool === "generic" && (
+            <div className="space-y-2">
+              <p className="text-[11.5px] leading-5 text-txt2">
+                أي أداة بتدعم &quot;OpenAI Compatible&quot; أو &quot;Custom Provider&quot; هتشتغل
+                بنفس الشكل:
+              </p>
+              <div className="space-y-1.5 rounded-md border border-line2 bg-panel2 p-3 text-[11px]">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-txt3">Base URL</span>
+                  <span className="mono text-cyan" dir="ltr">
+                    {origin || "https://<الدومين>"}/api/malg/v1
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-txt3">API Key</span>
+                  <span className="mono text-green">مفتاحك</span>
+                </div>
+              </div>
+              <p className="text-[10.5px] leading-5 text-txt3">
+                الواجهة بتدعم <code className="mono">stream: true</code> و{" "}
+                <code className="mono">stream: false</code>، والموديل محدد من المفتاح نفسه مش من
+                اسم الموديل اللي هتبعته.
+              </p>
+            </div>
+          )}
         </section>
 
         {/* جدول الأسعار */}
