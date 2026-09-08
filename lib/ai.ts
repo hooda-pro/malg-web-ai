@@ -27,23 +27,44 @@ export function normalizeModelId(raw: unknown): ModelId {
 export interface ApiMessage {
   role: string;
   content: string;
+  /** لازمة لرسايل role: "tool" (نتيجة تنفيذ أداة) عشان الموديل يعرف الرد ده
+   * بتاع أنهي استدعاء أداة بالظبط — مهم خصوصًا لو أكتر من أداة اتطلبت مع بعض. */
+  tool_call_id?: string;
+  /** بعض الصيغ بتحط اسم الأداة هنا كمان لرسايل "tool". */
+  name?: string;
+  /** لرسايل role: "assistant" اللي طلبت استدعاء أداة قبل كده في المحادثة —
+   * لازم تتنقل زي ما هي (مش بس content) عشان الموديل يفتكر إيه اللي طلبه. */
+  tool_calls?: UpstreamToolCall[];
 }
 
 // ---------------------------------------------------------------------------
 // قارئ ستريم موحّد (مشترك بين /api/chat و /api/chat/continue)
 // ---------------------------------------------------------------------------
 
+export interface UpstreamToolCall {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+}
+
 export interface UpstreamStreamResult {
   content: string;
   reasoning: string;
   finishReason: string | null;
   stoppedByUser: boolean;
+  /** موجودة بس لو الموديل طلب استدعاء أداة (function calling) — اختيارية عشان
+   * الاستدعاءات القديمة (retry-merge جوه /api/chat و /api/chat/continue) تفضل
+   * صحيحة من غير ما تحتاج تتعدل، لأنها أصلاً مش بتستخدم الحقل ده. */
+  toolCalls?: UpstreamToolCall[];
 }
 
 /**
  * يقرأ ستريم SSE من أي مزوّد (GLM / OpenRouter / xKiro) ويجمّع الـ content و
  * الـ reasoning تدريجيًا، مع استدعاء onDelta لحظيًا لكل جزء يوصل (عشان نقدر
- * نبعته للعميل فورًا زي ما كنا بنعمل بالـ passthrough الخام قديمًا).
+ * نبعته للعميل فورًا زي ما كنا بنعمل بالـ passthrough الخام قديمًا). بيجمّع
+ * كمان أي tool_calls (function calling) لو الموديل طلب استدعاء أداة — دي
+ * بتوصل مجزّأة عبر عدة أجزاء ستريم (id/name مرة واحدة، والـ arguments بيتبني
+ * تدريجيًا نص JSON فوق نص) فبنجمعها هنا بالـ index وترجع كاملة في النهاية.
  *
  * ملحوظة مهمة (سبب رئيسي لمشكلة "malg-2.1 معتش بيكتب كود"): الموديلات
  * المجانية زي minimax-m3:free بترجع أحيانًا استجابة HTTP سليمة (200) لكن
@@ -66,6 +87,7 @@ export async function readUpstreamStream(
   let reasoning = "";
   let finishReason: string | null = null;
   let stoppedByUser = false;
+  const toolCallsAcc: { id: string; name: string; arguments: string }[] = [];
 
   const onAbort = () => {
     stoppedByUser = true;
@@ -95,6 +117,15 @@ export async function readUpstreamStream(
         content += delta.content;
         onDelta("content", delta.content);
       }
+      if (Array.isArray(delta?.tool_calls)) {
+        for (const tc of delta.tool_calls) {
+          const idx = typeof tc?.index === "number" ? tc.index : toolCallsAcc.length;
+          if (!toolCallsAcc[idx]) toolCallsAcc[idx] = { id: "", name: "", arguments: "" };
+          if (tc?.id) toolCallsAcc[idx].id = tc.id;
+          if (tc?.function?.name) toolCallsAcc[idx].name += tc.function.name;
+          if (tc?.function?.arguments) toolCallsAcc[idx].arguments += tc.function.arguments;
+        }
+      }
     } catch {
       // سطر غير صالح كـ JSON — تجاهله
     }
@@ -115,7 +146,15 @@ export async function readUpstreamStream(
     signal.removeEventListener("abort", onAbort);
   }
 
-  return { content, reasoning, finishReason, stoppedByUser };
+  const toolCalls: UpstreamToolCall[] = toolCallsAcc
+    .map((tc, i) =>
+      tc
+        ? { id: tc.id || `call_${i}`, type: "function" as const, function: { name: tc.name, arguments: tc.arguments } }
+        : null
+    )
+    .filter((tc): tc is UpstreamToolCall => tc !== null);
+
+  return { content, reasoning, finishReason, stoppedByUser, toolCalls };
 }
 
 /** رسالة صادقة تتكتب للمستخدم لو الموديل رجّع استجابة فاضية بعد كل المحاولات
@@ -171,6 +210,21 @@ export type NegotiationResult =
   | { ok: false; errorMessage: string };
 
 /**
+ * خيارات إضافية اختيارية لـ negotiateUpstream — بتتبعت بس من نقطة الـ API
+ * العامة (app/api/malg/v1/chat/completions) لما المستدعي (أداة زي Cline)
+ * تبعت تعريفات أدوات (function calling) في طلبها. من غير الحقل ده، السلوك
+ * القديم لـ /api/chat و /api/chat/continue فاضل زي ما هو بالظبط.
+ */
+export interface NegotiateOptions {
+  /** تعريفات أدوات على نمط OpenAI — بتتبعت زي ما هي من غير أي تعديل. لو
+   * موجودة لـ GLM/OpenRouter، بتحل محل أداة البحث المدمجة بتاعت الموقع
+   * (مش بتتخلط معاها)، عشان منلخبطش الموديل بين سياق الموقع وسياق الأداة
+   * الخارجية المستدعية. */
+  tools?: unknown[];
+  toolChoice?: unknown;
+}
+
+/**
  * يجرب الاتصال بموديل mlag (GLM) بنفس منطق إعادة المحاولة والتراجع
  * (fallback) الموجود في ApiClient.kt / ChatRepository.kt الأصلي:
  * 1) الموديل المختار + أدوات البحث على الإنترنت
@@ -178,13 +232,18 @@ export type NegotiationResult =
  * 3) لو فشل، يعيد المحاولة بدون tools
  * 4) لو لسه فاشل، يجرب الموديل المجاني الاحتياطي glm-4.5-flash بدون tools
  */
-async function negotiateGLM(apiMessages: ApiMessage[], signal: AbortSignal): Promise<NegotiationResult> {
+async function negotiateGLM(
+  apiMessages: ApiMessage[],
+  signal: AbortSignal,
+  options: NegotiateOptions = {}
+): Promise<NegotiationResult> {
   const apiKey = process.env.MLAG_API_KEY || "";
   const model = process.env.MLAG_MODEL?.trim() || MODEL_GLM_47_FLASH;
 
-  const tools = [
-    { type: "web_search", web_search: { enable: true, search_result: true } },
-  ];
+  // لو المستدعي (نقطة الـ API العامة) بعت أدوات بتاعته هو (زي Cline)، بنستخدمها
+  // هي بدل أداة البحث المدمجة بتاعت الموقع — مش بنخلطهم مع بعض.
+  const externalTools = options.tools && options.tools.length > 0 ? options.tools : null;
+  const builtInTools = [{ type: "web_search", web_search: { enable: true, search_result: true } }];
 
   const buildBody = (m: string, useTools: boolean) =>
     JSON.stringify({
@@ -193,7 +252,12 @@ async function negotiateGLM(apiMessages: ApiMessage[], signal: AbortSignal): Pro
       temperature: 0.4,
       max_tokens: 96000,
       stream: true,
-      ...(useTools ? { tools } : {}),
+      ...(useTools
+        ? {
+            tools: externalTools || builtInTools,
+            ...(externalTools && options.toolChoice ? { tool_choice: options.toolChoice } : {}),
+          }
+        : {}),
     });
 
   const call = (m: string, useTools: boolean) =>
@@ -360,7 +424,8 @@ function parseOpenRouterError(httpCode: number, rawJson: string): string {
  */
 async function negotiateOpenRouter(
   apiMessages: ApiMessage[],
-  signal: AbortSignal
+  signal: AbortSignal,
+  options: NegotiateOptions = {}
 ): Promise<NegotiationResult> {
   const keys = getOpenRouterKeys();
   if (keys.length === 0) {
@@ -373,6 +438,8 @@ async function negotiateOpenRouter(
       errorMessage: "موديل mlag-2.1 مش متاح حاليًا — جرب موديل تاني من القايمة.",
     };
   }
+
+  const externalTools = options.tools && options.tools.length > 0 ? options.tools : null;
 
   const call = (key: string, useTools: boolean) =>
     fetch(OPENROUTER_BASE_URL, {
@@ -392,7 +459,12 @@ async function negotiateOpenRouter(
         // أداة بحث الإنترنت المدمجة في OpenRouter نفسه (server-side): الموديل هو
         // اللي بيقرر لو محتاج يبحث ولا لأ، والبحث بيتنفذ عند OpenRouter مباشرة —
         // مفيش حاجة إضافية لازم نعملها هنا، النتيجة بترجع جوه نفس الستريم العادي.
-        ...(useTools ? { tools: [{ type: "openrouter:web_search" }] } : {}),
+        // لو المستدعي (نقطة الـ API العامة) بعت أدوات بتاعته هو، بنستخدمها هي بدلها.
+        ...(useTools
+          ? externalTools
+            ? { tools: externalTools, ...(options.toolChoice ? { tool_choice: options.toolChoice } : {}) }
+            : { tools: [{ type: "openrouter:web_search" }] }
+          : {}),
       }),
       signal,
     });
@@ -498,7 +570,11 @@ function parseXkiroError(httpCode: number, rawJson: string): string {
  * النتيجة في طلب تاني. ده أكبر من مجرد "فلاج" زي الموديلين التانيين، فسبناه لتحديث
  * لاحق لو حابب تضيفه.
  */
-async function negotiateXkiro(apiMessages: ApiMessage[], signal: AbortSignal): Promise<NegotiationResult> {
+async function negotiateXkiro(
+  apiMessages: ApiMessage[],
+  signal: AbortSignal,
+  options: NegotiateOptions = {}
+): Promise<NegotiationResult> {
   const keys = getXkiroKeys();
   if (keys.length === 0) {
     console.error("[mlag config] provider C keys missing — set XKIRO_API_KEYS in env");
@@ -507,6 +583,8 @@ async function negotiateXkiro(apiMessages: ApiMessage[], signal: AbortSignal): P
       errorMessage: "موديل mlag-2.2 مش متاح حاليًا — جرب موديل تاني من القايمة.",
     };
   }
+
+  const externalTools = options.tools && options.tools.length > 0 ? options.tools : null;
 
   const call = (key: string) =>
     fetch(XKIRO_BASE_URL, {
@@ -521,6 +599,11 @@ async function negotiateXkiro(apiMessages: ApiMessage[], signal: AbortSignal): P
         temperature: 0.4,
         max_tokens: XKIRO_MAX_TOKENS,
         stream: true,
+        // بوابة xKiro بتدعم function calling عادي (على عكس أداة البحث المدمجة
+        // بتاعت GLM/OpenRouter فوق) — فبنبعت أدوات المستدعي زي ما هي لو موجودة.
+        ...(externalTools
+          ? { tools: externalTools, ...(options.toolChoice ? { tool_choice: options.toolChoice } : {}) }
+          : {}),
       }),
       signal,
     });
@@ -580,19 +663,20 @@ async function negotiateXkiro(apiMessages: ApiMessage[], signal: AbortSignal): P
 export async function negotiateUpstream(
   apiMessages: ApiMessage[],
   signal: AbortSignal,
-  modelId: ModelId = DEFAULT_MODEL
+  modelId: ModelId = DEFAULT_MODEL,
+  options: NegotiateOptions = {}
 ): Promise<NegotiationResult> {
   if (modelId === "malg-2.1") {
-    const result = await negotiateOpenRouter(apiMessages, signal);
+    const result = await negotiateOpenRouter(apiMessages, signal, options);
     if (result.ok) return result;
     console.error("[mlag] malg-2.1 (provider A) فشل بالكامل — رجعنا لـ malg-2:", result.errorMessage);
-    return negotiateGLM(apiMessages, signal);
+    return negotiateGLM(apiMessages, signal, options);
   }
   if (modelId === "malg-2.2") {
-    const result = await negotiateXkiro(apiMessages, signal);
+    const result = await negotiateXkiro(apiMessages, signal, options);
     if (result.ok) return result;
     console.error("[mlag] malg-2.2 (provider C) فشل بالكامل — رجعنا لـ malg-2:", result.errorMessage);
-    return negotiateGLM(apiMessages, signal);
+    return negotiateGLM(apiMessages, signal, options);
   }
-  return negotiateGLM(apiMessages, signal);
+  return negotiateGLM(apiMessages, signal, options);
 }

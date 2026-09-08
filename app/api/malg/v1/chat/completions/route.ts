@@ -9,6 +9,7 @@ import {
   readUpstreamStream,
   normalizeModelId,
   type ApiMessage,
+  type UpstreamToolCall,
 } from "@/lib/ai";
 import { API_IDENTITY_SYSTEM_PROMPT } from "@/lib/systemPrompt";
 
@@ -17,9 +18,11 @@ export const maxDuration = 300;
 
 // حد أقصى لعدد الرسائل ولطول كل رسالة في الطلب الواحد — يحمي من استهلاك
 // رصيد ضخم بغلطة أو ضغط زائد على المزوّدين المجانيين (malg-2.1 / malg-2.2)
-// بطلب برمجي واحد ضخم.
-const MAX_MESSAGES = 40;
-const MAX_MESSAGE_LENGTH = 24_000;
+// بطلب برمجي واحد ضخم. الأرقام دي أعلى من نسخة أول إصدار من الـ endpoint عشان
+// تستوعب جلسات أدوات برمجة حقيقية (محتوى ملفات كاملة في رسايل tool، ومحادثة
+// طويلة فيها رحلات ذهاب وإياب كتير مع استدعاءات أدوات).
+const MAX_MESSAGES = 200;
+const MAX_MESSAGE_LENGTH = 100_000;
 
 const GENERIC_MISSING_KEY_MESSAGE = "مفتاح API مفقود أو غير صالح";
 const GENERIC_UPSTREAM_ERROR = "حصل خطأ غير متوقع أثناء توليد الرد — جرب تاني.";
@@ -52,12 +55,27 @@ async function recordUsage(params: {
   }
 }
 
+/** finish_reason الصحيح: "tool_calls" لو الموديل طلب استدعاء أداة، غير كده stop/length زي المعتاد. */
+function computeFinishReason(toolCalls: UpstreamToolCall[] | undefined, upstreamFinishReason: string | null): string {
+  if (toolCalls && toolCalls.length > 0) return "tool_calls";
+  return upstreamFinishReason === "length" ? "length" : "stop";
+}
+
+/** نص إضافي (JSON الأدوات المطلوبة) بيتضاف لتقدير توكنز الإكمال، عشان ردود
+ * function-calling (زي كتابة ملف كامل) تتحسب في الرصيد بعدالة زي أي رد نصي. */
+function toolCallsBillableText(toolCalls: UpstreamToolCall[] | undefined): string {
+  return toolCalls && toolCalls.length > 0 ? JSON.stringify(toolCalls) : "";
+}
+
 /**
  * نقطة الـ API العامة للمطورين — بيستخدمها المستخدم في تطبيقاته/كوده الخاص
  * (خارج الموقع) بنفس فكرة OpenAI / OpenRouter. المصادقة بمفتاح API في هيدر
- * Authorization، مش بكوكي جلسة المتصفح. بتدعم وضعين: رد كامل دفعة واحدة
- * (الافتراضي)، أو streaming حقيقي بصيغة OpenAI SSE (`"stream": true`) —
- * ده اللي محتاجينه أدوات زي Cline / OpenCode / Codex CLI عشان تشتغل معاها.
+ * Authorization، مش بكوكي جلسة المتصفح. بتدعم:
+ * - وضعين: رد كامل دفعة واحدة (الافتراضي)، أو streaming حقيقي بصيغة OpenAI
+ *   SSE (`"stream": true`) — ده اللي محتاجينه أدوات زي Cline/OpenCode/Codex.
+ * - function calling حقيقي (`tools` / `tool_choice` في الطلب، و `tool_calls`
+ *   في الرد) — من غيره أدوات زي Cline بتقدر تكتب نص بس، مش تعدل ملفات فعليًا
+ *   أو تشغل أوامر، لأنها معتمدة كليًا على tool_calls عشان تنفذ أي حاجة.
  */
 export async function POST(req: NextRequest) {
   await ensureSchema();
@@ -135,7 +153,16 @@ export async function POST(req: NextRequest) {
   for (const m of rawMessages) {
     const role = typeof m?.role === "string" ? m.role : "";
     const content = typeof m?.content === "string" ? m.content : "";
-    if (!["system", "user", "assistant"].includes(role) || !content.trim()) {
+    if (!["system", "user", "assistant", "tool"].includes(role)) {
+      return NextResponse.json({ error: "شكل الرسائل غير صحيح" }, { status: 400 });
+    }
+    // رسايل "tool" (نتيجة تنفيذ أداة من الأداة المستدعية زي Cline) ممكن يكون
+    // محتواها فاضي أحيانًا (تنفيذ ناجح من غير نص)، وكذلك رسايل "assistant"
+    // اللي طلبت استدعاء أداة من غير أي نص مصاحب — باقي الحالات لازم محتوى فعلي.
+    const assistantToolCalls =
+      role === "assistant" && Array.isArray(m?.tool_calls) ? (m.tool_calls as UpstreamToolCall[]) : undefined;
+    const hasAssistantToolCalls = !!assistantToolCalls && assistantToolCalls.length > 0;
+    if (role !== "tool" && !hasAssistantToolCalls && !content.trim()) {
       return NextResponse.json({ error: "شكل الرسائل غير صحيح" }, { status: 400 });
     }
     if (content.length > MAX_MESSAGE_LENGTH) {
@@ -144,13 +171,22 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    apiMessages.push({ role, content });
+    const entry: ApiMessage = { role, content };
+    if (role === "tool") {
+      if (typeof m?.tool_call_id === "string") entry.tool_call_id = m.tool_call_id;
+      if (typeof m?.name === "string") entry.name = m.name;
+    }
+    if (hasAssistantToolCalls) entry.tool_calls = assistantToolCalls;
+    apiMessages.push(entry);
   }
 
-  // ملحوظة توافق: بنقرأ body.model لو موجودة بس عشان مانرجعش خطأ لأدوات
-  // زي Cline/OpenCode/Codex اللي بتبعت الحقل ده دايمًا — بنتجاهل قيمته تمامًا،
-  // لأن الموديل محدد فعليًا من المفتاح نفسه وقت إنشائه.
   const wantsStream = body?.stream === true;
+
+  // function calling: لو الأداة المستدعية (زي Cline) بعتت تعريفات أدوات في
+  // طلبها، بنبعتها زي ما هي للموديل (بدون أي تعديل) عشان يقدر يستدعيها فعليًا
+  // بدل ما يكتب وصف نصي بس من غير أي تنفيذ حقيقي.
+  const rawTools = Array.isArray(body?.tools) && body.tools.length > 0 ? body.tools : undefined;
+  const rawToolChoice = body?.tool_choice;
 
   // بنحقن رسالة هوية "mlag" بعد آخر رسالة system موجودة أصلاً من المستدعي
   // (زي system prompt بتاع Cline/OpenCode نفسه)، عشان تبقى أقرب حاجة لبداية
@@ -167,13 +203,16 @@ export async function POST(req: NextRequest) {
   ];
 
   // 5) استدعِ negotiateUpstream الموجودة بالفعل — من غير أي منطق اتصال جديد،
-  // نفس الدالة اللي يستخدمها /api/chat حاليًا (بكل منطق إعادة المحاولة والتراجع بتاعها)
+  // نفس الدالة اللي يستخدمها /api/chat حاليًا (بكل منطق إعادة المحاولة والتراجع
+  // بتاعها)، بس دلوقتي بتاخد كمان tools/tool_choice اختياريًا.
   const controller = new AbortController();
   req.signal.addEventListener("abort", () => controller.abort());
 
+  const negotiateOptions = { tools: rawTools, toolChoice: rawToolChoice };
+
   let negotiated;
   try {
-    negotiated = await negotiateUpstream(messagesForUpstream, controller.signal, modelId);
+    negotiated = await negotiateUpstream(messagesForUpstream, controller.signal, modelId, negotiateOptions);
   } catch {
     return NextResponse.json({ error: "تم إلغاء الطلب" }, { status: 499 });
   }
@@ -225,12 +264,16 @@ export async function POST(req: NextRequest) {
         let result = await readUpstreamStream(upstreamResponse, controller.signal, onDelta);
 
         // نفس منطق إعادة المحاولة الموجود في /api/chat: لو الاستجابة رجعت فاضية
-        // تمامًا (عطل مؤقت شائع في الموديلات المجانية)، جرب مرة تانية. آمن هنا
-        // لأن onDelta لسه ما اتنادتش خالص لو المحتوى فاضي، يعني ماتبعتش أي بايت للعميل.
-        if (!result.content.trim() && !result.stoppedByUser) {
-          const retryNegotiated = await negotiateUpstream(messagesForUpstream, controller.signal, modelId).catch(
-            () => null
-          );
+        // تمامًا (مش نص ولا حتى استدعاء أداة — عطل مؤقت شائع في الموديلات
+        // المجانية)، جرب مرة تانية. آمن هنا لأن onDelta لسه ما اتنادتش خالص لو
+        // المحتوى فاضي، يعني ماتبعتش أي بايت للعميل.
+        if (!result.content.trim() && !result.stoppedByUser && (result.toolCalls?.length ?? 0) === 0) {
+          const retryNegotiated = await negotiateUpstream(
+            messagesForUpstream,
+            controller.signal,
+            modelId,
+            negotiateOptions
+          ).catch(() => null);
           if (retryNegotiated?.ok) {
             const retryResult = await readUpstreamStream(retryNegotiated.response, controller.signal, onDelta);
             result = {
@@ -238,13 +281,16 @@ export async function POST(req: NextRequest) {
               reasoning: result.reasoning || retryResult.reasoning,
               finishReason: retryResult.finishReason ?? result.finishReason,
               stoppedByUser: retryResult.stoppedByUser,
+              toolCalls: retryResult.toolCalls,
             };
           }
         }
 
         const finalContent = result.content.trim();
+        const toolCalls = result.toolCalls ?? [];
+        const hasToolCalls = toolCalls.length > 0;
 
-        if (!finalContent) {
+        if (!finalContent && !hasToolCalls) {
           // من غير خصم أي توكنز على رد ماتكتبش أصلاً
           send({ error: { message: GENERIC_UPSTREAM_ERROR, type: "upstream_error" } });
           try {
@@ -255,13 +301,37 @@ export async function POST(req: NextRequest) {
           return;
         }
 
+        // لو الموديل طلب استدعاء أداة، بنبعتها كـ delta واحدة كاملة (مش تدريجيًا
+        // زي النص العادي) — Cline وأمثالها بتجمّع أي حاجة توصلها بالـ index
+        // برضو، فمفيش فرق فعلي في السلوك، وده أبسط وأضمن.
+        if (hasToolCalls) {
+          send({
+            ...chunkBase,
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  tool_calls: toolCalls.map((tc, i) => ({
+                    index: i,
+                    id: tc.id,
+                    type: "function",
+                    function: tc.function,
+                  })),
+                },
+                finish_reason: null,
+              },
+            ],
+          });
+        }
+
+        const billableCompletionText = finalContent + toolCallsBillableText(toolCalls);
         const promptText = messagesForUpstream.map((m) => m.content).join("\n");
-        const totalTokens = estimateTokens(promptText, finalContent);
+        const totalTokens = estimateTokens(promptText, billableCompletionText);
         await recordUsage({ keyId: keyRow.id, userId: keyRow.user_id, modelId, totalTokens });
 
         send({
           ...chunkBase,
-          choices: [{ index: 0, delta: {}, finish_reason: result.finishReason === "length" ? "length" : "stop" }],
+          choices: [{ index: 0, delta: {}, finish_reason: computeFinishReason(toolCalls, result.finishReason) }],
         });
         try {
           streamController.enqueue(encoder.encode("data: [DONE]\n\n"));
@@ -287,10 +357,13 @@ export async function POST(req: NextRequest) {
   // ————————————————————————————————————————————————————————————
   let result = await readUpstreamStream(upstreamResponse, controller.signal, () => {});
 
-  if (!result.content.trim() && !result.stoppedByUser) {
-    const retryNegotiated = await negotiateUpstream(messagesForUpstream, controller.signal, modelId).catch(
-      () => null
-    );
+  if (!result.content.trim() && !result.stoppedByUser && (result.toolCalls?.length ?? 0) === 0) {
+    const retryNegotiated = await negotiateUpstream(
+      messagesForUpstream,
+      controller.signal,
+      modelId,
+      negotiateOptions
+    ).catch(() => null);
     if (retryNegotiated?.ok) {
       const retryResult = await readUpstreamStream(retryNegotiated.response, controller.signal, () => {});
       result = {
@@ -298,21 +371,32 @@ export async function POST(req: NextRequest) {
         reasoning: result.reasoning || retryResult.reasoning,
         finishReason: retryResult.finishReason ?? result.finishReason,
         stoppedByUser: retryResult.stoppedByUser,
+        toolCalls: retryResult.toolCalls,
       };
     }
   }
 
   const finalContent = result.content.trim();
-  if (!finalContent) {
+  const toolCalls = result.toolCalls ?? [];
+  const hasToolCalls = toolCalls.length > 0;
+
+  if (!finalContent && !hasToolCalls) {
     return NextResponse.json({ error: GENERIC_UPSTREAM_ERROR }, { status: 502 });
   }
 
+  const billableCompletionText = finalContent + toolCallsBillableText(toolCalls);
   const promptText = messagesForUpstream.map((m) => m.content).join("\n");
   const promptTokens = estimateTokens(promptText);
-  const totalTokens = estimateTokens(promptText, finalContent);
+  const totalTokens = estimateTokens(promptText, billableCompletionText);
   const completionTokens = Math.max(totalTokens - promptTokens, 0);
 
   await recordUsage({ keyId: keyRow.id, userId: keyRow.user_id, modelId, totalTokens });
+
+  const message: { role: "assistant"; content: string | null; tool_calls?: UpstreamToolCall[] } = {
+    role: "assistant",
+    content: finalContent || null,
+  };
+  if (hasToolCalls) message.tool_calls = toolCalls;
 
   return NextResponse.json({
     id: completionId,
@@ -322,8 +406,8 @@ export async function POST(req: NextRequest) {
     choices: [
       {
         index: 0,
-        message: { role: "assistant", content: finalContent },
-        finish_reason: result.finishReason === "length" ? "length" : "stop",
+        message,
+        finish_reason: computeFinishReason(toolCalls, result.finishReason),
       },
     ],
     usage: {
