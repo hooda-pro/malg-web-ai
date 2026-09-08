@@ -443,6 +443,12 @@ Content-Type: application/json
             <h2 className="text-[13px] font-bold text-txt">وصله بأداة برمجة بالذكاء الاصطناعي</h2>
           </div>
 
+          <p className="mb-3 rounded-md border border-cyan/30 bg-cyan/10 px-3 py-2 text-[11px] leading-5 text-cyan">
+            حتى لو استخدمته جوه أداة زي دي، لو حد سأل الموديل "مين عملك؟" هيرد إنه "mlag" من
+            تطوير محمود أحمد سعيد — الهوية دي متفروضة على مستوى الـ API نفسه، وبتشتغل جنب تعليمات
+            الأداة العادية من غير ما تأثر على أدائها في المهمة البرمجية.
+          </p>
+
           <div className="mb-3 flex flex-wrap gap-1.5">
             {TOOL_TABS.map((tool) => (
               <button

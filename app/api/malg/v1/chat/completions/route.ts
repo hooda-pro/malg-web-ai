@@ -10,6 +10,7 @@ import {
   normalizeModelId,
   type ApiMessage,
 } from "@/lib/ai";
+import { API_IDENTITY_SYSTEM_PROMPT } from "@/lib/systemPrompt";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -151,6 +152,20 @@ export async function POST(req: NextRequest) {
   // لأن الموديل محدد فعليًا من المفتاح نفسه وقت إنشائه.
   const wantsStream = body?.stream === true;
 
+  // بنحقن رسالة هوية "mlag" بعد آخر رسالة system موجودة أصلاً من المستدعي
+  // (زي system prompt بتاع Cline/OpenCode نفسه)، عشان تبقى أقرب حاجة لبداية
+  // الرد الفعلي وتقدر تتغلب في حالة تعارض هوية — من غير ما تلمس أو تكرر أي
+  // حاجة من تعليمات الأداة المستدعية نفسها.
+  let identityInsertAt = 0;
+  while (identityInsertAt < apiMessages.length && apiMessages[identityInsertAt].role === "system") {
+    identityInsertAt++;
+  }
+  const messagesForUpstream: ApiMessage[] = [
+    ...apiMessages.slice(0, identityInsertAt),
+    { role: "system", content: API_IDENTITY_SYSTEM_PROMPT },
+    ...apiMessages.slice(identityInsertAt),
+  ];
+
   // 5) استدعِ negotiateUpstream الموجودة بالفعل — من غير أي منطق اتصال جديد،
   // نفس الدالة اللي يستخدمها /api/chat حاليًا (بكل منطق إعادة المحاولة والتراجع بتاعها)
   const controller = new AbortController();
@@ -158,7 +173,7 @@ export async function POST(req: NextRequest) {
 
   let negotiated;
   try {
-    negotiated = await negotiateUpstream(apiMessages, controller.signal, modelId);
+    negotiated = await negotiateUpstream(messagesForUpstream, controller.signal, modelId);
   } catch {
     return NextResponse.json({ error: "تم إلغاء الطلب" }, { status: 499 });
   }
@@ -213,7 +228,7 @@ export async function POST(req: NextRequest) {
         // تمامًا (عطل مؤقت شائع في الموديلات المجانية)، جرب مرة تانية. آمن هنا
         // لأن onDelta لسه ما اتنادتش خالص لو المحتوى فاضي، يعني ماتبعتش أي بايت للعميل.
         if (!result.content.trim() && !result.stoppedByUser) {
-          const retryNegotiated = await negotiateUpstream(apiMessages, controller.signal, modelId).catch(
+          const retryNegotiated = await negotiateUpstream(messagesForUpstream, controller.signal, modelId).catch(
             () => null
           );
           if (retryNegotiated?.ok) {
@@ -240,7 +255,7 @@ export async function POST(req: NextRequest) {
           return;
         }
 
-        const promptText = apiMessages.map((m) => m.content).join("\n");
+        const promptText = messagesForUpstream.map((m) => m.content).join("\n");
         const totalTokens = estimateTokens(promptText, finalContent);
         await recordUsage({ keyId: keyRow.id, userId: keyRow.user_id, modelId, totalTokens });
 
@@ -273,7 +288,7 @@ export async function POST(req: NextRequest) {
   let result = await readUpstreamStream(upstreamResponse, controller.signal, () => {});
 
   if (!result.content.trim() && !result.stoppedByUser) {
-    const retryNegotiated = await negotiateUpstream(apiMessages, controller.signal, modelId).catch(
+    const retryNegotiated = await negotiateUpstream(messagesForUpstream, controller.signal, modelId).catch(
       () => null
     );
     if (retryNegotiated?.ok) {
@@ -292,7 +307,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: GENERIC_UPSTREAM_ERROR }, { status: 502 });
   }
 
-  const promptText = apiMessages.map((m) => m.content).join("\n");
+  const promptText = messagesForUpstream.map((m) => m.content).join("\n");
   const promptTokens = estimateTokens(promptText);
   const totalTokens = estimateTokens(promptText, finalContent);
   const completionTokens = Math.max(totalTokens - promptTokens, 0);
