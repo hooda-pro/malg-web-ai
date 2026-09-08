@@ -1,18 +1,25 @@
 import { MODEL_GLM_45_FLASH, MODEL_GLM_47_FLASH } from "./systemPrompt";
 
 const GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
+// حد الإخراج الحقيقي لـ GLM-4.7-Flash (وكذلك الافتراضي glm-4.5-flash) هو
+// 131,072 توكن — بنطلب حد أعلى بأمان (128K) قريب منه عشان رد واحد طويل (زي
+// كتابة ملف كبير أو مشروع كامل في استدعاء أداة واحد) ما يتقطعش في نص الطريق.
+const GLM_MAX_TOKENS = 128000;
+
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions";
 const OPENROUTER_MODEL = "minimax/minimax-m3:free";
 // من غير max_tokens صريح، بعض مزوّدي OpenRouter (خصوصاً على المسارات المجانية)
 // بيرجعوا لحد افتراضي واطي جداً (زي 4096) فبيقطعوا الكود في نص الملف — ده كان
 // سبب رئيسي في ظهور أكواد ناقصة/مكسورة من موديل malg-2.1. الموديل بيدعم مخرجات
-// لغاية 262K توكن فعليًا، فبنطلب حد أعلى بأمان (32K) يغطي أي صفحة/مشروع عادي.
-const OPENROUTER_MAX_TOKENS = 32000;
+// لغاية 512K توكن فعليًا، فبنطلب حد أعلى بأمان (128K) يغطي أي رد طويل حقيقي
+// (زي كتابة ملف كبير جوه استدعاء أداة واحد) من غير ما يتقطع في نص الطريق.
+const OPENROUTER_MAX_TOKENS = 128000;
 
 // malg-2.2 — Qwen3.8 Max (مجاني) عبر بوابة xKiro (متوافقة مع صيغة OpenAI)
 const XKIRO_BASE_URL = "https://api.xkiro.com/v1/chat/completions";
 const XKIRO_MODEL = "qwen/qwen3.8-max:free";
-const XKIRO_MAX_TOKENS = 32000;
+// حد الإخراج الحقيقي لـ Qwen3.8 Max هو 131,072 توكن — نفس منطق GLM فوق.
+const XKIRO_MAX_TOKENS = 128000;
 
 /** الموديلات المتاحة للمستخدم من الواجهة — لازم تتطابق مع components/SettingsContext.tsx */
 export type ModelId = "malg-2" | "malg-2.1" | "malg-2.2";
@@ -250,7 +257,7 @@ async function negotiateGLM(
       model: m,
       messages: apiMessages,
       temperature: 0.4,
-      max_tokens: 96000,
+      max_tokens: GLM_MAX_TOKENS,
       stream: true,
       ...(useTools
         ? {
