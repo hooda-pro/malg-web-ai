@@ -1,0 +1,222 @@
+/* =========================================================
+   base.css — الأساسيات: ألوان، خطوط، Reset، أنيميشن الظهور
+   ========================================================= */
+
+:root{
+  /* لفطومتي — نسخة الألوان الدافئة: كريمي/نبيتي/دهبي بدل الدارك */
+  --bg-0:#fbf2ed;
+  --bg-1:#f6d9d2;
+  --bg-2:#f0c4bb;
+  --rose:#a24a5e;
+  --rose-deep:#6b2737;
+  --rose-soft:#8a3b52;
+  --gold:#c9a15a;
+  --gold-deep:#ad8646;
+  --text:#3a2432;
+  --muted:#7a5b66;
+  --muted-2:#9c8089;
+  --glass:rgba(255,255,255,.55);
+  --glass-strong:rgba(255,255,255,.75);
+  --line:rgba(107,39,55,.16);
+  --radius:20px;
+  --radius-lg:26px;
+  --shadow:0 18px 50px -12px rgba(74,34,56,.32);
+  --nav-h:64px;
+  --font-head:'Aref Ruqaa','Amiri','Segoe UI',Tahoma,serif;
+  --font-body:'IBM Plex Sans Arabic','Segoe UI',Tahoma,sans-serif;
+  --ease:cubic-bezier(.22,.61,.36,1);
+
+  /* تريبلت RGB — عشان استخدامهم جوه rgba() في التدرجات والظلال */
+  --rose-rgb:162,74,94;
+  --rose-deep-rgb:107,39,55;
+  --gold-rgb:201,161,90;
+  --ink-rgb:58,36,50;
+}
+
+/* ---------- Reset ---------- */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;overflow-x:clip}
+body{
+  margin:0;
+  font-family:var(--font-body);
+  font-size:16px;
+  line-height:1.8;
+  color:var(--text);
+  background:var(--bg-0);
+  overflow-x:hidden;
+  padding-bottom:calc(var(--nav-h) + 16px);
+  -webkit-font-smoothing:antialiased;
+}
+img{max-width:100%;display:block}
+button{font-family:inherit;color:inherit;cursor:pointer}
+h1,h2,h3,h4{font-family:var(--font-head);line-height:1.35;margin:0;font-weight:700}
+p{margin:0}
+a{color:inherit}
+ol,ul{margin:0;padding:0;list-style:none}
+::selection{background:rgba(var(--rose-rgb),.4)}
+:focus-visible{outline:2px solid var(--rose-soft);outline-offset:2px;border-radius:6px}
+
+/* سكرول بار ناعم */
+::-webkit-scrollbar{width:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(var(--rose-rgb),.35);border-radius:99px}
+
+/* ---------- أدوات عامة ---------- */
+.container{width:min(620px,100% - 36px);margin-inline:auto}
+
+.glass{
+  background:var(--glass);
+  border:1px solid var(--line);
+  border-radius:var(--radius-lg);
+}
+/* البلور دي من أتقل حاجات على الموبايل — بنشغّلها على الشاشات الكبيرة بس */
+@media (min-width:900px){
+  .glass{backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+}
+
+.grad-text{
+  background:linear-gradient(120deg,var(--rose-soft),var(--rose) 45%,var(--gold));
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+}
+
+.beat{display:inline-block;animation:beat 1.7s ease-in-out infinite;transform-origin:center}
+@keyframes beat{
+  0%,100%{transform:scale(1)}
+  12%{transform:scale(1.25)}
+  24%{transform:scale(1)}
+  36%{transform:scale(1.15)}
+  48%{transform:scale(1)}
+}
+
+.chip{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:7px 16px;border-radius:999px;
+  background:var(--glass);border:1px solid var(--line);
+  font-size:13px;font-weight:700;color:var(--rose-soft);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+}
+
+/* ---------- عناوين الأقسام ---------- */
+.section{padding:84px 0 10px;position:relative}
+.section-head{text-align:center;margin-bottom:34px}
+.eyebrow{
+  display:inline-block;font-size:12.5px;font-weight:800;letter-spacing:.06em;
+  color:var(--gold);background:rgba(var(--gold-rgb),.1);
+  border:1px solid rgba(var(--gold-rgb),.25);
+  padding:4px 14px;border-radius:999px;margin-bottom:12px;
+}
+.section-title{font-size:clamp(26px,7vw,34px)}
+.section-desc{color:var(--muted);font-size:15px;max-width:430px;margin:10px auto 0}
+
+/* =========================================================
+   أنيميشن الظهور أثناء السكرول (Reveal)
+   بتشتغل مع IntersectionObserver في js/effects.js
+   أنواع الدخول: r-up / r-down / r-left / r-right / r-scale / r-blur / r-fade
+   و body.ready بيمنع تشغيلها قبل ما شاشة البداية تخلص
+   ========================================================= */
+.reveal{opacity:0}
+.r-up{transform:translate3d(0,26px,0)}
+.r-down{transform:translate3d(0,-26px,0)}
+.r-left{transform:translate3d(26px,0,0)}   /* دخول من ناحية اليمين (مناسب لـ RTL) */
+.r-right{transform:translate3d(-26px,0,0)}
+.r-scale{transform:scale(.92)}
+.r-blur{filter:blur(10px)}
+.r-fade{transform:none}
+
+body.ready .reveal{
+  transition:opacity .8s var(--ease),transform .8s var(--ease),filter .8s var(--ease);
+  transition-delay:var(--d,0s);
+}
+body.ready .reveal.in{opacity:1;transform:none;filter:blur(0)}
+
+/* ملاحظة: قاعدة prefers-reduced-motion اتشالت عن قصد —
+   الأنيميشن اجباري وشغال في كل الأحوال حتى لو "تقليل الحركة"
+   مفعّل من الموبايل (بناءً على طلب صاحب الموقع) */
+
+/* =========================================================
+   تخفيف للهواتف (تحت 900px):
+   - من غير backdrop-filter (أتقل حاجة على الموبايل)
+     ونقوم الخلفيات شوية عشان الشكل يفضل حلو من غير بلور
+   - الخلفية المتحركة بتخف من sections.css و effects.js
+   ========================================================= */
+@media (max-width:899px){
+  .fab,.bottom-nav,.bubble,.chip,.modal-backdrop,.intro-skip,
+  .album,.lb-btn,.ph-dl,.ph-date,.secret{
+    backdrop-filter:none !important;
+    -webkit-backdrop-filter:none !important;
+  }
+  .glass{background:rgba(255,255,255,.78)}
+  .bottom-nav{background:rgba(251,242,237,.93)}
+  .album{background:rgba(31,15,20,.97)}
+  .toast{background:rgba(107,39,55,.97)}
+  .chip{background:rgba(255,255,255,.78)}
+  .bubble{background:rgba(255,255,255,.78)}
+}
+
+/* =========================================================
+   الإعدادات: الوضع الداكن + الخط العادي
+   بيتفعّلوا من أيقونة الإعدادات (js/settings.js):
+   - html[data-theme="dark"]  → وضع داكن
+   - html[data-font="normal"] → الخط عادي بدل رقعة
+   ========================================================= */
+
+/* ---------- الخط العادي: العناوين بتبقى بنفس خط النص ---------- */
+html[data-font="normal"]{
+  --font-head:'IBM Plex Sans Arabic','Segoe UI',Tahoma,sans-serif;
+}
+
+/* ---------- الوضع الداكن: تحويلة على متغيرات الألوان ---------- */
+html[data-theme="dark"]{
+  --bg-0:#1d1016;
+  --bg-1:#2a151d;
+  --bg-2:#351a24;
+  --rose:#e293a9;
+  --rose-deep:#8a3b52;
+  --rose-soft:#f0a9bd;
+  --gold:#dcbd80;
+  --gold-deep:#c9a15a;
+  --text:#f6e9ee;
+  --muted:#c9a8b5;
+  --muted-2:#a38592;
+  --glass:rgba(56,30,40,.5);
+  --glass-strong:rgba(56,30,40,.74);
+  --line:rgba(255,214,226,.15);
+  --shadow:0 18px 50px -12px rgba(0,0,0,.65);
+  --rose-rgb:226,147,169;
+  --rose-deep-rgb:138,59,82;
+  --gold-rgb:220,189,128;
+  --ink-rgb:246,233,238;
+}
+
+/* نص فاتح فوق التدرجات الغامقة (كان بياخد لون الخلفية الفاتحة) */
+html[data-theme="dark"] .btn-primary,
+html[data-theme="dark"] .seg-btn.active{color:#fff5f8}
+
+/* السماء: نسخة ليلية */
+html[data-theme="dark"] .sky{
+  background:
+    radial-gradient(1200px 800px at 85% -10%,rgba(var(--rose-rgb),.10) 0%,transparent 60%),
+    radial-gradient(1000px 700px at -10% 30%,rgba(var(--gold-rgb),.07) 0%,transparent 55%),
+    radial-gradient(900px 700px at 70% 110%,rgba(var(--rose-rgb),.08) 0%,transparent 60%),
+    linear-gradient(180deg,#241319 0%,var(--bg-0) 55%,#180c11 100%);
+}
+
+/* خلفيات كانت فاتحة ثابتة في التصميم الأصلي */
+html[data-theme="dark"] .bottom-nav{background:rgba(24,13,18,.8)}
+html[data-theme="dark"] .modal-panel{background:linear-gradient(180deg,rgba(43,24,32,.97),rgba(33,17,24,.97))}
+html[data-theme="dark"] .gate-input{background:rgba(255,255,255,.06)}
+html[data-theme="dark"] .cd-tile{background:rgba(255,255,255,.05)}
+html[data-theme="dark"] .intro{background:radial-gradient(120% 90% at 50% 10%,#3a2029 0%,var(--bg-1) 45%,var(--bg-0) 100%)}
+html[data-theme="dark"] .gate-photo img{background:linear-gradient(150deg,#3a2029,#2a151d)}
+html[data-theme="dark"] .ph-date{background:rgba(24,13,18,.6)}
+
+/* تعويض خلفيات الموبايل الفاتحة (القواعد دي أقوى تحديدًا فبتتغلب عليها) */
+@media (max-width:899px){
+  html[data-theme="dark"] .glass,
+  html[data-theme="dark"] .chip,
+  html[data-theme="dark"] .bubble{background:rgba(56,30,40,.82)}
+  html[data-theme="dark"] .album-menu{background:rgba(40,21,28,.97)}
+}

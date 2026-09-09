@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>بطتي 💗</title>
+  <meta name="description" content="موقع صغير اتعمل بحب لفطومتي... حكاية، ذكريات، ورسالة من القلب. كل سنة وانتي طيبة ❤️">
+  <meta name="theme-color" content="#6b2737">
+
+  <!-- Open Graph: شكل اللينك لما يتشارك -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="لفطومتي ❤️">
+  <meta property="og:title" content="لفطومتي ❤️ — كل سنة وانتي طيبة">
+  <meta property="og:description" content="هدية صغيرة اتعملت بحب... افتحي الحكاية من الأول للآخر 🎁">
+  <meta property="og:image" content="assets/social/og-cover.png">
+  <meta property="og:locale" content="ar_EG">
+
+  <!-- Twitter / X -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="لفطومتي ❤️ — كل سنة وانتي طيبة">
+  <meta name="twitter:description" content="هدية صغيرة اتعملت بحب... افتحي الحكاية من الأول للآخر 🎁">
+  <meta name="twitter:image" content="assets/social/og-cover.png">
+
+  <link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
+  <link rel="apple-touch-icon" href="assets/icons/icon-512.png">
+  <link rel="manifest" href="manifest.webmanifest">
+
+  <!-- خطوط: Aref Ruqaa للعناوين العاطفية + IBM Plex Sans Arabic للنصوص -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/sections.css">
+
+  <!-- لو الجافاسكريبت مقفول: خلي المحتوى ظاهر عادي -->
+  <noscript>
+    <style>
+      .reveal{opacity:1!important;transform:none!important;filter:none!important}
+      #intro{display:none}
+    </style>
+  </noscript>
+</head>
+<body>
+
+  <!-- ============ شاشة البداية (Intro) ============ -->
+  <div id="intro" class="intro" aria-hidden="true">
+    <div class="intro-stage">
+      <p class="intro-word" data-word="1">فطومتي</p>
+      <p class="intro-word" data-word="2">بطتي</p>
+      <p class="intro-word" data-word="3">مزتي</p>
+      <div class="intro-final">
+        <span class="intro-heart beat" aria-hidden="true">❤️</span>
+        <h2 class="intro-title">لفطومتي</h2>
+        <p class="intro-sub">هدية صغيرة يارب تعجبك...</p>
+      </div>
+    </div>
+    <button id="introSkip" class="intro-skip" type="button">تخطي</button>
+  </div>
+
+  <!-- ============ الخلفية: سماء متحركة ============ -->
+  <div class="sky" aria-hidden="true">
+    <div class="sky-glow sky-glow--1"></div>
+    <div class="sky-glow sky-glow--2"></div>
+    <div class="sky-stars" id="skyStars"></div>
+    <div class="sky-hearts" id="skyHearts"></div>
+  </div>
+
+  <!-- شريط تقدم القراءة -->
+  <div class="scroll-progress" aria-hidden="true"><span id="scrollProgressBar"></span></div>
+
+  <!-- ============ أزرار عائمة: مشاركة + إعدادات ============ -->
+  <div class="float-actions">
+    <button id="shareFab" class="fab" type="button" aria-label="مشاركة الموقع">
+      <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
+    </button>
+    <button id="settingsFab" class="fab" type="button" aria-label="الإعدادات" aria-haspopup="dialog">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
+
+  <main id="top">
+
+    <!-- ============ 1) البداية (Hero) ============ -->
+    <header id="home" class="hero">
+      <div class="container hero-inner" id="heroInner">
+        <p class="chip reveal r-scale">🎁 هدية عيد ميلاد</p>
+        <h1 class="hero-title reveal r-up" style="--d:.12s">
+          كل سنة وانتي طيبة<br>
+          <span class="grad-text">يا فطومتي</span>
+          <span class="beat">❤️</span>
+        </h1>
+        <p class="hero-sub reveal r-up" style="--d:.28s">المرة دي مش مجرد رسالة... عملتلك حاجة تفضل معاكي.</p>
+        <a href="#story" class="btn btn-primary btn-lg reveal r-scale" style="--d:.45s">ابدأي الحكاية</a>
+        <div class="scroll-hint reveal r-fade" style="--d:.75s" aria-hidden="true">
+          <span>انزلي تحت</span>
+          <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+      </div>
+    </header>
+
+    <!-- ============ 2) الحكاية: فصول + خط الزمن ============ -->
+    <section id="story" class="section">
+      <div class="container">
+        <div class="section-head reveal r-up">
+          <span class="eyebrow">الفصول</span>
+          <h2 class="section-title">حكايتنا</h2>
+          <p class="section-desc">كل بطاقة هنا جزء من الحكاية... افتحيها بالترتيب عشان تحسي بيها.</p>
+        </div>
+        <div class="chapters" id="chapters"><!-- الفصول بتترندر من js/content.js --></div>
+      </div>
+
+      <div class="container">
+        <div class="section-head reveal r-up">
+          <span class="eyebrow">خط الزمن</span>
+          <h2 class="section-title">مراحل الحكاية</h2>
+        </div>
+        <ol class="timeline" id="timeline"><!-- بتترندر من js/content.js --></ol>
+      </div>
+    </section>
+
+    <!-- (3) قايمة الأسئلة القديمة اتشالت — بقت بوب أب بيفتح من زر "افتحي الألبوم" تحت -->
+
+    <!-- ============ 3) الذكريات: كلام لسه فاكره (مقفولة — القفل بيفتح بوب أب تاريخ الميلاد) ============ -->
+    <section id="memories" class="section">
+      <div class="container">
+        <div class="section-head reveal r-up">
+          <span class="eyebrow">الذكريات</span>
+          <h2 class="section-title">كلام لسه فاكره</h2>
+          <p class="section-desc">جمل صغيرة بينا... لسه محفوطة في قلبي لحد النهارده.💘</p>
+        </div>
+        <button class="chat-lock" id="chatLock" type="button" hidden></button>
+        <div class="chat" id="chat"></div>
+      </div>
+    </section>
+
+    <!-- ============ 4) الرسالة ============ -->
+    <section id="letter" class="section">
+      <div class="container">
+        <div class="section-head reveal r-up">
+          <span class="eyebrow">من قلبي</span>
+          <h2 class="section-title">الرسالة</h2>
+        </div>
+        <article class="letter glass reveal r-blur" style="--d:.1s">
+          <div class="letter-head">
+            <span class="letter-seal" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.9-10-9.6C.6 8 2.6 4.5 6.2 4.5c2.2 0 3.9 1.2 4.8 3 .9-1.8 2.6-3 4.8-3 3.6 0 5.6 3.5 4.2 6.9C19.5 16.1 12 21 12 21z"/></svg>
+            </span>
+            <h3 id="letterHead">ليكي انتي بس</h3>
+          </div>
+          <div class="letter-body" id="letterBody"></div>
+          <p class="letter-sign" id="letterSign"></p>
+        </article>
+
+        <!-- الرسالة المخفية -->
+        <div class="secret-wrap reveal r-scale">
+          <button id="secretCard" class="secret glass" type="button">
+            <span class="secret-lock" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+            </span>
+            <span class="secret-title">في حاجة مستخبية هنا...</span>
+            <span class="secret-hint">دوسي عشان تفتحيها</span>
+          </button>
+          <div id="secretReveal" class="secret-reveal glass" hidden></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 5) عيد الميلاد ============ -->
+    <section id="birthday" class="section">
+      <div class="container">
+        <div class="section-head reveal r-up">
+          <span class="eyebrow">المناسبة</span>
+          <h2 class="section-title">عيد الميلاد 🎂</h2>
+        </div>
+        <div class="birthday-card glass reveal r-scale" style="--d:.1s">
+          <p class="bday-date" id="bdayDate">10 أبريل 2027</p>
+
+          <!-- العداد: بيتحول تلقائياً لرسالة يوم 10/4/2027 -->
+          <div class="countdown" id="countdown" role="timer" aria-label="العد التنازلي لعيد الميلاد">
+            <div class="cd-tile"><span class="cd-num" id="cdDays">--</span><span class="cd-label">يوم</span></div>
+            <div class="cd-tile"><span class="cd-num" id="cdHours">--</span><span class="cd-label">ساعة</span></div>
+            <div class="cd-tile"><span class="cd-num" id="cdMins">--</span><span class="cd-label">دقيقة</span></div>
+            <div class="cd-tile"><span class="cd-num" id="cdSecs">--</span><span class="cd-label">ثانية</span></div>
+          </div>
+
+          <div class="bday-msg" id="bdayMsg" hidden>
+            <p class="bday-big" id="bdayBig"></p>
+            <p class="bday-small" id="bdaySmall"></p>
+          </div>
+
+          <p class="bday-wait" id="bdayWait">فاضل شوية على الفرحة... 🤍</p>
+          <button id="celebrateBtn" class="btn btn-ghost" type="button">اعملي احتفال ✨</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 6) ألبوم الصور ============ -->
+    <section id="gallery" class="section">
+      <div class="container">
+        <div class="album-entry glass reveal r-scale">
+          <span class="album-entry-emoji" aria-hidden="true">📸</span>
+          <h3 class="album-entry-title">ألبوم الذكريات</h3>
+          <p class="album-entry-text">كل الصور اللي معانا في مكان واحد... افتحي الألبوم وشوفيها كلها، وتقدري تنزلي اللي تحبي — ولسه فيه مفاجآت جاي 👀</p>
+          <button id="openAlbum" class="btn btn-primary btn-lg" type="button">افتحي الألبوم 📸</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ الفوتر ============ -->
+    <footer class="footer">
+      <div class="container">
+        <p class="footer-line">انا لسه <span class="beat">بحبك </span> قلبي</p>
+        <p class="footer-note">10 أبريل 2027 — كل سنة وانتي طيبة ❤️</p>
+      </div>
+    </footer>
+  </main>
+
+  <!-- ============ النافيجيشن السفلي ============ -->
+  <nav class="bottom-nav" aria-label="أقسام الموقع">
+    <a href="#home" class="nav-item" data-nav="home">
+      <svg viewBox="0 0 24 24"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>
+      <span>الرئيسية</span>
+    </a>
+    <a href="#story" class="nav-item" data-nav="story">
+      <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      <span>الحكاية</span>
+    </a>
+    <a href="#memories" class="nav-item" data-nav="memories">
+      <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <span>الذكريات</span>
+    </a>
+    <a href="#letter" class="nav-item" data-nav="letter">
+      <svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 6l-10 7L2 6"/></svg>
+      <span>الرسالة</span>
+    </a>
+    <a href="#birthday" class="nav-item" data-nav="birthday">
+      <svg viewBox="0 0 24 24"><path d="M4 21h16"/><path d="M5 21v-5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v5"/><path d="M12 14v-3"/><path d="M12 11c.8 0 1.5-.7 1.5-1.5S12 6.5 12 6.5s-1.5 2.2-1.5 3S11.2 11 12 11z"/></svg>
+      <span>عيد الميلاد</span>
+    </a>
+    <a href="#gallery" class="nav-item" data-nav="gallery">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+      <span>الصور</span>
+    </a>
+  </nav>
+
+  <!-- ============ مودال الفصول ============ -->
+  <div id="chapterModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" aria-hidden="true">
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-panel">
+      <header class="modal-head">
+        <span class="modal-kicker" id="modalKicker"></span>
+        <h3 class="modal-title" id="modalTitle"></h3>
+        <button class="modal-close" type="button" data-close aria-label="اقفلي">
+          <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </header>
+      <div class="modal-body" id="modalBody"></div>
+      <footer class="modal-foot">
+        <button id="modalNext" class="btn btn-primary btn-sm" type="button">الفصل اللي بعده ←</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ============ مودال بوابة الألبوم: سؤال الكلمتين + الصور (بيفتح من زر افتحي الألبوم) ============ -->
+  <div id="albumModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="albModalTitle" aria-hidden="true">
+    <div class="modal-backdrop" data-close-album-gate></div>
+    <div class="modal-panel">
+      <header class="modal-head">
+        <span class="modal-kicker">📸 قبل ما تفتحي الألبوم</span>
+        <h3 class="modal-title" id="albModalTitle"></h3>
+        <button class="modal-close" type="button" data-close-album-gate aria-label="اقفلي">
+          <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </header>
+      <div class="modal-body">
+
+        <!-- الخطوة 1: سؤال الكلمتين (كيبورد عادي) -->
+        <div class="gate-step" data-alb-step="ask">
+          <p class="gate-text" id="albAskText"></p>
+          <input id="albAnswer" class="gate-input" type="text" inputmode="text" autocomplete="off">
+          <p class="gate-wrong-note" id="albWrongNote" hidden></p>
+          <div class="gate-choices">
+            <button id="albCheck" class="btn btn-primary" type="button"></button>
+          </div>
+        </div>
+
+        <!-- الخطوة 2: الصور تظهر جوه البوب أب -->
+        <div class="gate-step" data-alb-step="photos" hidden>
+          <p class="gate-text" id="albPhotosText"></p>
+          <div class="gate-photos" id="albPhotos"></div>
+          <div class="gate-choices">
+            <button id="albOpen" class="btn btn-primary" type="button"></button>
+            <button id="albGoChat" class="btn btn-ghost" type="button"></button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ مودال بوابة الذكريات: سؤال تاريخ الميلاد (بيفتح من قفل الرسايل) ============ -->
+  <div id="memoriesModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="memModalTitle" aria-hidden="true">
+    <div class="modal-backdrop" data-close-mem-gate></div>
+    <div class="modal-panel">
+      <header class="modal-head">
+        <span class="modal-kicker">🔒 قبل ما تفتحي الذكريات</span>
+        <h3 class="modal-title" id="memModalTitle"></h3>
+        <button class="modal-close" type="button" data-close-mem-gate aria-label="اقفلي">
+          <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </header>
+      <div class="modal-body">
+
+        <!-- الخطوة 1: سؤال التاريخ (كيبورد عادي — مش أرقام بس) -->
+        <div class="gate-step" data-mem-step="ask">
+          <p class="gate-text" id="memAskText"></p>
+          <input id="memAnswer" class="gate-input" type="text" inputmode="text" autocomplete="off">
+          <div class="gate-choices">
+            <button id="memCheck" class="btn btn-primary" type="button"></button>
+            <button id="memSkip" class="btn btn-ghost" type="button"></button>
+          </div>
+        </div>
+
+        <!-- الخطوة 2: لو غلط أو مش فاكرة — التاريخ بيظهر -->
+        <div class="gate-step" data-mem-step="revealed" hidden>
+          <p class="gate-text" id="memRevText"></p>
+          <p class="gate-date" id="memRevDate"></p>
+          <div class="gate-choices">
+            <button id="memContinue" class="btn btn-primary" type="button"></button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ مودال الإعدادات (بيفتح من الأيقونة اللي تحت زر المشاركة) ============ -->
+  <div id="settingsModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="setTitle" aria-hidden="true">
+    <div class="modal-backdrop" data-close-settings></div>
+    <div class="modal-panel">
+      <header class="modal-head">
+        <span class="modal-kicker">⚙️ تخصيص الموقع</span>
+        <h3 class="modal-title" id="setTitle">الإعدادات</h3>
+        <button class="modal-close" type="button" data-close-settings aria-label="اقفلي">
+          <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </header>
+      <div class="modal-body">
+
+        <!-- وضع داكن -->
+        <div class="settings-row">
+          <span class="settings-ico" aria-hidden="true">🌙</span>
+          <span class="settings-txt">
+            <span class="settings-title">وضع داكن</span>
+            <span class="settings-sub">مريحة للعين</span>
+          </span>
+          <button id="setDark" class="switch" type="button" role="switch" aria-checked="false" aria-label="تفعيل الوضع الداكن"></button>
+        </div>
+
+        <!-- الخط: رقعة (الافتراضي) ولا عادي -->
+        <div class="settings-row">
+          <span class="settings-ico" aria-hidden="true">✒️</span>
+          <span class="settings-txt">
+            <span class="settings-title">الخط</span>
+            <span class="settings-sub">رقعة أو عادي</span>
+          </span>
+          <div class="seg" role="group" aria-label="اختيار الخط">
+            <button id="fontRuqaa" class="seg-btn active" type="button">رقعة</button>
+            <button id="fontNormal" class="seg-btn" type="button">عادي</button>
+          </div>
+        </div>
+
+        <!-- إخفاء الشريط السفلي -->
+        <div class="settings-row">
+          <span class="settings-ico" aria-hidden="true">🧭</span>
+          <span class="settings-txt">
+            <span class="settings-title">إخفاء الشريط اللي تحت</span>
+            <span class="settings-sub">شيل قايمة الأقسام</span>
+          </span>
+          <button id="setHideNav" class="switch" type="button" role="switch" aria-checked="false" aria-label="إخفاء الشريط السفلي"></button>
+        </div>
+
+        <p class="settings-note">اختياراتك بتتحفظ على جهازك تلقائيًا 🤍</p>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ واجهة الألبوم (شاشة كاملة لوحدها) ============ -->
+  <div id="album" class="album" role="dialog" aria-modal="true" aria-label="ألبوم الذكريات" aria-hidden="true">
+    <header class="album-head">
+      <span class="album-title">📸 ألبوم الذكريات <small id="albumCount"></small></span>
+      <div class="album-actions">
+        <button id="albumMenuBtn" class="lb-btn" type="button" aria-label="قايمة الألبوم">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+        </button>
+        <button class="lb-btn" type="button" data-close-album aria-label="اقفلي الألبوم">
+          <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="albumMenu" class="album-menu glass" hidden>
+        <button id="albumOldestFirst" type="button">📅 مرتبين من الأقدم للأحدث</button>
+        <button id="albumDlHelp" type="button">⬇️ عايزة تنزلي صورة؟ دوسي على السهم اللي عليها</button>
+      </div>
+    </header>
+    <div class="album-body">
+      <div class="polaroids" id="polaroids"></div>
+    </div>
+  </div>
+
+  <!-- توست: رسالة صغيرة تحت -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- كانفاس الاحتفال (كونفيتي) -->
+  <canvas id="confetti" class="confetti-canvas" aria-hidden="true"></canvas>
+
+  <!-- ============ السكريبتات (بالترتيب: المحتوى الأول) ============ -->
+  <script src="js/content.js"></script>
+  <script src="js/effects.js"></script>
+  <script src="js/story.js"></script>
+  <script src="js/gallery.js"></script>
+  <script src="js/countdown.js"></script>
+  <script src="js/share.js"></script>
+  <script src="js/settings.js"></script>
+  <script src="js/gate.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
