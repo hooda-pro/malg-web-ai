@@ -4,6 +4,7 @@ import { Download, FileCode2, FolderArchive } from "lucide-react";
 import type { ProjectFile } from "@/lib/parseContent";
 import { sanitizeFileName } from "@/lib/utils";
 import { useSettings } from "./SettingsContext";
+import { cn } from "@/lib/utils";
 
 function downloadTextFile(name: string, content: string) {
   const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
@@ -35,63 +36,69 @@ async function downloadZip(files: ProjectFile[], zipName: string) {
 }
 
 /**
- * كارت الملفات جوا الرسالة — زي كارت الأرتيفاكت في Claude بالظبط:
- * بتدوس على أي ملف فبتفتحله لوحة المعاينة/الكود الجانبية على طول (مش بيتفتح
- * كود خام جوا الرسالة). زرار التحميل موجود كأيقونة صغيرة جنب كل ملف كمان.
+ * كارت الملفات جوا الرسالة — بيقدّم كل ملف باسمه وزر تحميل بس، من غير أي عرض للكود الخام.
+ * الكود عمره ما يتفتح أو يتعرض هنا؛ لو المستخدم عايز يشوفه شغال يستخدم زر «معاينة».
  */
 export default function ProjectFilesCard({
   messageId,
   files,
-  onOpen,
 }: {
   messageId: string;
   files: ProjectFile[];
-  onOpen: (files: ProjectFile[], focusPath: string) => void;
+  onRunCode?: (code: string, language: string) => void;
 }) {
   const isProject = files.length >= 2;
   const { t } = useSettings();
 
   return (
-    <div className="rounded-md border border-line2 bg-panel2 overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-line2">
-        <div className="flex items-center gap-2 text-txt">
-          {isProject ? <FolderArchive size={14} className="text-cyan" /> : <FileCode2 size={14} className="text-cyan" />}
-          <span className="mono text-xs">
+    <div className="overflow-hidden rounded-lg border border-hair bg-surface shadow-1">
+      <div className="flex items-center justify-between gap-2 border-b border-hair bg-surface-2 px-3.5 py-2.5">
+        <div className="flex min-w-0 items-center gap-2 text-ink">
+          {isProject ? (
+            <FolderArchive size={15} className="shrink-0 text-accent" />
+          ) : (
+            <FileCode2 size={15} className="shrink-0 text-accent" />
+          )}
+          <span className="truncate text-[13px] font-medium">
             {isProject ? t("filesCardProject", { n: files.length }) : t("filesCardFile")}
           </span>
         </div>
         {isProject && (
           <button
             onClick={() => downloadZip(files, `mlag-project-${messageId.slice(0, 6)}.zip`)}
-            className="flex items-center gap-1 rounded bg-green/10 px-2 py-1 text-[11px] text-green hover:bg-green/20"
+            className={cn(
+              "inline-flex shrink-0 items-center gap-1.5 rounded-full border border-hair bg-surface",
+              "px-2.5 py-1 text-[12px] font-medium text-ink-2 shadow-1",
+              "transition-colors duration-1 hover:border-hair-2 hover:text-ink"
+            )}
           >
-            <Download size={12} /> {t("filesCardDownloadAll")}
+            <Download size={12} />
+            {t("filesCardDownloadAll")}
           </button>
         )}
       </div>
 
-      <div className="divide-y divide-line2">
+      <ul>
         {files.map((f) => (
-          <button
-            key={f.path}
-            onClick={() => onOpen(files, f.path)}
-            className="flex w-full items-center justify-between px-3 py-2 text-right hover:bg-white/[0.02]"
-          >
-            <span className="mono text-[12px] text-txt2 truncate" dir="ltr">
-              {f.path}
-            </span>
-            <span
-              onClick={(e) => {
-                e.stopPropagation();
-                downloadTextFile(sanitizeFileName(f.path.split("/").pop() || f.path), f.content);
-              }}
-              className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-txt3 hover:text-green hover:bg-green/10"
+          <li key={f.path} className="border-b border-hair last:border-b-0">
+            <button
+              onClick={() =>
+                downloadTextFile(sanitizeFileName(f.path.split("/").pop() || f.path), f.content)
+              }
+              dir="ltr"
+              className="group flex w-full items-center gap-3 px-3.5 py-2.5 text-start transition-colors duration-1 hover:bg-surface-3"
             >
-              <Download size={12} />
-            </span>
-          </button>
+              <span className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-ink-2">
+                {f.path}
+              </span>
+              <Download
+                size={13}
+                className="shrink-0 text-ink-3 transition-colors duration-1 group-hover:text-accent"
+              />
+            </button>
+          </li>
         ))}
-      </div>
+      </ul>
     </div>
   );
 }

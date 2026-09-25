@@ -4,34 +4,28 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from "react";
 import { translate, type Lang } from "@/lib/i18n";
 
-export type ModelId = "malg-2" | "malg-2.1" | "malg-2.2";
-
-export const AVAILABLE_MODELS: { id: ModelId; label: string; hint: string }[] = [
-  { id: "malg-2", label: "malg-2", hint: "الموديل الأساسي — سريع ومتوازن" },
-  { id: "malg-2.1", label: "malg-2.1", hint: "موديل تجريبي جديد" },
-  { id: "malg-2.2", label: "malg-2.2", hint: "موديل تجريبي — أداء أقوى في مهام معينة" },
-];
+export type Theme = "light" | "dark";
 
 interface Settings {
   lang: Lang;
+  theme: Theme;
   animations: boolean;
   showTime: boolean;
-  model: ModelId;
 }
 
-const DEFAULTS: Settings = { lang: "ar", animations: true, showTime: true, model: "malg-2" };
+const DEFAULTS: Settings = { lang: "ar", theme: "light", animations: true, showTime: true };
 const STORAGE_KEY = "mlag-settings";
 
 interface SettingsValue {
   lang: Lang;
+  theme: Theme;
   animations: boolean;
   showTime: boolean;
-  model: ModelId;
   dir: "rtl" | "ltr";
   setLang: (lang: Lang) => void;
+  setTheme: (theme: Theme) => void;
   setAnimations: (on: boolean) => void;
   setShowTime: (on: boolean) => void;
-  setModel: (model: ModelId) => void;
   /** ترجمة نص بمعاملات اختيارية: t("balance", { n: "500,000" }) */
   t: (key: string, params?: Record<string, string | number>) => string;
 }
@@ -65,15 +59,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       // تجاهل
     }
     const dir = settings.lang === "ar" ? "rtl" : "ltr";
-    document.documentElement.lang = settings.lang;
-    document.documentElement.dir = dir;
-    document.documentElement.classList.toggle("no-anim", !settings.animations);
+    const root = document.documentElement;
+    root.lang = settings.lang;
+    root.dir = dir;
+    root.setAttribute("data-theme", settings.theme);
+    root.classList.toggle("no-anim", !settings.animations);
   }, [settings, loaded]);
 
   const setLang = useCallback((lang: Lang) => setSettings((p) => ({ ...p, lang })), []);
+  const setTheme = useCallback((theme: Theme) => setSettings((p) => ({ ...p, theme })), []);
   const setAnimations = useCallback((on: boolean) => setSettings((p) => ({ ...p, animations: on })), []);
   const setShowTime = useCallback((on: boolean) => setSettings((p) => ({ ...p, showTime: on })), []);
-  const setModel = useCallback((model: ModelId) => setSettings((p) => ({ ...p, model })), []);
 
   const t = useCallback(
     (key: string, params?: Record<string, string | number>) => translate(settings.lang, key, params),
@@ -83,17 +79,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const value = useMemo<SettingsValue>(
     () => ({
       lang: settings.lang,
+      theme: settings.theme,
       animations: settings.animations,
       showTime: settings.showTime,
-      model: settings.model,
       dir: settings.lang === "ar" ? "rtl" : "ltr",
       setLang,
+      setTheme,
       setAnimations,
       setShowTime,
-      setModel,
       t,
     }),
-    [settings, setLang, setAnimations, setShowTime, setModel, t]
+    [settings, setLang, setTheme, setAnimations, setShowTime, t]
   );
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
@@ -105,14 +101,14 @@ export function useSettings(): SettingsValue {
     // احتياط — لو اتستخدم برا الـ Provider
     return {
       lang: DEFAULTS.lang,
+      theme: DEFAULTS.theme,
       animations: DEFAULTS.animations,
       showTime: DEFAULTS.showTime,
-      model: DEFAULTS.model,
       dir: "rtl",
       setLang: () => {},
+      setTheme: () => {},
       setAnimations: () => {},
       setShowTime: () => {},
-      setModel: () => {},
       t: (key, params) => translate(DEFAULTS.lang, key, params),
     };
   }

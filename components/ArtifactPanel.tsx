@@ -1,21 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
-  Check,
-  Code2,
-  Copy,
   Download,
-  Eye,
+  ExternalLink,
   Maximize2,
   Minimize2,
+  MonitorPlay,
   RefreshCw,
   X,
 } from "lucide-react";
 import type { ProjectFile } from "@/lib/parseContent";
 import { sanitizeFileName } from "@/lib/utils";
-import { highlightCode } from "@/lib/highlight";
+import { IconButton } from "./ui/Controls";
 import { useSettings } from "./SettingsContext";
+import { cn } from "@/lib/utils";
 
 const PREVIEWABLE_EXTS = new Set(["html", "htm", "css", "js"]);
 
@@ -111,191 +110,112 @@ ${js}
   return doc;
 }
 
+/** يفتح المعاينة في تاب جديد من نفس الـ HTML المجمّع. */
+function openInNewTab(doc: string) {
+  const blob = new Blob([doc], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank", "noopener");
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 /**
- * لوحة الأرتيفاكت الجانبية — زي Claude Artifacts بالظبط:
- * تابين فوق الشمال (عين = معاينة، أقواس كود = كود)، وفوق اليمين زرار نسخ وزرار
- * تحديث وزرار ملء شاشة. تاب الكود بيوضح الملف باسمه مع تظليل الكود وزرار نسخ.
+ * لوحة المعاينة — نافذة معاينة حيّة بس. الكود نفسه بيتقدّم للمستخدم كملف
+ * قابل للتحميل (في ProjectFilesCard جوا الرسالة)، مش بيتعرض هنا أبدًا.
  */
 export default function ArtifactPanel({
   files,
-  focusPath,
   onClose,
 }: {
   files: ProjectFile[];
-  focusPath?: string;
   onClose: () => void;
 }) {
   const { t } = useSettings();
   const [fullscreen, setFullscreen] = useState(false);
   const [runKey, setRunKey] = useState(0);
-  const [copied, setCopied] = useState(false);
   const hasWeb = useMemo(
     () => files.some((f) => PREVIEWABLE_EXTS.has((f.path.split(".").pop() || "").toLowerCase())),
     [files]
   );
-  const [tab, setTab] = useState<"preview" | "code">(hasWeb ? "preview" : "code");
-  const [activePath, setActivePath] = useState<string>(focusPath || files[0]?.path || "");
-
-  // لما الملفات تتحدث (مثلاً أثناء البث) — ثبّت الملف المفتوح أو ارجع لأول ملف
-  useEffect(() => {
-    setActivePath((p) => (files.some((f) => f.path === p) ? p : focusPath || files[0]?.path || ""));
-  }, [files, focusPath]);
 
   const doc = useMemo(() => buildPreviewDoc(files), [files]);
-  const activeFile = files.find((f) => f.path === activePath) ?? files[0];
   const title = files.length === 1 ? files[0].path : t("previewFiles", { n: files.length });
-  const highlighted = useMemo(
-    () => (activeFile ? highlightCode(activeFile.content) : ""),
-    [activeFile]
-  );
-
-  const handleCopy = async () => {
-    if (!activeFile) return;
-    try {
-      await navigator.clipboard.writeText(activeFile.content);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // تجاهل لو الحافظة مش متاحة
-    }
-  };
 
   return (
     <div
-      className={`animate-fadeIn flex flex-col bg-panel ${
+      className={cn(
+        "flex flex-col bg-surface",
         fullscreen
-          ? "fixed inset-0 z-[80]"
-          : "fixed inset-0 z-[70] lg:static lg:z-auto lg:min-w-[430px] lg:w-[45%] lg:border-s lg:border-line"
-      }`}
+          ? "fixed inset-0 z-modal"
+          : "fixed inset-0 z-overlay lg:static lg:z-auto lg:min-w-[430px] lg:w-[45%] lg:border-s lg:border-hair"
+      )}
     >
-      {/* شريط العنوان — زي Claude: تابات المعاينة/الكود على الشمال، والأزرار على اليمين */}
-      <div className="terminal-dots flex items-center justify-between gap-2 border-b border-line bg-panel px-2.5 py-2">
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="hidden gap-1 sm:flex">
-            <span className="h-2 w-2 rounded-full bg-rose/70" />
-            <span className="h-2 w-2 rounded-full bg-amber/70" />
-            <span className="h-2 w-2 rounded-full bg-green/70" />
+      <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-hair px-3 sm:px-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[9px] bg-accent-soft text-accent">
+            <MonitorPlay size={14} />
           </span>
-          <div className="flex items-center gap-1 rounded-lg bg-panel2 p-0.5">
-            <button
-              onClick={() => hasWeb && setTab("preview")}
-              disabled={!hasWeb}
-              title={t("previewTab")}
-              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] transition-colors ${
-                tab === "preview"
-                  ? "bg-panel text-cyan shadow-sm"
-                  : "text-txt3 hover:text-txt2 disabled:opacity-30"
-              }`}
-            >
-              <Eye size={13} /> <span className="hidden sm:inline">{t("previewTab")}</span>
-            </button>
-            <button
-              onClick={() => setTab("code")}
-              title={t("runnerTabCode")}
-              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] transition-colors ${
-                tab === "code" ? "bg-panel text-cyan shadow-sm" : "text-txt3 hover:text-txt2"
-              }`}
-            >
-              <Code2 size={13} /> <span className="hidden sm:inline">{t("runnerTabCode")}</span>
-            </button>
-          </div>
+          <span dir="ltr" className="truncate font-mono text-[12px] text-ink-2">
+            {title}
+          </span>
         </div>
-
-        <div className="flex min-w-0 flex-1 items-center justify-center px-1">
-          <span className="mono truncate text-[11px] text-txt3">{title}</span>
-        </div>
-
         <div className="flex shrink-0 items-center gap-0.5">
-          <button
-            onClick={handleCopy}
-            className="rounded-md p-1.5 text-txt2 hover:bg-white/5 hover:text-green"
-            title={copied ? t("copied") : t("copy")}
-          >
-            {copied ? <Check size={15} className="text-green" /> : <Copy size={15} />}
-          </button>
-          {tab === "preview" && hasWeb && (
-            <button
-              onClick={() => setRunKey((k) => k + 1)}
-              className="rounded-md p-1.5 text-txt2 hover:bg-white/5 hover:text-green"
-              title={t("previewRerun")}
-            >
-              <RefreshCw size={15} />
-            </button>
+          {hasWeb && (
+            <>
+              <IconButton label={t("previewRerun")} onClick={() => setRunKey((k) => k + 1)} size="sm">
+                <RefreshCw size={15} />
+              </IconButton>
+              <IconButton
+                label={t("openInNewTab")}
+                onClick={() => openInNewTab(doc)}
+                size="sm"
+              >
+                <ExternalLink size={15} />
+              </IconButton>
+            </>
           )}
-          <button
+          <IconButton
+            label={fullscreen ? t("artifactExitFullscreen") : t("artifactFullscreen")}
             onClick={() => setFullscreen((f) => !f)}
-            className="rounded-md p-1.5 text-txt2 hover:bg-white/5 hover:text-green"
-            title={fullscreen ? t("artifactExitFullscreen") : t("artifactFullscreen")}
+            size="sm"
           >
             {fullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-          </button>
-          <span className="mx-0.5 h-4 w-px bg-line2" />
-          <button
-            onClick={onClose}
-            className="rounded-md p-1.5 text-txt3 hover:bg-white/5 hover:text-txt"
-            title={t("artifactClose")}
-          >
+          </IconButton>
+          <IconButton label={t("artifactClose")} onClick={onClose} size="sm">
             <X size={16} />
-          </button>
+          </IconButton>
         </div>
       </div>
 
-      {/* المحتوى */}
-      <div className="min-h-0 flex-1 overflow-hidden">
-        {tab === "preview" && hasWeb ? (
-          <iframe
-            key={runKey}
-            title="artifact-preview"
-            srcDoc={doc}
-            sandbox="allow-scripts allow-forms allow-modals allow-popups"
-            className="h-full w-full bg-white"
-          />
+      <div className="min-h-0 flex-1 overflow-hidden bg-surface-2 p-3">
+        {hasWeb ? (
+          <div className="h-full overflow-hidden rounded-md border border-hair bg-canvas shadow-1">
+            <iframe
+              key={runKey}
+              title="artifact-preview"
+              srcDoc={doc}
+              sandbox="allow-scripts allow-forms allow-modals allow-popups"
+              className="h-full w-full"
+            />
+          </div>
         ) : (
-          <div className="flex h-full min-h-0">
-            {/* قايمة الملفات — لو أكتر من ملف */}
-            {files.length > 1 && (
-              <div className="w-44 shrink-0 overflow-y-auto border-e border-line2 bg-panel2 p-1.5">
-                {files.map((f) => (
-                  <button
-                    key={f.path}
-                    onClick={() => setActivePath(f.path)}
-                    dir="ltr"
-                    className={`mono block w-full truncate rounded px-2 py-1.5 text-start text-[11px] ${
-                      f.path === activeFile?.path
-                        ? "bg-cyan/10 text-cyan"
-                        : "text-txt2 hover:bg-white/[0.03] hover:text-txt"
-                    }`}
-                  >
-                    {f.path}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="min-w-0 flex-1 overflow-y-auto">
-              {activeFile && (
-                <>
-                  <div className="flex items-center justify-between border-b border-line2 bg-panel2 px-3 py-1.5">
-                    <span className="mono text-[11px] text-txt3" dir="ltr">
-                      {activeFile.path}
-                    </span>
-                    <button
-                      onClick={() =>
-                        downloadTextFile(
-                          sanitizeFileName(activeFile.path.split("/").pop() || activeFile.path),
-                          activeFile.content
-                        )
-                      }
-                      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-txt3 hover:text-green hover:bg-green/10"
-                      title={t("filesCardDownloadAll")}
-                    >
-                      <Download size={12} />
-                    </button>
-                  </div>
-                  <pre className="mono overflow-x-auto p-3 text-[12.5px] leading-[1.6] text-txt" dir="ltr">
-                    <code dangerouslySetInnerHTML={{ __html: highlighted }} />
-                  </pre>
-                </>
-              )}
+          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+            <p className="max-w-sm text-pretty text-[13px] leading-6 text-ink-2">
+              {t("noPreviewAvailable")}
+            </p>
+            <div className="flex w-full max-w-sm flex-col gap-1.5">
+              {files.map((f) => (
+                <button
+                  key={f.path}
+                  onClick={() =>
+                    downloadTextFile(sanitizeFileName(f.path.split("/").pop() || f.path), f.content)
+                  }
+                  dir="ltr"
+                  className="flex items-center justify-between gap-2 rounded-md border border-hair bg-surface px-3 py-2.5 font-mono text-[12px] text-ink-2 transition-colors duration-1 hover:border-accent-line hover:text-ink"
+                >
+                  <span className="truncate">{f.path}</span>
+                  <Download size={13} className="shrink-0" />
+                </button>
+              ))}
             </div>
           </div>
         )}

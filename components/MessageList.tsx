@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { ChevronRight, Eye, Sparkles } from "lucide-react";
 import type { ChatMessage } from "@/lib/types";
 import type { ProjectFile } from "@/lib/parseContent";
-import { parseStreamingContent } from "@/lib/parseContent";
-import { renderFormattedText } from "@/lib/markdown";
+import { extractProjectFiles, parseStreamingContent } from "@/lib/parseContent";
 import MessageItem from "./MessageItem";
 import WelcomeHero from "./WelcomeHero";
 import { useSettings } from "./SettingsContext";
+import { cn } from "@/lib/utils";
+
+const PREVIEWABLE_EXTS = new Set(["html", "htm", "css", "js"]);
 
 export default function MessageList({
   messages,
@@ -35,7 +37,7 @@ export default function MessageList({
   onContinue: (messageId: string) => void;
   continuingMessageId: string | null;
   continuationStreamingContent: string;
-  onPreviewFiles: (files: ProjectFile[], focusPath?: string) => void;
+  onPreviewFiles: (files: ProjectFile[]) => void;
 }) {
   const { t } = useSettings();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -64,110 +66,123 @@ export default function MessageList({
   }
 
   const streamSegments = isGenerating ? parseStreamingContent(streamingContent) : [];
+  const streamFiles = isGenerating ? extractProjectFiles(streamingContent) : [];
+  const streamHasPreview = streamFiles.some((f) =>
+    PREVIEWABLE_EXTS.has((f.path.split(".").pop() || "").toLowerCase())
+  );
 
   return (
-    <div className="flex-1 overflow-y-auto py-2">
-      {messages.map((m) => (
-        <MessageItem
-          key={m.id}
-          message={m}
-          onRunCode={onRunCode}
-          onContinue={() => onContinue(m.id)}
-          isContinuing={continuingMessageId === m.id}
-          continuationStreamingContent={
-            continuingMessageId === m.id ? continuationStreamingContent : null
-          }
-          onPreviewFiles={onPreviewFiles}
-        />
-      ))}
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto w-full max-w-[820px] pb-2">
+        {messages.map((m) => (
+          <MessageItem
+            key={m.id}
+            message={m}
+            onRunCode={onRunCode}
+            onContinue={() => onContinue(m.id)}
+            isContinuing={continuingMessageId === m.id}
+            continuationStreamingContent={
+              continuingMessageId === m.id ? continuationStreamingContent : null
+            }
+            onPreviewFiles={onPreviewFiles}
+          />
+        ))}
 
-      {isGenerating && (
-        <div className="animate-slideUp [animation-fill-mode:both] flex w-full justify-start gap-2 px-2.5 py-1.5">
-          <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-cyan/50 bg-purple/15">
-            <Sparkles size={13} className="text-cyan animate-pulse" />
-          </div>
-          <div className="flex max-w-[88%] flex-col items-start">
-            <div className="mb-1 flex items-center gap-1.5 px-0.5">
-              <span className="mono text-[11px] font-bold text-cyan">mlag</span>
-              <span className="flex gap-0.5">
-                <span className="h-1 w-1 animate-pulse rounded-full bg-green" />
-                <span className="h-1 w-1 animate-pulse rounded-full bg-green [animation-delay:150ms]" />
-                <span className="h-1 w-1 animate-pulse rounded-full bg-green [animation-delay:300ms]" />
+        {isGenerating && (
+          <article className="animate-rise w-full px-4 py-4 sm:px-6">
+            <div className="flex gap-3">
+              <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-[9px] bg-accent-soft text-accent">
+                <Sparkles size={14} />
               </span>
-            </div>
-            {/* مؤشر «يفكر» — كلمة واحدة عارية من غير أي فقاعة أو نص حواليها.
-                بيظهر فوراً بعد إرسال الرسالة حتى قبل ما reasoning يوصل. */}
-            {(!streamingContent || streamingReasoning) && (
-              <div className="mb-2">
-                <button
-                  onClick={() => setThinkOpen(!thinkOpen)}
-                  className="flex items-center gap-1 rounded px-0.5"
-                  title={thinkOpen ? t("thinkHide") : t("thinkShow")}
-                >
-                  <span
-                    className={`mono text-[11px] font-bold text-amber transition-transform duration-200 ${
-                      thinkOpen ? "rotate-90" : ""
-                    }`}
+
+              <div className="min-w-0 flex-1">
+                <div className="mb-1.5 flex items-center gap-1.5">
+                  <span className="text-[13.5px] font-semibold tracking-label text-ink">mlag</span>
+                  <button
+                    onClick={() => setThinkOpen(!thinkOpen)}
+                    aria-expanded={thinkOpen}
+                    title={thinkOpen ? t("thinkHide") : t("thinkShow")}
+                    className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[12.5px] font-medium text-ink-3 transition-colors duration-1 hover:text-ink"
                   >
-                    {">"}
-                  </span>
-                  <span className="shimmer-text text-[11px] font-bold">{t("thinking")}</span>
-                </button>
+                    <ChevronRight
+                      size={12}
+                      className={cn(
+                        "transition-transform duration-2 ease-soft",
+                        thinkOpen && "rotate-90"
+                      )}
+                    />
+                    <span className="shimmer-text">{t("thinking")}</span>
+                  </button>
+                </div>
+
                 {thinkOpen && (
                   <div
                     ref={thinkBoxRef}
-                    className="reasoning-box animate-fadeIn mt-1.5 max-h-[180px] w-[320px] max-w-full overflow-y-auto rounded-md border border-line2 bg-panel3 px-2.5 py-2"
+                    className="animate-materialize mb-3 max-h-[200px] overflow-y-auto rounded-md border border-hair bg-surface-2 px-3.5 py-3"
                   >
-                    <div className="text-[11px] leading-5 text-txt2">
-                      {streamingReasoning
-                        ? renderFormattedText(streamingReasoning, "stream-reasoning")
-                        : "..."}
-                    </div>
+                    <p
+                      dir="auto"
+                      className="whitespace-pre-wrap text-[12.5px] leading-6 text-ink-2"
+                    >
+                      {streamingReasoning || "..."}
+                    </p>
+                  </div>
+                )}
+
+                <div className="measure space-y-2">
+                  {streamSegments.map((seg, i) =>
+                    seg.type === "prose" ? (
+                      <p
+                        key={i}
+                        dir="auto"
+                        className={cn(
+                          "whitespace-pre-wrap text-pretty text-[15px] leading-7 text-ink",
+                          i === streamSegments.length - 1 && "caret"
+                        )}
+                      >
+                        {seg.text}
+                      </p>
+                    ) : (
+                      <div
+                        key={i}
+                        className="flex items-center gap-2.5 rounded-md border border-hair bg-surface-2 px-3.5 py-2.5"
+                      >
+                        <span
+                          className={cn(
+                            "h-2.5 w-2.5 shrink-0 rounded-full border-2",
+                            seg.isComplete
+                              ? "border-live bg-live/20"
+                              : "animate-spin-slow border-accent border-t-transparent"
+                          )}
+                        />
+                        <span dir="ltr" className="truncate text-[12.5px] text-ink-2">
+                          {seg.isComplete
+                            ? t("fileDone", { path: seg.path })
+                            : t("fileWriting", { path: seg.path })}
+                        </span>
+                      </div>
+                    )
+                  )}
+                </div>
+
+                {streamHasPreview && (
+                  <div className="mt-3">
+                    <button
+                      onClick={() => onPreviewFiles(streamFiles)}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1.5 text-[12.5px] font-medium text-accent transition-colors duration-1 hover:bg-accent hover:text-accent-ink"
+                    >
+                      <Eye size={13} />
+                      {t("previewPage")}
+                    </button>
                   </div>
                 )}
               </div>
-            )}
+            </div>
+          </article>
+        )}
 
-            {/* شريط البناء — زي Claude: الموديل بيبني في بيئته والكود مش بيتكتب في الشات */}
-            {streamSegments.some((s) => s.type === "fileblock") && (
-              <div className="mb-2 flex items-center gap-2 rounded-md border border-green/30 bg-green/5 px-2.5 py-1.5">
-                <span className="mono text-[10.5px] font-bold text-green" dir="ltr">
-                  $ mlag build --live
-                </span>
-                <span className="shimmer-text text-[11px] text-txt2">{t("buildingFiles")}</span>
-              </div>
-            )}
-
-            {/* الفقاعة نفسها مبتظهرش خالص لحد ما يوصل كلام فعلي — مفيش فقاعة فاضية */}
-            {(streamSegments.length > 0 || streamingContent) && (
-              <div className="rounded-lg rounded-bl-sm border border-line2 bg-panel2 px-3 py-2">
-                {streamSegments.map((seg, i) =>
-                  seg.type === "prose" ? (
-                    <div key={i} className="relative">
-                      {renderFormattedText(seg.text, `stream-${i}`)}
-                      {i === streamSegments.length - 1 && <span className="term-caret" />}
-                    </div>
-                  ) : (
-                    <div
-                      key={i}
-                      className="my-1.5 flex items-center gap-2 rounded-md border border-cyan/30 bg-cyan/5 px-2.5 py-2"
-                    >
-                      <span className="h-3 w-3 animate-spin rounded-full border-2 border-cyan border-t-transparent" />
-                      <span className="mono text-[11.5px] text-cyan" dir="ltr">
-                        {seg.isComplete
-                          ? t("fileDone", { path: seg.path })
-                          : t("fileWriting", { path: seg.path })}
-                      </span>
-                    </div>
-                  )
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      <div ref={bottomRef} />
+        <div ref={bottomRef} />
+      </div>
     </div>
   );
 }

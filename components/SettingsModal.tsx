@@ -1,27 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Check, RefreshCw, Settings as SettingsIcon, X } from "lucide-react";
+import { Check, RefreshCw } from "lucide-react";
 import type { SessionUser } from "@/lib/types";
 import { LANGUAGES, type Lang } from "@/lib/i18n";
-import { useSettings } from "./SettingsContext";
-
-function Toggle({ on, onToggle }: { on: boolean; onToggle: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onToggle(!on)}
-      className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-        on ? "bg-green/40" : "border border-line2 bg-panel3"
-      }`}
-    >
-      <span
-        className={`absolute top-0.5 h-4 w-4 rounded-full transition-all ${
-          on ? "start-0.5 bg-green" : "end-0.5 bg-txt3"
-        }`}
-      />
-    </button>
-  );
-}
+import { Button, Dialog, Panel, Segmented, Switch } from "./ui/Controls";
+import { useSettings, type Theme } from "./SettingsContext";
+import { cn } from "@/lib/utils";
 
 export default function SettingsModal({
   user,
@@ -32,7 +17,8 @@ export default function SettingsModal({
   onClose: () => void;
   onNameUpdated: (newName: string) => void;
 }) {
-  const { t, lang, animations, showTime, setLang, setAnimations, setShowTime } = useSettings();
+  const { t, lang, theme, animations, showTime, setLang, setTheme, setAnimations, setShowTime } =
+    useSettings();
   const [nameDraft, setNameDraft] = useState(user?.displayName ?? "");
   const [nameStatus, setNameStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [nameError, setNameError] = useState<string | null>(null);
@@ -71,121 +57,129 @@ export default function SettingsModal({
   };
 
   return (
-    <div className="animate-fadeIn fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
-      <div className="max-h-[90dvh] w-full max-w-sm overflow-y-auto rounded-lg border border-line2 bg-panel glow-green">
-        <div className="terminal-dots flex items-center justify-between border-b border-line px-3 py-2.5">
-          <div className="flex items-center gap-2">
-            <span className="flex gap-1">
-              <span className="h-2 w-2 rounded-full bg-rose/70" />
-              <span className="h-2 w-2 rounded-full bg-amber/70" />
-              <span className="h-2 w-2 rounded-full bg-green/70" />
-            </span>
-            <span className="mono text-[11px] text-txt3">settings.sh</span>
-          </div>
-          <button onClick={onClose} className="text-txt3 hover:text-txt">
-            <X size={16} />
-          </button>
-        </div>
-
-        <div className="px-4 py-4">
-          {/* الحساب + تغيير الاسم */}
-          {user && (
-            <div className="mb-4 rounded-md border border-line2 bg-panel2 px-2.5 py-2.5">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-green/40 bg-green/10">
-                  <span className="mono text-[12px] text-green">
-                    {user.displayName[0]?.toUpperCase()}
-                  </span>
-                </div>
-                <div className="min-w-0 overflow-hidden">
-                  <p className="truncate text-[12.5px] font-medium text-txt">{user.displayName}</p>
-                  <p className="truncate text-[10.5px] text-txt3">{user.email}</p>
-                </div>
-                <SettingsIcon size={14} className="shrink-0 text-txt3" />
+    <Dialog
+      open
+      onClose={onClose}
+      labelledBy="mlag-settings-title"
+      title={t("settingsTitle")}
+      subtitle={t("settingsSaved")}
+    >
+      <div className="space-y-5 pb-4">
+        {user && (
+          <section>
+            <h3 className="mb-2 px-1 text-[12px] font-semibold uppercase tracking-micro text-ink-3">
+              {t("settingsAccount")}
+            </h3>
+            <Panel>
+              <div className="flex items-center gap-2 p-3">
+                <input
+                  value={nameDraft}
+                  onChange={(e) => {
+                    setNameDraft(e.target.value);
+                    setNameStatus("idle");
+                    setNameError(null);
+                  }}
+                  onKeyDown={(e) => e.key === "Enter" && saveName()}
+                  placeholder={t("phName")}
+                  maxLength={40}
+                  aria-label={t("editName")}
+                  className={cn(
+                    "h-10 min-w-0 flex-1 rounded-md border border-hair bg-surface-2 px-3",
+                    "text-[14px] text-ink placeholder:text-ink-3 transition-all duration-1",
+                    "hover:border-hair-2 focus:border-accent focus:bg-surface focus:outline-none",
+                    "focus:shadow-[0_0_0_3.5px_var(--accent-soft)]"
+                  )}
+                />
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={saveName}
+                  disabled={
+                    nameStatus === "saving" ||
+                    !nameDraft.trim() ||
+                    nameDraft.trim() === user.displayName
+                  }
+                >
+                  {nameStatus === "saving" ? (
+                    <>
+                      <RefreshCw size={12} className="animate-spin-slow" />
+                      {t("saving")}
+                    </>
+                  ) : nameStatus === "saved" ? (
+                    <>
+                      <Check size={12} />
+                      {t("nameSaved")}
+                    </>
+                  ) : (
+                    t("save")
+                  )}
+                </Button>
               </div>
-
-              {/* تغيير الاسم */}
-              <div className="mt-2.5 border-t border-line pt-2.5">
-                <p className="mb-1.5 text-[10.5px] font-bold text-txt3">
-                  {t("editName")} — {t("editNameHint")}
+              {nameError && (
+                <p role="alert" className="px-3 pb-3 text-[12px] text-danger">
+                  {nameError}
                 </p>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    value={nameDraft}
-                    onChange={(e) => {
-                      setNameDraft(e.target.value);
-                      setNameStatus("idle");
-                      setNameError(null);
-                    }}
-                    onKeyDown={(e) => e.key === "Enter" && saveName()}
-                    placeholder={t("phName")}
-                    maxLength={40}
-                    className="min-w-0 flex-1 rounded border border-line2 bg-panel px-2 py-1.5 text-base text-txt placeholder:text-txt3 focus:border-green/50 focus:outline-none sm:text-[12px]"
-                  />
+              )}
+            </Panel>
+          </section>
+        )}
+
+        <section>
+          <h3 className="mb-2 px-1 text-[12px] font-semibold uppercase tracking-micro text-ink-3">
+            {t("appearance")}
+          </h3>
+          <Panel>
+            <div className="flex items-center justify-between gap-3 px-4 py-3">
+              <span className="text-[14px] text-ink">{t("themeLabel")}</span>
+              <Segmented<Theme>
+                value={theme}
+                onChange={setTheme}
+                size="sm"
+                options={[
+                  { value: "light", label: t("themeLight") },
+                  { value: "dark", label: t("themeDark") },
+                ]}
+              />
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-hair px-4 py-3">
+              <span className="text-[14px] text-ink">{t("settingsLang")}</span>
+              <div className="flex flex-wrap justify-end gap-1.5">
+                {LANGUAGES.map((l) => (
                   <button
-                    onClick={saveName}
-                    disabled={
-                      nameStatus === "saving" ||
-                      !nameDraft.trim() ||
-                      nameDraft.trim() === user.displayName
-                    }
-                    className="flex shrink-0 items-center gap-1 rounded bg-green/15 px-2.5 py-1.5 text-[11.5px] font-bold text-green transition-colors hover:bg-green/25 disabled:opacity-40"
-                  >
-                    {nameStatus === "saving" ? (
-                      <>
-                        <RefreshCw size={11} className="animate-spin" /> {t("saving")}
-                      </>
-                    ) : nameStatus === "saved" ? (
-                      <>
-                        <Check size={11} /> {t("nameSaved")}
-                      </>
-                    ) : (
-                      t("save")
+                    key={l.code}
+                    onClick={() => setLang(l.code as Lang)}
+                    aria-pressed={lang === l.code}
+                    className={cn(
+                      "rounded-full border px-3 py-1.5 text-[12.5px] font-medium transition-all duration-1",
+                      lang === l.code
+                        ? "border-accent-line bg-accent-soft text-accent"
+                        : "border-hair text-ink-2 hover:border-hair-2 hover:text-ink"
                     )}
+                  >
+                    {l.label}
                   </button>
-                </div>
-                {nameError && <p className="mt-1.5 text-[10.5px] text-rose">{nameError}</p>}
+                ))}
               </div>
             </div>
-          )}
+          </Panel>
+        </section>
 
-          {/* اللغة */}
-          <p className="mb-2 flex items-center gap-1.5 text-[11.5px] font-bold text-txt2">
-            {t("settingsLang")}
-          </p>
-          <div className="mb-4 grid grid-cols-2 gap-2">
-            {LANGUAGES.map((l) => (
-              <button
-                key={l.code}
-                onClick={() => setLang(l.code as Lang)}
-                className={`flex items-center justify-between rounded-md border px-2.5 py-2 text-[12.5px] transition-colors ${
-                  lang === l.code
-                    ? "border-green/50 bg-green/10 font-bold text-green"
-                    : "border-line2 text-txt2 hover:border-line2 hover:bg-white/[0.03] hover:text-txt"
-                }`}
-              >
-                {l.label}
-                {lang === l.code && <Check size={13} />}
-              </button>
-            ))}
-          </div>
-
-          {/* تخصيصات */}
-          <p className="mb-2 text-[11.5px] font-bold text-txt2">{t("settingsTitle")}</p>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between rounded-md border border-line2 bg-panel2 px-2.5 py-2">
-              <span className="text-[12px] text-txt">{t("settingsAnim")}</span>
-              <Toggle on={animations} onToggle={setAnimations} />
+        <section>
+          <h3 className="mb-2 px-1 text-[12px] font-semibold uppercase tracking-micro text-ink-3">
+            {t("preferences")}
+          </h3>
+          <Panel>
+            <div className="flex items-center justify-between gap-3 px-4 py-3">
+              <span className="text-[14px] text-ink">{t("settingsAnim")}</span>
+              <Switch checked={animations} onChange={setAnimations} label={t("settingsAnim")} />
             </div>
-            <div className="flex items-center justify-between rounded-md border border-line2 bg-panel2 px-2.5 py-2">
-              <span className="text-[12px] text-txt">{t("settingsShowTime")}</span>
-              <Toggle on={showTime} onToggle={setShowTime} />
+            <div className="flex items-center justify-between gap-3 border-t border-hair px-4 py-3">
+              <span className="text-[14px] text-ink">{t("settingsShowTime")}</span>
+              <Switch checked={showTime} onChange={setShowTime} label={t("settingsShowTime")} />
             </div>
-          </div>
-
-          <p className="mt-4 text-center text-[10px] text-txt3">{t("settingsSaved")}</p>
-        </div>
+          </Panel>
+        </section>
       </div>
-    </div>
+    </Dialog>
   );
 }

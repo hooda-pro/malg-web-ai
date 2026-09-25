@@ -1,5 +1,3 @@
-import bcrypt from "bcryptjs";
-import { randomUUID } from "crypto";
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 
 // مهم: ما بنعملش neon(...) على مستوى الملف مباشرة، عشان Next.js بيستورد
@@ -29,59 +27,6 @@ export const sql: NeonQueryFunction<false, false> = ((strings: TemplateStringsAr
 let schemaReady: Promise<void> | null = null;
 
 /**
- * بيتأكد إن فيه حساب أدمن واحد على الأقل في القاعدة — لو مفيش، بينشئ الحساب الافتراضي.
- * الإيميل والباسورد بيتظبطوا من متغيرات البيئة ADMIN_EMAIL و ADMIN_PASSWORD
- * (لو مش موجودين بيستخدم القيم الافتراضية اللي تحت).
- */
-async function seedDefaultAdmin() {
-  try {
-    const existing = await sql`SELECT id FROM users WHERE is_admin = TRUE LIMIT 1`;
-    if (existing.length > 0) return;
-
-    const email = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
-    let password = process.env.ADMIN_PASSWORD || "";
-
-    if (!email || !password) {
-      // ثغرة أمنية اتصلحت: كان فيه إيميل/باسورد افتراضي ثابت في الكود
-      // (admin@mlag.ai / Mlag@Admin2026) بيتعمل بيه حساب أدمن تلقائي لو
-      // ADMIN_EMAIL/ADMIN_PASSWORD مش متظبطين — يعني أي حد شاف الكود (أو
-      // النسخة دي) كان يقدر يدخل لوحة الأدمن مباشرة. دلوقتي: لازم تظبط
-      // الاتنين في متغيرات البيئة، وإلا مفيش حساب أدمن هيتعمل خالص.
-      console.error(
-        "[seed] ADMIN_EMAIL و/أو ADMIN_PASSWORD مش متظبطين في متغيرات البيئة — " +
-          "مفيش حساب أدمن هيتعمل تلقائيًا لأسباب أمنية. ضيفهم في Vercel Project " +
-          "Settings > Environment Variables (باسورد قوي وطويل) وأعد النشر."
-      );
-      return;
-    }
-
-    if (password.length < 12) {
-      console.error(
-        "[seed] ADMIN_PASSWORD قصير جدًا (أقل من 12 حرف) — اختار باسورد أقوى وأعد النشر. مفيش حساب أدمن هيتعمل دلوقتي."
-      );
-      return;
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10);
-    const id = randomUUID();
-
-    await sql`
-      INSERT INTO users (id, email, password_hash, display_name, is_admin)
-      VALUES (${id}, ${email}, ${passwordHash}, 'Admin', TRUE)
-      ON CONFLICT (email) DO UPDATE SET is_admin = TRUE
-    `;
-    await sql`
-      INSERT INTO user_quota (user_id, total_allocated_tokens, used_tokens)
-      VALUES (${id}, 99000000, 0)
-      ON CONFLICT (user_id) DO NOTHING
-    `;
-    console.log(`[seed] تم إنشاء حساب الأدمن الافتراضي: ${email}`);
-  } catch (e) {
-    console.error("seedDefaultAdmin error", e);
-  }
-}
-
-/**
  * ينشئ الجداول لو مش موجودة (idempotent). بتتكرر النتيجة بأمان.
  * بتتنفذ مرة واحدة لكل نسخة سيرفر شغالة (cold start) بفضل الـ promise cache.
  */
@@ -92,20 +37,12 @@ export function ensureSchema(): Promise<void> {
         CREATE TABLE IF NOT EXISTS users (
           id TEXT PRIMARY KEY,
           email TEXT UNIQUE NOT NULL,
-          password_hash TEXT,
+          password_hash TEXT NOT NULL,
           display_name TEXT NOT NULL,
           is_admin BOOLEAN NOT NULL DEFAULT FALSE,
           created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )
       `;
-
-      // ——— تسجيل الدخول بجوجل (Firebase Auth): مفيش باسورد للحسابات دي ———
-      await sql`ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL`;
-      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uid TEXT`;
-      await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_firebase_uid ON users(firebase_uid) WHERE firebase_uid IS NOT NULL`;
-      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER`;
-      // الحسابات القديمة (بريد/باسورد) تعتبر بياناتها مكتملة افتراضيًا
-      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_complete BOOLEAN NOT NULL DEFAULT TRUE`;
 
       await sql`
         CREATE TABLE IF NOT EXISTS chat_sessions (
@@ -142,66 +79,6 @@ export function ensureSchema(): Promise<void> {
           updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )
       `;
-
-      // ——— الأدمن: أعمدة الحظر + سجل الإجراءات ———
-      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_banned BOOLEAN NOT NULL DEFAULT FALSE`;
-      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_at TIMESTAMPTZ`;
-
-      await sql`
-        CREATE TABLE IF NOT EXISTS admin_logs (
-          id TEXT PRIMARY KEY,
-          admin_id TEXT NOT NULL,
-          admin_email TEXT NOT NULL,
-          action TEXT NOT NULL,
-          target_user_id TEXT,
-          target_email TEXT,
-          details TEXT,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )
-      `;
-
-      // ——— API للمطورين: مفاتيح API + رصيد منفصل تمامًا عن رصيد الشات + لوج استخدام ———
-      await sql`
-        CREATE TABLE IF NOT EXISTS api_keys (
-          id TEXT PRIMARY KEY,
-          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          label TEXT NOT NULL DEFAULT 'مفتاح API',
-          key_prefix TEXT NOT NULL,
-          key_hash TEXT NOT NULL UNIQUE,
-          model_id TEXT NOT NULL,
-          is_active BOOLEAN NOT NULL DEFAULT TRUE,
-          last_used_at TIMESTAMPTZ,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )
-      `;
-      await sql`CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id)`;
-
-      // رصيد الـ API — منفصل تمامًا عن user_quota، يبدأ بصفر (عكس رصيد الشات
-      // اللي بيبدأ برصيد مجاني) ومفيش تجديد أسبوعي تلقائي زيه، لأنه رصيد مدفوع.
-      await sql`
-        CREATE TABLE IF NOT EXISTS user_api_quota (
-          user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-          total_allocated_tokens BIGINT NOT NULL DEFAULT 0,
-          used_tokens BIGINT NOT NULL DEFAULT 0,
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )
-      `;
-
-      // لوج استخدام لكل استدعاء API — يفيد الأدمن يشوف مين بيستهلك إيه وعلى أي موديل
-      await sql`
-        CREATE TABLE IF NOT EXISTS api_usage_logs (
-          id TEXT PRIMARY KEY,
-          api_key_id TEXT NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
-          user_id TEXT NOT NULL,
-          model_id TEXT NOT NULL,
-          tokens_used INTEGER NOT NULL DEFAULT 0,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )
-      `;
-      await sql`CREATE INDEX IF NOT EXISTS idx_api_usage_user ON api_usage_logs(user_id)`;
-
-      // إنشاء حساب الأدمن الافتراضي لو مفيش أي أدمن في القاعدة
-      await seedDefaultAdmin();
     })();
   }
   return schemaReady;

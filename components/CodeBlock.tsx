@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Copy, Play, Terminal } from "lucide-react";
+import { Check, Copy, Play } from "lucide-react";
 import { highlightCode } from "@/lib/highlight";
 import { useSettings } from "./SettingsContext";
 
@@ -20,11 +20,6 @@ export default function CodeBlock({
   const [copied, setCopied] = useState(false);
   const html = useMemo(() => highlightCode(code), [code]);
   const canRun = RUNNABLE_LANGS.has((language || "").toLowerCase()) && !!onRun;
-  const lineCount = useMemo(() => code.split("\n").length, [code]);
-  const lineNumbers = useMemo(
-    () => Array.from({ length: lineCount }, (_, i) => i + 1).join("\n"),
-    [lineCount]
-  );
 
   const handleCopy = async () => {
     try {
@@ -37,42 +32,37 @@ export default function CodeBlock({
   };
 
   return (
-    <div className="my-2 overflow-hidden rounded-md border border-line bg-[#040504] text-left" dir="ltr">
-      <div className="flex items-center justify-between border-b border-line bg-panel2 px-3 py-1.5">
-        <div className="flex items-center gap-1.5 text-txt3">
-          <Terminal size={12} />
-          <span className="mono text-[11px] tracking-wide">{language || "text"}</span>
-        </div>
+    <div
+      dir="ltr"
+      className="code-surface my-1 overflow-hidden rounded-lg border border-hair text-start shadow-1"
+    >
+      <div className="flex items-center justify-between gap-2 border-b border-hair px-3 py-2">
+        <span className="truncate font-mono text-[11.5px] uppercase tracking-micro text-ink-3">
+          {language || "text"}
+        </span>
         <div className="flex items-center gap-1">
           {canRun && (
             <button
               onClick={() => onRun?.(code, language)}
-              className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-green hover:bg-green/10"
+              className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium text-accent transition-colors duration-1 hover:bg-accent-soft"
             >
-              <Play size={12} /> {t("runnerRun")}
+              <Play size={12} />
+              {t("runnerRun")}
             </button>
           )}
           <button
             onClick={handleCopy}
-            className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-txt2 hover:bg-white/5"
+            className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium text-ink-2 transition-colors duration-1 hover:bg-surface-3 hover:text-ink"
           >
-            {copied ? <Check size={12} className="text-green" /> : <Copy size={12} />}
+            {copied ? <Check size={12} className="text-live" /> : <Copy size={12} />}
             {copied ? t("copied") : t("copy")}
           </button>
         </div>
       </div>
-      <pre className="mono flex overflow-x-auto p-3 text-[12.5px] leading-[1.6] text-txt">
-        {lineCount > 1 && (
-          <code
-            aria-hidden="true"
-            className="select-none pe-3 text-end text-txt3/40"
-            style={{ minWidth: `${String(lineCount).length + 1}ch` }}
-          >
-            {lineNumbers}
-          </code>
-        )}
-        <code className="flex-1" dangerouslySetInnerHTML={{ __html: html }} />
+      <pre className="overflow-x-auto px-4 py-3 font-mono text-[12.5px] leading-[1.7]">
+        <code dangerouslySetInnerHTML={{ __html: html }} />
       </pre>
     </div>
   );
 }
+

@@ -1,9 +1,11 @@
 "use client";
 
-import { LogIn, LogOut, MessageCircle, Plus, Settings, ShieldCheck, Terminal, Trash2, X } from "lucide-react";
+import { LogIn, LogOut, MessageSquare, Plus, Settings2, ShieldCheck, Trash2, X } from "lucide-react";
 import type { ChatSession, SessionUser } from "@/lib/types";
 import { formatTime } from "@/lib/utils";
+import { Button, IconButton } from "./ui/Controls";
 import { useSettings } from "./SettingsContext";
+import { cn } from "@/lib/utils";
 
 export default function ChatDrawer({
   open,
@@ -39,121 +41,139 @@ export default function ChatDrawer({
       {open && (
         <div
           onClick={onClose}
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[1px] lg:hidden"
+          className="animate-fade fixed inset-0 z-overlay bg-black/20 backdrop-blur-sm lg:hidden"
+          aria-hidden="true"
         />
       )}
+
       <aside
-        className={`fixed inset-y-0 z-50 flex w-[82%] max-w-[300px] shrink-0 flex-col border-line bg-panel transition-transform duration-200 start-0 lg:static lg:z-auto lg:w-[264px] lg:max-w-none lg:translate-x-0 ${
-          open
-            ? "translate-x-0"
-            : "-translate-x-full rtl:translate-x-full lg:translate-x-0 rtl:lg:translate-x-0"
-        } ${dir === "rtl" ? "border-s" : "border-e"}`}
+        aria-label={t("chatHistory")}
+        className={cn(
+          "fixed inset-y-0 start-0 z-sheet flex w-[86%] max-w-[320px] shrink-0 flex-col",
+          "border-e border-hair bg-surface transition-transform duration-3 ease-soft",
+          "lg:static lg:z-auto lg:w-[292px] lg:max-w-none lg:translate-x-0 rtl:lg:translate-x-0",
+          open ? "translate-x-0 shadow-3" : "-translate-x-full rtl:translate-x-full",
+          dir === "rtl" ? "lg:border-s lg:border-e-0" : ""
+        )}
       >
-        <div className="flex items-center justify-between border-b border-line px-3 py-3">
-          <span className="mono text-xs font-bold text-green">$ mlag --sessions</span>
-          <button onClick={onClose} className="text-txt3 hover:text-txt lg:hidden">
-            <X size={16} />
-          </button>
+        <div className="flex h-14 shrink-0 items-center justify-between gap-2 px-4">
+          <h2 className="text-[12px] font-semibold uppercase tracking-micro text-ink-3">
+            {t("chatHistory")}
+          </h2>
+          <IconButton label={t("closeDrawer")} onClick={onClose} size="sm" className="lg:hidden">
+            <X size={17} />
+          </IconButton>
         </div>
 
-        <div className="p-2.5">
-          <button
+        <div className="px-3 pb-3">
+          <Button
+            variant="secondary"
             onClick={onNewChat}
-            className="flex w-full items-center justify-center gap-2 rounded-md border border-green/40 bg-green/10 py-2 text-[12.5px] font-medium text-green hover:bg-green/15"
+            className="w-full justify-start rounded-md"
+            aria-label={t("newChat")}
           >
-            <Plus size={14} /> {t("newChat")}
-          </button>
+            <Plus size={16} />
+            {t("newChat")}
+          </Button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-2 pb-2">
-          {sessions.length === 0 && (
-            <p className="mt-6 text-center text-[11.5px] text-txt3">{t("noSessions")}</p>
-          )}
-          {sessions.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => onSelectSession(s.id)}
-              className={`group mb-1 flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-start ${
-                s.id === currentSessionId
-                  ? "border border-cyan/40 bg-cyan/10"
-                  : "border border-transparent hover:bg-white/[0.03]"
-              }`}
-            >
-              <MessageCircle size={14} className="shrink-0 text-txt3" />
-              <span className="flex-1 truncate text-[12px] text-txt2">{s.title}</span>
-              <span className="shrink-0 text-[9px] text-txt3">{formatTime(s.updatedAt)}</span>
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDeleteSession(s.id);
-                }}
-                className="shrink-0 rounded p-1 text-txt3 opacity-100 hover:text-rose lg:opacity-0 lg:group-hover:opacity-100"
-              >
-                <Trash2 size={12} />
+        <div className="min-h-0 flex-1 overflow-y-auto px-3">
+          {sessions.length === 0 ? (
+            <div className="flex flex-col items-center gap-2.5 px-4 py-10 text-center">
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-surface-3 text-ink-3">
+                <MessageSquare size={16} />
               </span>
-            </button>
-          ))}
+              <p className="text-pretty text-[12.5px] leading-5 text-ink-3">{t("noSessions")}</p>
+            </div>
+          ) : (
+            <ul className="overflow-hidden rounded-md border border-hair bg-surface-2">
+              {sessions.map((s) => {
+                const active = s.id === currentSessionId;
+                return (
+                  <li
+                    key={s.id}
+                    className="group relative flex items-center border-b border-hair last:border-b-0"
+                  >
+                    <button
+                      onClick={() => onSelectSession(s.id)}
+                      aria-current={active}
+                      className={cn(
+                        "flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2.5 text-start",
+                        "transition-colors duration-1",
+                        active ? "bg-surface text-ink shadow-1" : "text-ink-2 hover:bg-surface-3"
+                      )}
+                    >
+                      <MessageSquare
+                        size={14}
+                        className={cn("shrink-0", active ? "text-accent" : "text-ink-3")}
+                      />
+                      <span dir="auto" className="min-w-0 flex-1 truncate text-[13px] font-medium">
+                        {s.title}
+                      </span>
+                      <span className="tnum shrink-0 text-[11px] text-ink-3">
+                        {formatTime(s.updatedAt)}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => onDeleteSession(s.id)}
+                      title={t("deleteChat")}
+                      aria-label={t("deleteChat")}
+                      className={cn(
+                        "grid h-9 w-7 shrink-0 place-items-center text-ink-3",
+                        "opacity-0 transition-opacity duration-1 hover:text-danger",
+                        "group-hover:opacity-100 focus-visible:opacity-100"
+                      )}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
 
         {sessions.length > 0 && (
-          <div className="px-2.5 pb-2">
+          <div className="px-3 pb-2">
             <button
               onClick={onClearAll}
-              className="flex w-full items-center justify-center gap-1.5 rounded-md border border-line2 py-1.5 text-[11px] text-txt3 hover:border-rose/40 hover:text-rose"
+              className="w-full rounded-md py-2 text-[12px] font-medium text-ink-3 transition-colors duration-1 hover:bg-danger-soft hover:text-danger"
             >
-              <Trash2 size={12} /> {t("clearAll")}
+              {t("clearAll")}
             </button>
           </div>
         )}
 
-        <div className="border-t border-line p-3">
+        <div className="border-t border-hair p-3">
           {user ? (
-            <div className="flex items-center justify-between gap-1">
-              {/* الضغط على الحساب يفتح الإعدادات */}
+            <div className="flex items-center gap-1">
               <button
                 onClick={onOpenSettings}
                 title={t("accountSettings")}
-                className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-md px-1 py-1 text-start transition-colors hover:bg-white/[0.04]"
+                className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-2 py-2 text-start transition-colors duration-1 hover:bg-surface-3"
               >
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-green/40 bg-green/10">
-                  {user.isAdmin ? (
-                    <ShieldCheck size={13} className="text-green" />
-                  ) : (
-                    <span className="mono text-[11px] text-green">
-                      {user.displayName[0]?.toUpperCase()}
-                    </span>
-                  )}
-                </div>
-                <div className="min-w-0 overflow-hidden">
-                  <p className="truncate text-[12px] font-medium text-txt">{user.displayName}</p>
-                  <p className="truncate text-[10px] text-txt3">{user.email}</p>
-                </div>
-                <Settings size={13} className="shrink-0 text-txt3" />
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent-soft text-[12px] font-semibold text-accent">
+                  {user.isAdmin ? <ShieldCheck size={14} /> : user.displayName[0]?.toUpperCase()}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-medium text-ink">
+                    {user.displayName}
+                  </span>
+                  <span className="block truncate text-[11px] text-ink-3" dir="ltr">
+                    {user.email}
+                  </span>
+                </span>
+                <Settings2 size={15} className="shrink-0 text-ink-3" />
               </button>
-              {user.isAdmin && (
-                <a
-                  href="/#/admin"
-                  title="لوحة الأدمن"
-                  className="shrink-0 rounded p-1.5 text-txt3 transition-colors hover:text-green"
-                >
-                  <Terminal size={14} />
-                </a>
-              )}
-              <button
-                onClick={onLogout}
-                title={t("logout")}
-                className="shrink-0 rounded p-1.5 text-txt3 hover:text-rose"
-              >
-                <LogOut size={14} />
-              </button>
+              <IconButton label={t("logout")} onClick={onLogout} size="sm">
+                <LogOut size={15} />
+              </IconButton>
             </div>
           ) : (
-            <button
-              onClick={onOpenAuth}
-              className="flex w-full items-center justify-center gap-2 rounded-md border border-cyan/40 bg-cyan/10 py-2 text-[12.5px] font-medium text-cyan hover:bg-cyan/15"
-            >
-              <LogIn size={14} /> {t("loginOrRegister")}
-            </button>
+            <Button variant="primary" onClick={onOpenAuth} className="w-full">
+              <LogIn size={16} />
+              {t("loginOrRegister")}
+            </Button>
           )}
         </div>
       </aside>
