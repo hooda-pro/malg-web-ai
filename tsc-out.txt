@@ -1,0 +1,18 @@
+node:fs:2872
+        binding.stat(base, false, undefined, true);
+                ^
+
+Error: EPERM: operation not permitted, stat 'C:\Users\hooda\OneDrive'
+    at Object.realpathSync (node:fs:2872:17)
+    at toRealPath (node:internal/modules/helpers:63:13)
+    at Module._findPath (node:internal/modules/cjs/loader:803:22)
+    at resolveMainPath (node:internal/modules/run_main:35:21)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:146:20)
+    at node:internal/main/run_main_module:33:47 {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'stat',
+  path: 'C:\\Users\\hooda\\OneDrive'
+}
+
+Node.js v24.19.0

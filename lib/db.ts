@@ -79,6 +79,48 @@ export function ensureSchema(): Promise<void> {
           updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )
       `;
+
+      // سجل إجراءات لوحة الأدمن — بيستخدمه lib/adminGuard.ts (logAdminAction)
+      await sql`
+        CREATE TABLE IF NOT EXISTS admin_logs (
+          id TEXT PRIMARY KEY,
+          admin_id TEXT NOT NULL,
+          admin_email TEXT NOT NULL,
+          action TEXT NOT NULL,
+          target_user_id TEXT,
+          target_email TEXT,
+          details TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS idx_admin_logs_created ON admin_logs(created_at DESC)`;
+
+      // رصيد الـ API المنفصل (رصيد المطورين) — بيشتغل معاه lib/apiQuota.ts.
+      // الافتراضي صفر: أي حساب جديد ميقدرش يكلم نقطة الـ API لحد ما الأدمن
+      // يشحن رصيد فعلي، حتى لو نفس الحساب عنده رصيد شات طبيعي.
+      await sql`
+        CREATE TABLE IF NOT EXISTS user_api_quota (
+          user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          total_allocated_tokens BIGINT NOT NULL DEFAULT 0,
+          used_tokens BIGINT NOT NULL DEFAULT 0,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `;
+
+      // مفاتيح الـ API العامة — كل مفتاح مربوط بحساب وبيتخصم من رصيد الـ API
+      await sql`
+        CREATE TABLE IF NOT EXISTS api_keys (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          key_hash TEXT NOT NULL UNIQUE,
+          key_prefix TEXT NOT NULL,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          last_used_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id)`;
     })();
   }
   return schemaReady;

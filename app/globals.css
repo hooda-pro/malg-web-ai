@@ -146,10 +146,18 @@
     color: var(--ink);
   }
 
+  /* Focus ring: keyboard-only, and never on the composer. The composer's
+     wrapper paints its own focus state via focus-within, so an outline on
+     the bare textarea underneath would draw a second, flickering box. */
   :focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
     border-radius: 8px;
+  }
+
+  textarea:focus-visible,
+  #mlag-composer:focus-visible {
+    outline: none;
   }
 
   button,

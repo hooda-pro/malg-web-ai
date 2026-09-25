@@ -2,13 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { sql, ensureSchema } from "@/lib/db";
 import { COOKIE_NAME, SESSION_COOKIE_MAX_AGE, signSession } from "@/lib/auth";
+import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const email = String(body?.email || "").trim().toLowerCase();
-    const password = String(body?.password || "");
+  // حماية Brute force: 8 محاولات كل 5 دقايق لكل (IP + email)، بعدها قفل 5 دقايق
+  const body = await req.json().catch(() => null);
+  const email = String(body?.email || "").trim().toLowerCase();
+  const password = String(body?.password || "");
+  const ip = getClientIp(req);
+  const rl = checkRateLimit(`login:${ip}:${email}`);
 
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "محاولات كتير أوي — استنى شوية وحاول تاني" },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds ?? 300) } }
+    );
+  }
+
+  try {
     if (!email || password.length < 6) {
       return NextResponse.json(
         { error: "يرجى إدخال بريد إلكتروني صحيح وكلمة مرور من 6 أحرف على الأقل" },

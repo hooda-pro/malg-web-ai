@@ -34,4 +34,13 @@ export function getSessionUser(): SessionUser | null {
   return verifySession(token);
 }
 
+/**
+ * زي getSessionUser بس بيرجّع اليوزر لو كان أدمن وبس — بيستخدمه
+ * lib/adminGuard.ts قبل ما يسيب أي مسار لوحة أدمن يكمّل.
+ */
+export function getAdminUser(): SessionUser | null {
+  const user = getSessionUser();
+  return user && user.isAdmin ? user : null;
+}
+
 export const SESSION_COOKIE_MAX_AGE = MAX_AGE_SECONDS;
