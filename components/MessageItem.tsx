@@ -16,14 +16,12 @@ const PREVIEWABLE_EXTS = new Set(["html", "htm", "css", "js"]);
 
 export default function MessageItem({
   message,
-  onRunCode,
   onContinue,
   isContinuing,
   continuationStreamingContent,
   onPreviewFiles,
 }: {
   message: ChatMessage;
-  onRunCode: (code: string, language: string) => void;
   onContinue: () => void;
   isContinuing: boolean;
   continuationStreamingContent: string | null;
@@ -148,7 +146,7 @@ export default function MessageItem({
                   </div>
                 ) : null
               ) : hasProjectFiles ? null : (
-                <CodeBlock key={i} language={seg.language} code={seg.code} onRun={onRunCode} />
+                <CodeBlock key={i} language={seg.language} code={seg.code} />
               )
             )}
           </div>

@@ -11,7 +11,6 @@ import MessageList from "./MessageList";
 import BottomInputBar from "./BottomInputBar";
 import AuthModal from "./AuthModal";
 import RechargeModal from "./RechargeModal";
-import CodeRunnerModal from "./CodeRunnerModal";
 import ArtifactPanel from "./ArtifactPanel";
 import SettingsModal from "./SettingsModal";
 import ShortcutsDialog from "./ShortcutsDialog";
@@ -83,10 +82,6 @@ export default function ChatShell() {
 
   const [continuingMessageId, setContinuingMessageId] = useState<string | null>(null);
   const [continuationStreamingContent, setContinuationStreamingContent] = useState("");
-
-  const [runnerOpen, setRunnerOpen] = useState(false);
-  const [runnerCode, setRunnerCode] = useState<string | undefined>(undefined);
-  const [runnerLang, setRunnerLang] = useState<string | undefined>(undefined);
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelFiles, setPanelFiles] = useState<ProjectFile[]>([]);
@@ -567,18 +562,6 @@ export default function ChatShell() {
     abortRef.current?.abort();
   };
 
-  const openRunnerDemo = () => {
-    setRunnerCode(undefined);
-    setRunnerLang(undefined);
-    setRunnerOpen(true);
-  };
-
-  const openRunnerWithCode = (code: string, language: string) => {
-    setRunnerCode(code);
-    setRunnerLang(language);
-    setRunnerOpen(true);
-  };
-
   const openSettings = useCallback((tab: SettingsTab = "general") => {
     setDrawerOpen(false);
     setSettingsTab(tab);
@@ -652,7 +635,6 @@ export default function ChatShell() {
           onToggleDrawer={toggleSidebar}
           sidebarCollapsed={sidebarCollapsed}
           remainingTokens={user?.isAdmin ? null : remainingTokens}
-          onOpenRunner={openRunnerDemo}
           onOpenRecharge={openRecharge}
           onNewChat={handleNewChat}
           lockedModel={lockedModel}
@@ -667,8 +649,6 @@ export default function ChatShell() {
           totalTokens={quota?.total ?? 500000}
           userName={user?.displayName}
           onPromptSelected={(p) => sendMessage(p)}
-          onOpenRunner={openRunnerDemo}
-          onRunCode={openRunnerWithCode}
           onContinue={continueMessage}
           continuingMessageId={continuingMessageId}
           continuationStreamingContent={continuationStreamingContent}
@@ -696,14 +676,6 @@ export default function ChatShell() {
           pendingUser={user && user.profileComplete === false ? user : null}
           onClose={() => setShowAuthModal(false)}
           onAuthenticated={handleAuthenticated}
-        />
-      )}
-
-      {runnerOpen && (
-        <CodeRunnerModal
-          onClose={() => setRunnerOpen(false)}
-          initialCode={runnerCode}
-          initialLanguage={runnerLang}
         />
       )}
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, Play, Sparkles, Zap } from "lucide-react";
+import { ArrowUpRight, Sparkles, Zap } from "lucide-react";
 import { formatTokens } from "@/lib/ai";
 import { useSettings } from "./SettingsContext";
 
@@ -10,12 +10,10 @@ export default function WelcomeHero({
   totalTokens,
   userName,
   onPromptSelected,
-  onOpenRunner,
 }: {
   totalTokens: number;
   userName?: string | null;
   onPromptSelected: (prompt: string) => void;
-  onOpenRunner: () => void;
 }) {
   const { t, nickname } = useSettings();
   const name = (nickname || userName || "").trim().split(/\s+/)[0];
@@ -69,14 +67,6 @@ export default function WelcomeHero({
             ))}
           </ul>
         </div>
-
-        <button
-          onClick={onOpenRunner}
-          className="mt-6 inline-flex items-center gap-2 rounded-full px-3 py-2 text-[13px] font-medium text-ink-2 transition-colors duration-1 hover:bg-surface-3 hover:text-ink"
-        >
-          <Play size={13} />
-          {t("tryRunner")}
-        </button>
       </div>
     </div>
   );

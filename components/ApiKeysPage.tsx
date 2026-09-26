@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils";
 type ModelId = "malg-a3";
 
 const API_MODELS: { id: ModelId; hint: string; recommended?: boolean }[] = [
-  { id: "malg-a3", hint: "الموديل الموحّد — بيدمج كل المزوّدين الداخليين في نموذج واحد", recommended: true },
+  { id: "malg-a3", hint: "الموديل الأساسي — أداء قوي وثابت في الفهم والبرمجة", recommended: true },
 ];
 
 interface ApiKeyRow {

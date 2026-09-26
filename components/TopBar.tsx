@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Lock, PanelLeft, SquarePen, SquareTerminal, Zap } from "lucide-react";
+import { Check, ChevronDown, Lock, PanelLeft, SquarePen, Zap } from "lucide-react";
 import { formatTokens } from "@/lib/ai";
 import { IconButton } from "./ui/Controls";
 import { AVAILABLE_MODELS, useSettings, type ModelId } from "./SettingsContext";
@@ -11,7 +11,6 @@ export default function TopBar({
   onToggleDrawer,
   sidebarCollapsed,
   remainingTokens,
-  onOpenRunner,
   onOpenRecharge,
   onNewChat,
   lockedModel,
@@ -20,7 +19,6 @@ export default function TopBar({
   onToggleDrawer: () => void;
   sidebarCollapsed: boolean;
   remainingTokens: number | null;
-  onOpenRunner: () => void;
   onOpenRecharge: () => void;
   onNewChat: () => void;
   /** الموديل اللي الشات الحالي متثبت عليه (لو اتبعت فيه رسايل بالفعل) */
@@ -55,10 +53,6 @@ export default function TopBar({
             <span className="tnum text-[12px] font-medium">{formatTokens(remainingTokens)}</span>
           </button>
         )}
-
-        <IconButton label={t("topbarRunner")} onClick={onOpenRunner}>
-          <SquareTerminal size={17} />
-        </IconButton>
 
         <IconButton
           label={t("newChat")}

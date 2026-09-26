@@ -21,8 +21,6 @@ export default function MessageList({
   totalTokens,
   userName,
   onPromptSelected,
-  onOpenRunner,
-  onRunCode,
   onContinue,
   continuingMessageId,
   continuationStreamingContent,
@@ -35,8 +33,6 @@ export default function MessageList({
   totalTokens: number;
   userName?: string | null;
   onPromptSelected: (prompt: string) => void;
-  onOpenRunner: () => void;
-  onRunCode: (code: string, language: string) => void;
   onContinue: (messageId: string) => void;
   continuingMessageId: string | null;
   continuationStreamingContent: string;
@@ -78,7 +74,6 @@ export default function MessageList({
         totalTokens={totalTokens}
         userName={userName}
         onPromptSelected={onPromptSelected}
-        onOpenRunner={onOpenRunner}
       />
     );
   }
@@ -98,7 +93,6 @@ export default function MessageList({
           <MessageItem
             key={m.id}
             message={m}
-            onRunCode={onRunCode}
             onContinue={() => onContinue(m.id)}
             isContinuing={continuingMessageId === m.id}
             continuationStreamingContent={

@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   description:
     "mlag AI — مساعد ذكي يكتب ويبني ويشغّل الكود جنبك: شات فوري، معاينة حيّة للمشاريع، بيئة تشغيل كود، ومحادثات محفوظة.",
   applicationName: "mlag AI",
-  keywords: ["mlag", "AI", "chat", "coding assistant", "artifacts", "code runner"],
+  keywords: ["mlag", "AI", "chat", "coding assistant", "artifacts"],
   openGraph: {
     title: "mlag AI",
     description: "مساعد ذكي للمبرمجين: شات فوري، معاينة حيّة للمشاريع، وبيئة تشغيل كود.",
