@@ -53,7 +53,7 @@ export default function BottomInputBar({
         className={cn(
           "mx-auto w-full max-w-[760px] rounded-xl border border-hair bg-surface shadow-2",
           "transition-[border-color,box-shadow] duration-2 ease-soft",
-          "focus-within:border-accent-line focus-within:shadow-[0_2px_8px_rgba(0,0,0,0.05),0_28px_60px_-28px_var(--accent-line)]"
+          "focus-within:!border-accent-line focus-within:shadow-[0_2px_8px_rgba(0,0,0,0.05),0_28px_60px_-28px_var(--accent-line)]"
         )}
       >
         <textarea
@@ -68,7 +68,7 @@ export default function BottomInputBar({
           aria-label={t("placeholder")}
           className={cn(
             "max-h-[200px] w-full resize-none bg-transparent px-4 pb-1 pt-3.5 text-[15px]",
-            "leading-7 text-ink placeholder:text-ink-3 focus:outline-none disabled:opacity-50"
+            "leading-7 text-ink placeholder:text-ink-3 outline-none focus:outline-none focus-visible:outline-none disabled:opacity-50"
           )}
         />
 
