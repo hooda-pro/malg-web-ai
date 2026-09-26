@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
  * وتقفل خطوة استكمال البروفايل (profile_complete = TRUE).
  */
 export async function POST(req: NextRequest) {
-  const user = getSessionUser();
+  const user = await getSessionUser();
   if (!user) {
     return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
   }

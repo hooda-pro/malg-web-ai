@@ -92,14 +92,14 @@ export const ACTION_LABELS: Record<string, string> = {
 
 /** لون كل إجراء في السجل */
 export const ACTION_COLORS: Record<string, string> = {
-  delete_user: "text-rose bg-rose/10 border-rose/30",
-  ban_user: "text-amber bg-amber/10 border-amber/30",
-  unban_user: "text-green bg-green/10 border-green/30",
-  recharge_tokens: "text-cyan bg-cyan/10 border-cyan/30",
-  set_tokens: "text-cyan bg-cyan/10 border-cyan/30",
-  reset_usage: "text-purple bg-purple/10 border-purple/30",
-  change_password: "text-txt2 bg-panel3 border-line2",
-  recharge_api_tokens: "text-cyan bg-cyan/10 border-cyan/30",
-  set_api_tokens: "text-cyan bg-cyan/10 border-cyan/30",
-  reset_api_usage: "text-purple bg-purple/10 border-purple/30",
+  delete_user: "text-danger bg-danger-soft border-hair",
+  ban_user: "text-warn bg-warn-soft border-hair",
+  unban_user: "text-accent bg-accent-soft border-accent-line",
+  recharge_tokens: "text-accent bg-accent-soft border-accent-line",
+  set_tokens: "text-accent bg-accent-soft border-accent-line",
+  reset_usage: "text-accent bg-accent-soft border-accent-line",
+  change_password: "text-ink-2 bg-surface-3 border-hair",
+  recharge_api_tokens: "text-accent bg-accent-soft border-accent-line",
+  set_api_tokens: "text-accent bg-accent-soft border-accent-line",
+  reset_api_usage: "text-accent bg-accent-soft border-accent-line",
 };

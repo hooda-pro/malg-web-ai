@@ -11,8 +11,9 @@ export const dynamic = "force-dynamic";
  * - set   : تعيين الرصيد الكلي لقيمة محددة
  * - reset : تصفير الاستهلاك (المستخدم يرجع رصيده كامل من غير تغيير التخصيص)
  */
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const guard = requireAdmin();
+export async function POST(req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
+  const guard = await requireAdmin();
   if (!guard.ok) return guard.res;
 
   await ensureSchema();

@@ -35,8 +35,14 @@ const config: Config = {
           soft: "var(--accent-soft)",
           line: "var(--accent-line)",
         },
-        live: "var(--live)",
-        warn: "var(--warn)",
+        live: {
+          DEFAULT: "var(--live)",
+          soft: "var(--live-soft)",
+        },
+        warn: {
+          DEFAULT: "var(--warn)",
+          soft: "var(--warn-soft)",
+        },
         danger: {
           DEFAULT: "var(--danger)",
           soft: "var(--danger-soft)",

@@ -5,8 +5,9 @@ import { requireAdmin, logAdminAction } from "@/lib/adminGuard";
 export const dynamic = "force-dynamic";
 
 /** حظر أو فك حظر حساب مستخدم */
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const guard = requireAdmin();
+export async function POST(req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
+  const guard = await requireAdmin();
   if (!guard.ok) return guard.res;
 
   await ensureSchema();

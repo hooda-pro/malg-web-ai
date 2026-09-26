@@ -3,7 +3,7 @@ import { sql, ensureSchema } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
 
 export async function POST() {
-  const user = getSessionUser();
+  const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
 
   await ensureSchema();

@@ -5,8 +5,9 @@ import { requireAdmin, logAdminAction } from "@/lib/adminGuard";
 export const dynamic = "force-dynamic";
 
 /** تفاصيل مستخدم كاملة: البيانات + الرصيد + المحادثات + آخر الرسايل */
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  const guard = requireAdmin();
+export async function GET(_req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
+  const guard = await requireAdmin();
   if (!guard.ok) return guard.res;
 
   await ensureSchema();
@@ -119,8 +120,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 }
 
 /** حذف حساب مستخدم نهائيًا (مع كل محادثاته ورصيده — CASCADE) */
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
-  const guard = requireAdmin();
+export async function DELETE(_req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
+  const guard = await requireAdmin();
   if (!guard.ok) return guard.res;
 
   await ensureSchema();

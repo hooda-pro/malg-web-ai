@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpLeft, Play, Sparkles, Zap } from "lucide-react";
+import { ArrowUpRight, Play, Sparkles, Zap } from "lucide-react";
 import { formatTokens } from "@/lib/ai";
 import { useSettings } from "./SettingsContext";
 
@@ -8,14 +8,17 @@ const QUICK_PROMPT_KEYS = ["prompt1", "prompt2", "prompt3", "prompt4"] as const;
 
 export default function WelcomeHero({
   totalTokens,
+  userName,
   onPromptSelected,
   onOpenRunner,
 }: {
   totalTokens: number;
+  userName?: string | null;
   onPromptSelected: (prompt: string) => void;
   onOpenRunner: () => void;
 }) {
-  const { t } = useSettings();
+  const { t, nickname } = useSettings();
+  const name = (nickname || userName || "").trim().split(/\s+/)[0];
 
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center px-5 pb-6 pt-10">
@@ -25,7 +28,7 @@ export default function WelcomeHero({
         </span>
 
         <h1 className="mt-6 text-balance text-[clamp(28px,5.2vw,40px)] font-semibold leading-[1.1] tracking-display text-ink">
-          {t("heroTitle")}
+          {name ? t("heroGreeting", { name }) : t("heroTitle")}
         </h1>
         <p className="mt-3 max-w-[46ch] text-pretty text-[15.5px] leading-7 text-ink-2">
           {t("heroSubtitle")}
@@ -57,9 +60,9 @@ export default function WelcomeHero({
                   <span className="min-w-0 flex-1 text-pretty text-[13.5px] leading-6 text-ink-2 transition-colors duration-1 group-hover:text-ink">
                     {t(key)}
                   </span>
-                  <ArrowUpLeft
+                  <ArrowUpRight
                     size={14}
-                    className="shrink-0 text-ink-3 transition-all duration-1 group-hover:-translate-y-0.5 group-hover:text-accent"
+                    className="flip-rtl shrink-0 text-ink-3 transition-all duration-1 group-hover:-translate-y-0.5 group-hover:text-accent"
                   />
                 </button>
               </li>

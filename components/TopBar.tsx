@@ -1,172 +1,178 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  Check,
-  ChevronDown,
-  Code2,
-  Coins,
-  Moon,
-  PanelRight,
-  Settings2,
-  Sparkles,
-  Sun,
-  Zap,
-} from "lucide-react";
+import { Check, ChevronDown, Lock, PanelLeft, SquarePen, SquareTerminal, Zap } from "lucide-react";
 import { formatTokens } from "@/lib/ai";
 import { IconButton } from "./ui/Controls";
-import type { ModelId } from "./SettingsContext";
-import { AVAILABLE_MODELS, useSettings } from "./SettingsContext";
+import { AVAILABLE_MODELS, useSettings, type ModelId } from "./SettingsContext";
 import { cn } from "@/lib/utils";
 
 export default function TopBar({
   onToggleDrawer,
+  sidebarCollapsed,
   remainingTokens,
   onOpenRunner,
-  onOpenSettings,
   onOpenRecharge,
+  onNewChat,
   lockedModel,
   onPickModel,
 }: {
   onToggleDrawer: () => void;
+  sidebarCollapsed: boolean;
   remainingTokens: number | null;
   onOpenRunner: () => void;
-  onOpenSettings: () => void;
   onOpenRecharge: () => void;
-  /** الموديل اللي الشات الحالي متثبت عليه (لو فيه رسايل اتبعتت فيه بالفعل) */
+  onNewChat: () => void;
+  /** الموديل اللي الشات الحالي متثبت عليه (لو اتبعت فيه رسايل بالفعل) */
   lockedModel?: ModelId | null;
-  /** اختيار موديل من القايمة — بيتعامل معاه ChatShell */
   onPickModel: (id: ModelId) => void;
 }) {
-  const { t, theme, setTheme, model } = useSettings();
-  const isDark = theme === "dark";
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  // اقفل القايمة لو المستخدم دوس برا
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenuOpen(false);
-    };
-    document.addEventListener("mousedown", onClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [menuOpen]);
-
-  // اللي بيتعرض فوق: لو الشات الحالي متثبت على موديل معين، وريه هو ده — مش الاختيار
-  // العام المؤقت — عشان الشات يفضل شغال بنفس الموديل لحد ما يتفتح شات جديد.
-  const displayModelId = lockedModel ?? model;
-  const currentModel = AVAILABLE_MODELS.find((m) => m.id === displayModelId) ?? AVAILABLE_MODELS[0];
+  const { t } = useSettings();
 
   return (
-    <header className="glass sticky top-0 z-nav flex h-14 shrink-0 items-center gap-3 border-b border-hair px-3 sm:px-5">
-      <IconButton label={t("topbarDrawer")} onClick={onToggleDrawer} className="lg:hidden">
-        <PanelRight size={18} className="flip-rtl" />
+    <header className="glass sticky top-0 z-nav flex h-14 shrink-0 items-center gap-1.5 border-b border-hair px-2.5 sm:px-4">
+      <IconButton
+        label={t("toggleSidebar")}
+        onClick={onToggleDrawer}
+        className={cn(!sidebarCollapsed && "lg:hidden")}
+      >
+        <PanelLeft size={18} className="flip-rtl" />
       </IconButton>
 
-      {/* شعار mlag AI + اختيار الموديل */}
-      <div className="relative" ref={menuRef}>
-        <button
-          onClick={() => setMenuOpen((o) => !o)}
-          className="flex min-w-0 items-center gap-2.5 rounded-lg px-1 py-1 transition-colors duration-1 hover:bg-surface-2"
-        >
-          <span className="relative grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-accent text-accent-ink shadow-accent">
-            <Sparkles size={15} />
-            <span className="pulse-dot absolute -bottom-px -end-px h-2.5 w-2.5 rounded-full bg-live ring-2 ring-[var(--ground)]" />
-          </span>
-          <div className="min-w-0 text-start leading-tight">
-            <p className="truncate text-[15px] font-semibold tracking-title text-ink">mlag AI</p>
-            <p className="tnum flex items-center gap-0.5 truncate text-[11px] tracking-label text-ink-3">
-              {currentModel.label}
-              <ChevronDown
-                size={11}
-                className={cn("transition-transform duration-1", menuOpen && "rotate-180")}
-              />
-            </p>
-          </div>
-        </button>
+      <ModelPicker lockedModel={lockedModel} onPickModel={onPickModel} />
 
-        {menuOpen && (
-          <div className="animate-materialize absolute start-0 top-[calc(100%+8px)] z-nav w-72 overflow-hidden rounded-lg border border-hair bg-surface py-1.5 shadow-2">
-            <p className="px-3.5 py-1.5 text-[11px] font-medium text-ink-3">
-              {t("modelSwitcherTitle")}
-            </p>
-            {AVAILABLE_MODELS.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => {
-                  onPickModel(m.id);
-                  setMenuOpen(false);
-                }}
-                className="flex w-full items-center justify-between gap-2 px-3.5 py-2.5 text-start transition-colors duration-1 hover:bg-surface-3"
-              >
-                <span className="min-w-0">
-                  <span className="tnum block text-[13px] text-ink">{m.label}</span>
-                  <span className="block text-[11.5px] text-ink-3">{m.hint}</span>
-                </span>
-                {m.id === displayModelId && <Check size={15} className="shrink-0 text-accent" />}
-              </button>
-            ))}
-            {lockedModel && (
-              <p className="border-t border-hair px-3.5 pb-1 pt-2.5 text-[11px] leading-relaxed text-ink-3">
-                {t("modelLockedHint")}
-              </p>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="ms-auto flex items-center gap-1.5">
+      <div className="ms-auto flex items-center gap-1">
         {remainingTokens !== null && (
-          <div
-            title={t("quotaTitle")}
+          <button
+            onClick={onOpenRecharge}
+            title={t("topbarTokensHint")}
             className={cn(
-              "hidden items-center gap-1.5 rounded-full border border-hair bg-surface px-2.5 py-1",
-              "text-ink-2 shadow-1 transition-colors hover:border-hair-2 xs:inline-flex"
+              "hidden h-8 items-center gap-1.5 rounded-full border border-hair bg-surface px-3",
+              "text-ink-2 shadow-1 transition-colors duration-1 hover:border-hair-2 hover:text-ink xs:inline-flex"
             )}
           >
             <Zap size={12} className="text-accent" />
             <span className="tnum text-[12px] font-medium">{formatTokens(remainingTokens)}</span>
-          </div>
+          </button>
         )}
 
-        <IconButton label={t("topbarRecharge")} onClick={onOpenRecharge}>
-          <Coins size={17} />
+        <IconButton label={t("topbarRunner")} onClick={onOpenRunner}>
+          <SquareTerminal size={17} />
         </IconButton>
-
-        <a
-          href="/#/api"
-          title={t("topbarApi")}
-          className={cn(
-            "grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-2",
-            "transition-colors duration-1 ease-soft hover:bg-surface-2 hover:text-ink"
-          )}
-        >
-          <Code2 size={17} />
-        </a>
 
         <IconButton
-          label={t("topbarTheme")}
-          onClick={() => setTheme(isDark ? "light" : "dark")}
+          label={t("newChat")}
+          onClick={onNewChat}
+          className={cn(!sidebarCollapsed && "lg:hidden")}
         >
-          {isDark ? <Sun size={17} /> : <Moon size={17} />}
-        </IconButton>
-
-        <IconButton label={t("topbarRunner")} onClick={onOpenRunner}>
-          <Zap size={17} />
-        </IconButton>
-
-        <IconButton label={t("settingsTitle")} onClick={onOpenSettings}>
-          <Settings2 size={17} />
+          <SquarePen size={17} />
         </IconButton>
       </div>
     </header>
+  );
+}
+
+function ModelPicker({
+  lockedModel,
+  onPickModel,
+}: {
+  lockedModel?: ModelId | null;
+  onPickModel: (id: ModelId) => void;
+}) {
+  const { t, model } = useSettings();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const displayId = lockedModel ?? model;
+  const current = AVAILABLE_MODELS.find((m) => m.id === displayId) ?? AVAILABLE_MODELS[0];
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="flex h-9 items-center gap-1.5 rounded-full px-3 transition-colors duration-1 hover:bg-surface-3"
+      >
+        <span className="text-[15px] font-semibold tracking-title text-ink">mlag</span>
+        <span dir="ltr" className="text-[15px] font-medium tracking-title text-ink-3">
+          {current.label.replace("malg-", "")}
+        </span>
+        {lockedModel && <Lock size={11} className="text-ink-3" aria-hidden="true" />}
+        <ChevronDown
+          size={14}
+          className={cn("text-ink-3 transition-transform duration-2 ease-soft", open && "rotate-180")}
+        />
+      </button>
+
+      {open && (
+        <div
+          role="listbox"
+          aria-label={t("modelSwitcherTitle")}
+          className="animate-materialize glass absolute start-0 top-[calc(100%+6px)] z-modal w-[300px] overflow-hidden rounded-lg border border-hair p-1.5 shadow-3"
+        >
+          <p className="px-2.5 pb-1.5 pt-1 text-[11.5px] font-medium text-ink-3">
+            {t("modelSwitcherTitle")}
+          </p>
+          {AVAILABLE_MODELS.map((m) => {
+            const selected = m.id === displayId;
+            return (
+              <button
+                key={m.id}
+                role="option"
+                aria-selected={selected}
+                onClick={() => {
+                  onPickModel(m.id);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-start transition-colors duration-1",
+                  selected ? "bg-surface-3" : "hover:bg-surface-3"
+                )}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-1.5">
+                    <span dir="ltr" className="text-[13.5px] font-medium text-ink">
+                      {m.label}
+                    </span>
+                    {m.badgeKey && (
+                      <span className="rounded-full bg-accent-soft px-1.5 py-px text-[10.5px] font-medium text-accent">
+                        {t(m.badgeKey)}
+                      </span>
+                    )}
+                  </span>
+                  <span className="mt-0.5 block text-[12px] leading-5 text-ink-3">{t(m.hintKey)}</span>
+                </span>
+                <span className="grid h-5 w-5 shrink-0 place-items-center">
+                  {selected && <Check size={15} className="text-accent" />}
+                </span>
+              </button>
+            );
+          })}
+          {lockedModel && (
+            <p className="mt-1 flex gap-2 border-t border-hair px-2.5 pb-1 pt-2.5 text-[11.5px] leading-5 text-ink-3">
+              <Lock size={12} className="mt-1 shrink-0" />
+              {t("modelLockedHint")}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

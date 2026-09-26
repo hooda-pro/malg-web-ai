@@ -16,7 +16,7 @@ export default function BottomInputBar({
   onStop: () => void;
   disabled: boolean;
 }) {
-  const { t } = useSettings();
+  const { t, enterToSend } = useSettings();
   const [text, setText] = useState("");
   const taRef = useRef<HTMLTextAreaElement>(null);
 
@@ -24,7 +24,7 @@ export default function BottomInputBar({
     const ta = taRef.current;
     if (!ta) return;
     ta.style.height = "0px";
-    ta.style.height = Math.min(ta.scrollHeight, 200) + "px";
+    ta.style.height = Math.min(ta.scrollHeight, 220) + "px";
   }, [text]);
 
   const handleSend = () => {
@@ -35,7 +35,10 @@ export default function BottomInputBar({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key !== "Enter") return;
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+    const withMod = e.metaKey || e.ctrlKey;
+    if (enterToSend ? !e.shiftKey : withMod) {
       e.preventDefault();
       handleSend();
     }
@@ -43,7 +46,6 @@ export default function BottomInputBar({
 
   return (
     <div className="relative shrink-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-6">
-      {/* fade so messages dissolve into the composer instead of being cut */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 bottom-full h-10 bg-gradient-to-t from-[var(--ground)] to-transparent"
@@ -63,18 +65,19 @@ export default function BottomInputBar({
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
           rows={1}
+          dir="auto"
           placeholder={t("placeholder")}
           disabled={disabled}
           aria-label={t("placeholder")}
           className={cn(
-            "max-h-[200px] w-full resize-none bg-transparent px-4 pb-1 pt-3.5 text-[15px]",
+            "max-h-[220px] w-full resize-none bg-transparent px-4 pb-1 pt-3.5 text-[15px]",
             "leading-7 text-ink placeholder:text-ink-3 outline-none focus:outline-none focus-visible:outline-none disabled:opacity-50"
           )}
         />
 
         <div className="flex items-center gap-2 px-2.5 pb-2.5 pt-1">
           <p className="min-w-0 flex-1 truncate px-1.5 text-[11.5px] text-ink-3">
-            {t("composerHint")}
+            {enterToSend ? t("composerHint") : t("enterToSendHint")}
           </p>
 
           {isGenerating ? (
@@ -82,12 +85,9 @@ export default function BottomInputBar({
               onClick={onStop}
               title={t("stop")}
               aria-label={t("stop")}
-              className={cn(
-                "grid h-9 w-9 shrink-0 place-items-center rounded-full text-white",
-                "bg-danger transition-transform duration-1 ease-soft active:scale-[0.92]"
-              )}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ink text-ground transition-transform duration-1 ease-soft active:scale-[0.92]"
             >
-              <Square size={13} fill="currentColor" />
+              <Square size={12} fill="currentColor" />
             </button>
           ) : (
             <button
@@ -101,7 +101,7 @@ export default function BottomInputBar({
                 "hover:bg-accent-hover active:scale-[0.92] disabled:bg-surface-3 disabled:text-ink-3 disabled:shadow-none"
               )}
             >
-              <ArrowUp size={17} strokeWidth={2.4} className="flip-rtl" />
+              <ArrowUp size={17} strokeWidth={2.4} />
             </button>
           )}
         </div>

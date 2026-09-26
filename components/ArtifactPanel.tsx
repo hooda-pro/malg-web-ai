@@ -1,18 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  Check,
+  Code2,
+  Copy,
   Download,
   ExternalLink,
+  Eye,
   Maximize2,
   Minimize2,
-  MonitorPlay,
   RefreshCw,
   X,
 } from "lucide-react";
 import type { ProjectFile } from "@/lib/parseContent";
 import { sanitizeFileName } from "@/lib/utils";
-import { IconButton } from "./ui/Controls";
+import { highlightCode } from "@/lib/highlight";
+import { IconButton, Segmented } from "./ui/Controls";
 import { useSettings } from "./SettingsContext";
 import { cn } from "@/lib/utils";
 
@@ -118,60 +122,133 @@ function openInNewTab(doc: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
+type Tab = "preview" | "code";
+
 /**
- * لوحة المعاينة — نافذة معاينة حيّة بس. الكود نفسه بيتقدّم للمستخدم كملف
- * قابل للتحميل (في ProjectFilesCard جوا الرسالة)، مش بيتعرض هنا أبدًا.
+ * لوحة الأرتيفاكت — زي Claude Artifacts: تاب «معاينة» حيّة وتاب «كود» فيه
+ * قايمة الملفات مع تظليل الكود ونسخ وتحميل. أثناء البث بتتحدث لحظة بلحظة.
  */
 export default function ArtifactPanel({
   files,
+  focusPath,
   onClose,
 }: {
   files: ProjectFile[];
+  focusPath?: string;
   onClose: () => void;
 }) {
   const { t } = useSettings();
   const [fullscreen, setFullscreen] = useState(false);
   const [runKey, setRunKey] = useState(0);
+  const [copied, setCopied] = useState(false);
   const hasWeb = useMemo(
     () => files.some((f) => PREVIEWABLE_EXTS.has((f.path.split(".").pop() || "").toLowerCase())),
     [files]
   );
+  const [tab, setTab] = useState<Tab>(focusPath || !hasWeb ? "code" : "preview");
+  const [activePath, setActivePath] = useState<string>(focusPath || files[0]?.path || "");
+
+  useEffect(() => {
+    if (focusPath) {
+      setActivePath(focusPath);
+      setTab("code");
+    }
+  }, [focusPath]);
+
+  useEffect(() => {
+    setActivePath((p) => (files.some((f) => f.path === p) ? p : files[0]?.path || ""));
+  }, [files]);
+
+  useEffect(() => {
+    if (!hasWeb) setTab("code");
+  }, [hasWeb]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && fullscreen) setFullscreen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [fullscreen]);
 
   const doc = useMemo(() => buildPreviewDoc(files), [files]);
+  const activeFile = files.find((f) => f.path === activePath) ?? files[0];
   const title = files.length === 1 ? files[0].path : t("previewFiles", { n: files.length });
+  const highlighted = useMemo(
+    () => (activeFile ? highlightCode(activeFile.content) : ""),
+    [activeFile]
+  );
+
+  const handleCopy = async () => {
+    if (!activeFile) return;
+    try {
+      await navigator.clipboard.writeText(activeFile.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // تجاهل لو الحافظة مش متاحة
+    }
+  };
 
   return (
-    <div
+    <section
+      aria-label={title}
       className={cn(
-        "flex flex-col bg-surface",
+        "animate-fade flex flex-col bg-surface",
         fullscreen
           ? "fixed inset-0 z-modal"
-          : "fixed inset-0 z-overlay lg:static lg:z-auto lg:min-w-[430px] lg:w-[45%] lg:border-s lg:border-hair"
+          : "fixed inset-0 z-overlay lg:static lg:z-auto lg:w-[46%] lg:min-w-[440px] lg:border-s lg:border-hair"
       )}
     >
       <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-hair px-3 sm:px-4">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[9px] bg-accent-soft text-accent">
-            <MonitorPlay size={14} />
-          </span>
-          <span dir="ltr" className="truncate font-mono text-[12px] text-ink-2">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <Segmented<Tab>
+            size="sm"
+            value={tab}
+            onChange={(v) => (v === "preview" && !hasWeb ? null : setTab(v))}
+            options={[
+              {
+                value: "preview",
+                title: t("previewTab"),
+                label: (
+                  <span className={cn("inline-flex items-center gap-1.5", !hasWeb && "opacity-40")}>
+                    <Eye size={13} />
+                    <span className="hidden sm:inline">{t("previewTab")}</span>
+                  </span>
+                ),
+              },
+              {
+                value: "code",
+                title: t("codeTab"),
+                label: (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Code2 size={13} />
+                    <span className="hidden sm:inline">{t("codeTab")}</span>
+                  </span>
+                ),
+              },
+            ]}
+          />
+          <span dir="ltr" className="hidden min-w-0 truncate font-mono text-[12px] text-ink-3 md:inline">
             {title}
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
-          {hasWeb && (
-            <>
-              <IconButton label={t("previewRerun")} onClick={() => setRunKey((k) => k + 1)} size="sm">
-                <RefreshCw size={15} />
-              </IconButton>
-              <IconButton
-                label={t("openInNewTab")}
-                onClick={() => openInNewTab(doc)}
-                size="sm"
-              >
-                <ExternalLink size={15} />
-              </IconButton>
-            </>
+          {tab === "code" ? (
+            <IconButton label={copied ? t("copied") : t("copy")} onClick={handleCopy} size="sm">
+              {copied ? <Check size={15} className="text-live" /> : <Copy size={15} />}
+            </IconButton>
+          ) : (
+            hasWeb && (
+              <>
+                <IconButton label={t("previewRerun")} onClick={() => setRunKey((k) => k + 1)} size="sm">
+                  <RefreshCw size={15} />
+                </IconButton>
+                <IconButton label={t("openInNewTab")} onClick={() => openInNewTab(doc)} size="sm">
+                  <ExternalLink size={15} />
+                </IconButton>
+              </>
+            )
           )}
           <IconButton
             label={fullscreen ? t("artifactExitFullscreen") : t("artifactFullscreen")}
@@ -180,46 +257,77 @@ export default function ArtifactPanel({
           >
             {fullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
           </IconButton>
+          <span className="mx-1 h-4 w-px bg-hair-2" aria-hidden="true" />
           <IconButton label={t("artifactClose")} onClick={onClose} size="sm">
             <X size={16} />
           </IconButton>
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden bg-surface-2 p-3">
-        {hasWeb ? (
-          <div className="h-full overflow-hidden rounded-md border border-hair bg-canvas shadow-1">
-            <iframe
-              key={runKey}
-              title="artifact-preview"
-              srcDoc={doc}
-              sandbox="allow-scripts allow-forms allow-modals allow-popups"
-              className="h-full w-full"
-            />
+      <div className="min-h-0 flex-1 overflow-hidden">
+        {tab === "preview" && hasWeb ? (
+          <div className="h-full bg-surface-2 p-3">
+            <div className="h-full overflow-hidden rounded-md border border-hair bg-canvas shadow-1">
+              <iframe
+                key={runKey}
+                title="artifact-preview"
+                srcDoc={doc}
+                sandbox="allow-scripts allow-forms allow-modals allow-popups"
+                className="h-full w-full"
+              />
+            </div>
           </div>
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-            <p className="max-w-sm text-pretty text-[13px] leading-6 text-ink-2">
-              {t("noPreviewAvailable")}
-            </p>
-            <div className="flex w-full max-w-sm flex-col gap-1.5">
-              {files.map((f) => (
-                <button
-                  key={f.path}
-                  onClick={() =>
-                    downloadTextFile(sanitizeFileName(f.path.split("/").pop() || f.path), f.content)
-                  }
-                  dir="ltr"
-                  className="flex items-center justify-between gap-2 rounded-md border border-hair bg-surface px-3 py-2.5 font-mono text-[12px] text-ink-2 transition-colors duration-1 hover:border-accent-line hover:text-ink"
-                >
-                  <span className="truncate">{f.path}</span>
-                  <Download size={13} className="shrink-0" />
-                </button>
-              ))}
+          <div className="flex h-full min-h-0 flex-col sm:flex-row" dir="ltr">
+            {files.length > 1 && (
+              <nav
+                aria-label={t("previewFiles", { n: files.length })}
+                className="flex shrink-0 gap-1 overflow-x-auto border-b border-hair bg-surface-2 p-2 sm:w-48 sm:flex-col sm:overflow-y-auto sm:border-b-0 sm:border-e"
+              >
+                {files.map((f) => (
+                  <button
+                    key={f.path}
+                    onClick={() => setActivePath(f.path)}
+                    aria-current={f.path === activeFile?.path}
+                    className={cn(
+                      "shrink-0 truncate rounded-xs px-2.5 py-1.5 text-start font-mono text-[12px] transition-colors duration-1",
+                      f.path === activeFile?.path
+                        ? "bg-surface text-ink shadow-1"
+                        : "text-ink-2 hover:bg-surface-3 hover:text-ink"
+                    )}
+                  >
+                    {f.path}
+                  </button>
+                ))}
+              </nav>
+            )}
+            <div className="code-surface flex min-h-0 min-w-0 flex-1 flex-col">
+              {activeFile && (
+                <>
+                  <div className="flex shrink-0 items-center justify-between gap-2 border-b border-hair px-4 py-2">
+                    <span className="truncate font-mono text-[12px] text-ink-3">{activeFile.path}</span>
+                    <button
+                      onClick={() =>
+                        downloadTextFile(
+                          sanitizeFileName(activeFile.path.split("/").pop() || activeFile.path),
+                          activeFile.content
+                        )
+                      }
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium text-ink-2 transition-colors duration-1 hover:bg-surface-3 hover:text-ink"
+                    >
+                      <Download size={12} />
+                      {t("downloadFile")}
+                    </button>
+                  </div>
+                  <pre className="min-h-0 flex-1 overflow-auto px-4 py-3 font-mono text-[12.5px] leading-[1.7]">
+                    <code dangerouslySetInnerHTML={{ __html: highlighted }} />
+                  </pre>
+                </>
+              )}
             </div>
           </div>
         )}
       </div>
-    </div>
+    </section>
   );
 }

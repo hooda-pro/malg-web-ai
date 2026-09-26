@@ -45,8 +45,8 @@ export function verifySession(token: string): SessionUser | null {
 }
 
 /** يقرأ اليوزر الحالي من الكوكي — يستخدم جوه Route Handlers و Server Components. */
-export function getSessionUser(): SessionUser | null {
-  const token = cookies().get(COOKIE_NAME)?.value;
+export async function getSessionUser(): Promise<SessionUser | null> {
+  const token = (await cookies()).get(COOKIE_NAME)?.value;
   if (!token) return null;
   return verifySession(token);
 }
@@ -54,8 +54,8 @@ export function getSessionUser(): SessionUser | null {
 export const SESSION_COOKIE_MAX_AGE = MAX_AGE_SECONDS;
 
 /** بيرجع اليوزر لو أدمن، وإلا null — الحارس بتاع مسارات لوحة الأدمن. */
-export function getAdminUser(): SessionUser | null {
-  const user = getSessionUser();
+export async function getAdminUser(): Promise<SessionUser | null> {
+  const user = await getSessionUser();
   return user && user.isAdmin ? user : null;
 }
 

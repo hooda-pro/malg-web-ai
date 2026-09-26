@@ -14,24 +14,15 @@ import RechargeModal from "./RechargeModal";
 import CodeRunnerModal from "./CodeRunnerModal";
 import ArtifactPanel from "./ArtifactPanel";
 import SettingsModal from "./SettingsModal";
+import ShortcutsDialog from "./ShortcutsDialog";
 import Toast from "./Toast";
-import type { ModelId } from "./SettingsContext";
-import { useSettings } from "./SettingsContext";
+import type { SettingsTab } from "./AccountMenu";
+import { useSettings, type ModelId } from "./SettingsContext";
 
 const PREVIEWABLE_EXTS = new Set(["html", "htm", "css", "js"]);
 const SESSION_MODELS_KEY = "mlag-session-models";
+const SIDEBAR_KEY = "mlag-sidebar-collapsed";
 
-function loadSessionModels(): Record<string, ModelId> {
-  try {
-    const raw = localStorage.getItem(SESSION_MODELS_KEY);
-    if (raw) return JSON.parse(raw) as Record<string, ModelId>;
-  } catch {
-    // تجاهل
-  }
-  return {};
-}
-
-/** هل الرد ده فيه كود صفحة/ويب يقدر يتعاين؟ */
 function hasPreviewableFiles(content: string): boolean {
   return extractProjectFiles(content).some((f) =>
     PREVIEWABLE_EXTS.has((f.path.split(".").pop() || "").toLowerCase())
@@ -53,12 +44,29 @@ function isPreviewCommand(text: string): boolean {
   );
 }
 
+function loadSessionModels(): Record<string, ModelId> {
+  try {
+    const raw = localStorage.getItem(SESSION_MODELS_KEY);
+    if (raw) return JSON.parse(raw) as Record<string, ModelId>;
+  } catch {
+    // تجاهل
+  }
+  return {};
+}
+
+function saveSessionModels(map: Record<string, ModelId>) {
+  try {
+    localStorage.setItem(SESSION_MODELS_KEY, JSON.stringify(map));
+  } catch {
+    // تجاهل
+  }
+}
+
 export default function ChatShell() {
-  const { t, lang, model, setModel } = useSettings();
+  const { t, lang, model, setModel, customInstructions, nickname } = useSettings();
   const [authChecked, setAuthChecked] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [showRecharge, setShowRecharge] = useState(false);
 
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -66,6 +74,7 @@ export default function ChatShell() {
   const [quota, setQuota] = useState<{ total: number; used: number } | null>(null);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const [isGenerating, setIsGenerating] = useState(false);
@@ -81,34 +90,38 @@ export default function ChatShell() {
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelFiles, setPanelFiles] = useState<ProjectFile[]>([]);
-  const [showSettings, setShowSettings] = useState(false);
+  const [panelFocusPath, setPanelFocusPath] = useState<string | undefined>(undefined);
 
-  const abortRef = useRef<AbortController | null>(null);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
+  const [showRecharge, setShowRecharge] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast((t) => (t === msg ? null : t)), 4500);
-  };
-
-  // كل شات (session) بيتثبت على أول موديل اتبعتله رسالة بيه، وبيفضل شغال بيه
-  // لحد ما يتفتح شات جديد — الخريطة دي بتتحفظ على الجهاز عشان تفضل بعد الريفريش.
+  // كل شات بيتثبت على أول موديل اتبعتله رسالة بيه لحد ما يتفتح شات جديد
   const [sessionModels, setSessionModels] = useState<Record<string, ModelId>>({});
   useEffect(() => {
     setSessionModels(loadSessionModels());
+    try {
+      setSidebarCollapsed(localStorage.getItem(SIDEBAR_KEY) === "1");
+    } catch {
+      // تجاهل
+    }
   }, []);
   const lockedModel: ModelId | undefined = currentSessionId
     ? sessionModels[currentSessionId]
     : undefined;
 
+  const abortRef = useRef<AbortController | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast((cur) => (cur === msg ? null : cur)), 4500);
+  }, []);
+
   const lockSessionModel = useCallback((sessionId: string, m: ModelId) => {
     setSessionModels((prev) => {
-      if (prev[sessionId]) return prev; // متثبت بالفعل — متغيرش
+      if (prev[sessionId]) return prev;
       const next = { ...prev, [sessionId]: m };
-      try {
-        localStorage.setItem(SESSION_MODELS_KEY, JSON.stringify(next));
-      } catch {
-        // تجاهل
-      }
+      saveSessionModels(next);
       return next;
     });
   }, []);
@@ -118,11 +131,7 @@ export default function ChatShell() {
       if (!(sessionId in prev)) return prev;
       const next = { ...prev };
       delete next[sessionId];
-      try {
-        localStorage.setItem(SESSION_MODELS_KEY, JSON.stringify(next));
-      } catch {
-        // تجاهل
-      }
+      saveSessionModels(next);
       return next;
     });
   }, []);
@@ -134,18 +143,33 @@ export default function ChatShell() {
         showToast(t("toastModelLocked", { current: lockedModel, picked: id }));
       }
     },
-    [lockedModel, setModel, t]
+    [lockedModel, setModel, showToast, t]
   );
 
-  const openPanelWithFiles = useCallback((files: ProjectFile[]) => {
+  const toggleSidebar = useCallback(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      setDrawerOpen((o) => !o);
+      return;
+    }
+    setSidebarCollapsed((c) => {
+      const next = !c;
+      try {
+        localStorage.setItem(SIDEBAR_KEY, next ? "1" : "0");
+      } catch {
+        // تجاهل
+      }
+      return next;
+    });
+  }, []);
+
+  const openPanelWithFiles = useCallback((files: ProjectFile[], focusPath?: string) => {
     if (!files.length) return;
     setPanelFiles(files);
+    setPanelFocusPath(focusPath);
     setPanelOpen(true);
   }, []);
 
-  // أول ما ملف قابل للمعاينة (HTML/CSS/JS) يبدأ يتكتب أثناء البث — افتح لوحة المعاينة الحيّة
-  // فورًا على الديسكتوب، عشان المستخدم يشوف البناء حاصل في الخلفية مش نص خام في الشات.
-  // بنفتحها بس لو فيه حاجة تتعاين فعلاً — مفيش شاشة كود بديلة تتفتح.
+  // أول ما ملف قابل للمعاينة يبدأ يتكتب أثناء البث — افتح المعاينة الحيّة على الديسكتوب
   useEffect(() => {
     if (!isGenerating || !streamingContent) return;
     if (panelOpen) return;
@@ -190,7 +214,6 @@ export default function ChatShell() {
     }
   }, []);
 
-  // تحميل أولي: اليوزر ثم الجلسات
   useEffect(() => {
     (async () => {
       try {
@@ -198,6 +221,8 @@ export default function ChatShell() {
         const data = await res.json();
         setUser(data.user || null);
         if (!data.user || data.user.profileComplete === false) setShowAuthModal(true);
+      } catch {
+        setShowAuthModal(true);
       } finally {
         setAuthChecked(true);
       }
@@ -211,13 +236,12 @@ export default function ChatShell() {
       setCurrentSessionId(null);
       setMessages([]);
       setQuota(null);
+      setPanelOpen(false);
       return;
     }
     (async () => {
       const list = await refreshSessions();
-      if (list.length > 0) {
-        setCurrentSessionId(list[0].id);
-      }
+      if (list.length > 0) setCurrentSessionId(list[0].id);
       await refreshQuota();
     })();
   }, [authChecked, user, refreshSessions, refreshQuota]);
@@ -244,6 +268,16 @@ export default function ChatShell() {
   }, [currentSessionId]);
 
   const handleNewChat = useCallback(async () => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+    // لو الشات الحالي فاضي أصلاً ما نعملش واحد جديد فوقه
+    if (currentSessionId && messages.length === 0) {
+      setDrawerOpen(false);
+      document.getElementById("mlag-composer")?.focus();
+      return;
+    }
     try {
       const res = await fetch("/api/sessions", { method: "POST" });
       const data = await res.json();
@@ -252,25 +286,29 @@ export default function ChatShell() {
         setCurrentSessionId(data.session.id);
         setMessages([]);
         setDrawerOpen(false);
+        setPanelOpen(false);
+        window.setTimeout(() => document.getElementById("mlag-composer")?.focus(), 50);
       }
     } catch {
       showToast(t("toastNewChatFail"));
     }
-  }, [t]);
+  }, [user, currentSessionId, messages.length, showToast, t]);
 
   const handleSelectSession = (id: string) => {
     setCurrentSessionId(id);
     setDrawerOpen(false);
+    setPanelOpen(false);
   };
 
   const handleDeleteSession = async (id: string) => {
     try {
       await fetch(`/api/sessions/${id}`, { method: "DELETE" });
+      forgetSessionModel(id);
       const list = await refreshSessions();
       if (currentSessionId === id) {
         setCurrentSessionId(list.length > 0 ? list[0].id : null);
+        setPanelOpen(false);
       }
-      forgetSessionModel(id);
     } catch {
       showToast(t("toastDeleteFail"));
     }
@@ -278,18 +316,21 @@ export default function ChatShell() {
 
   const handleClearAll = async () => {
     try {
-      await fetch("/api/sessions/clear", { method: "POST" });
+      const res = await fetch("/api/sessions/clear", { method: "POST" });
+      if (!res.ok) throw new Error("clear failed");
       setSessions([]);
       setCurrentSessionId(null);
       setMessages([]);
+      setPanelOpen(false);
+      setSessionModels({});
       try {
         localStorage.removeItem(SESSION_MODELS_KEY);
       } catch {
         // تجاهل
       }
-      setSessionModels({});
     } catch {
       showToast(t("toastClearFail"));
+      throw new Error("clear failed");
     }
   };
 
@@ -312,6 +353,8 @@ export default function ChatShell() {
     setUser((u) => (u ? { ...u, displayName: newName } : u));
   };
 
+  const personalizationBody = { customInstructions, nickname };
+
   const sendMessage = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
@@ -321,7 +364,6 @@ export default function ChatShell() {
         return;
       }
 
-      // أمر «معاينة»: يفتح معاينة حية لآخر أكواد اتبنت في المحادثة دي
       if (isPreviewCommand(trimmed)) {
         const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
         const files = lastAssistant ? extractProjectFiles(lastAssistant.content) : [];
@@ -339,9 +381,6 @@ export default function ChatShell() {
         return;
       }
 
-      // الشات ده لسه مفيش موديل متثبت عليه؟ يبقى هيتثبت من دلوقتي على الموديل الحالي.
-      // لو متثبت بالفعل، لازم نفضل نستخدم نفسه بغض النظر عن أي اختيار جديد من القايمة،
-      // لحد ما يتفتح شات جديد.
       const effectiveModel = sessionModels[sessionId] ?? model;
       lockSessionModel(sessionId, effectiveModel);
 
@@ -370,7 +409,13 @@ export default function ChatShell() {
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId, message: trimmed, uiLanguage: lang, model: effectiveModel }),
+          body: JSON.stringify({
+            sessionId,
+            message: trimmed,
+            uiLanguage: lang,
+            model: effectiveModel,
+            ...personalizationBody,
+          }),
           signal: controller.signal,
         });
 
@@ -383,51 +428,56 @@ export default function ChatShell() {
 
         const reader = res.body!.getReader();
         await consumeSSEStream(reader, {
-          onContent: (t) => {
-            accContent += t;
-            setStreamingContent((prev) => prev + t);
+          onContent: (chunk) => {
+            accContent += chunk;
+            setStreamingContent((prev) => prev + chunk);
           },
-          onReasoning: (t) => setStreamingReasoning((prev) => prev + t),
+          onReasoning: (chunk) => setStreamingReasoning((prev) => prev + chunk),
         });
       } catch (e: any) {
-        if (e?.name !== "AbortError") {
-          showToast(t("toastDrop"));
-        }
+        if (e?.name !== "AbortError") showToast(t("toastDrop"));
       } finally {
         abortRef.current = null;
-        setIsGenerating(false);
-        // لو الرد أنتج ملفات كود، الملفات نفسها بتتقدّم جوا الرسالة بزرار تحميل بس —
-        // من غير ما نفتح أي شاشة تلقائيًا. لو فيه حاجة قابلة للمعاينة فعلاً، اللوحة
-        // بتكون اتفتحت أصلاً وقت البث (useEffect فوق)؛ هنا بس ننبه لو لسه مقفولة.
         const producedFiles = accContent ? extractProjectFiles(accContent) : [];
-        if (producedFiles.length > 0 && hasPreviewableFiles(accContent) && !panelOpen) {
-          showToast(t("toastPreviewReady"));
+        if (producedFiles.length > 0) {
+          if (!panelOpen && hasPreviewableFiles(accContent)) {
+            openPanelWithFiles(producedFiles);
+            showToast(t("toastPreviewReady"));
+          } else {
+            setPanelFiles(producedFiles);
+          }
         }
-        setStreamingContent("");
-        setStreamingReasoning("");
+        // نجيب الرسالة المحفوظة الأول وبعدين نشيل فقاعة البث — عشان الرد ما يختفيش لحظة
         await refreshMessages(sessionId);
         await refreshQuota();
-        // أمان إضافي ضد سباق الحفظ: تحديث تاني بعد لحظة — يضمن إن الرد ما يختفيش
-        // حتى لو السيرفر اتأخر شوية في تسجيل الرسالة في الداتابيز
+        setIsGenerating(false);
+        setStreamingContent("");
+        setStreamingReasoning("");
         setTimeout(() => {
           void refreshMessages(sessionId);
+          void refreshSessions();
         }, 700);
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       isGenerating,
       user,
       messages,
       lang,
+      model,
+      sessionModels,
+      lockSessionModel,
+      customInstructions,
+      nickname,
       t,
       ensureSessionId,
       refreshMessages,
       refreshQuota,
+      refreshSessions,
       panelOpen,
       openPanelWithFiles,
-      model,
-      sessionModels,
-      lockSessionModel,
+      showToast,
     ]
   );
 
@@ -440,7 +490,6 @@ export default function ChatShell() {
       const controller = new AbortController();
       abortRef.current = controller;
       let accContent = "";
-
       const effectiveModel = sessionModels[currentSessionId] ?? model;
 
       try {
@@ -452,6 +501,7 @@ export default function ChatShell() {
             messageId,
             uiLanguage: lang,
             model: effectiveModel,
+            ...personalizationBody,
           }),
           signal: controller.signal,
         });
@@ -464,42 +514,52 @@ export default function ChatShell() {
 
         const reader = res.body!.getReader();
         await consumeSSEStream(reader, {
-          onContent: (t) => {
-            accContent += t;
-            setContinuationStreamingContent((prev) => prev + t);
+          onContent: (chunk) => {
+            accContent += chunk;
+            setContinuationStreamingContent((prev) => prev + chunk);
           },
         });
       } catch (e: any) {
-        if (e?.name !== "AbortError") {
-          showToast(t("toastContinueDrop"));
-        }
+        if (e?.name !== "AbortError") showToast(t("toastContinueDrop"));
       } finally {
         abortRef.current = null;
-        setContinuingMessageId(null);
-        const producedFiles = accContent ? extractProjectFiles(accContent) : [];
-        if (producedFiles.length > 0 && hasPreviewableFiles(accContent) && !panelOpen) {
-          showToast(t("toastPreviewReady"));
+        const originalMsg = messages.find((m) => m.id === messageId);
+        const mergedContent = (originalMsg?.content || "") + accContent;
+        const producedFiles = mergedContent ? extractProjectFiles(mergedContent) : [];
+        if (producedFiles.length > 0) {
+          if (!panelOpen && hasPreviewableFiles(mergedContent)) {
+            openPanelWithFiles(producedFiles);
+            showToast(t("toastPreviewReady"));
+          } else {
+            setPanelFiles(producedFiles);
+          }
         }
-        setContinuationStreamingContent("");
         await refreshMessages(currentSessionId);
         await refreshQuota();
-        // أمان إضافي ضد سباق الحفظ — تحديث تاني بعد لحظة
+        setContinuingMessageId(null);
+        setContinuationStreamingContent("");
         setTimeout(() => {
           void refreshMessages(currentSessionId);
         }, 700);
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       user,
       currentSessionId,
       continuingMessageId,
+      messages,
       lang,
+      model,
+      sessionModels,
+      customInstructions,
+      nickname,
       t,
       refreshMessages,
       refreshQuota,
       panelOpen,
-      model,
-      sessionModels,
+      openPanelWithFiles,
+      showToast,
     ]
   );
 
@@ -519,49 +579,82 @@ export default function ChatShell() {
     setRunnerOpen(true);
   };
 
+  const openSettings = useCallback((tab: SettingsTab = "general") => {
+    setDrawerOpen(false);
+    setSettingsTab(tab);
+  }, []);
+
+  const openRecharge = useCallback(() => {
+    setDrawerOpen(false);
+    setShowRecharge(true);
+  }, []);
+
+  // اختصارات الكيبورد العامة
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      const key = e.key.toLowerCase();
+      if (mod && e.shiftKey && key === "o") {
+        e.preventDefault();
+        void handleNewChat();
+      } else if (mod && e.shiftKey && key === "s") {
+        e.preventDefault();
+        toggleSidebar();
+      } else if (mod && !e.shiftKey && e.key === ",") {
+        e.preventDefault();
+        openSettings("general");
+      } else if (mod && e.key === "/") {
+        e.preventDefault();
+        setShowShortcuts((s) => !s);
+      } else if (e.shiftKey && e.key === "Escape") {
+        e.preventDefault();
+        document.getElementById("mlag-composer")?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [handleNewChat, toggleSidebar, openSettings]);
+
   const remainingTokens = quota ? Math.max(quota.total - quota.used, 0) : null;
 
-  // أثناء البث: نسخة لايف من ملفات الرد الجاري — اللوحة بتتحدث لحظة بلحظة زي Claude
   const liveStreamFiles =
     isGenerating && streamingContent ? extractProjectFiles(streamingContent) : null;
 
   return (
     <div id="mlag-main" className="flex h-[100dvh] overflow-hidden bg-ground">
-      {/* القايمة الجانبية: أول عنصر في الصف — بتفضل على الشمال في الإنجليزي،
-          وبتتنقل على اليمين تلقائيًا في العربي (لأن الـ flex بيقلب مع dir=rtl) */}
       <ChatDrawer
         open={drawerOpen}
+        collapsed={sidebarCollapsed}
         onClose={() => setDrawerOpen(false)}
+        onCollapse={toggleSidebar}
         sessions={sessions}
         currentSessionId={currentSessionId}
         onSelectSession={handleSelectSession}
         onNewChat={handleNewChat}
         onDeleteSession={handleDeleteSession}
-        onClearAll={handleClearAll}
         user={user}
+        quota={quota}
         onOpenAuth={() => {
           setDrawerOpen(false);
           setShowAuthModal(true);
         }}
         onLogout={handleLogout}
-        onOpenSettings={() => {
+        onOpenSettings={openSettings}
+        onOpenRecharge={openRecharge}
+        onOpenShortcuts={() => {
           setDrawerOpen(false);
-          setShowSettings(true);
-        }}
-        onOpenRecharge={() => {
-          setDrawerOpen(false);
-          setShowRecharge(true);
+          setShowShortcuts(true);
         }}
       />
 
-      {/* العمود الرئيسي: الشات — بياخد باقي العرض جنب القايمة الجانبية ولوحة الأرتيفاكت */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <main className="flex min-w-0 flex-1 flex-col">
         <TopBar
-          onToggleDrawer={() => setDrawerOpen(true)}
-          remainingTokens={remainingTokens}
+          onToggleDrawer={toggleSidebar}
+          sidebarCollapsed={sidebarCollapsed}
+          remainingTokens={user?.isAdmin ? null : remainingTokens}
           onOpenRunner={openRunnerDemo}
-          onOpenSettings={() => setShowSettings(true)}
-          onOpenRecharge={() => setShowRecharge(true)}
+          onOpenRecharge={openRecharge}
+          onNewChat={handleNewChat}
           lockedModel={lockedModel}
           onPickModel={handlePickModel}
         />
@@ -572,6 +665,7 @@ export default function ChatShell() {
           streamingContent={streamingContent}
           streamingReasoning={streamingReasoning}
           totalTokens={quota?.total ?? 500000}
+          userName={user?.displayName}
           onPromptSelected={(p) => sendMessage(p)}
           onOpenRunner={openRunnerDemo}
           onRunCode={openRunnerWithCode}
@@ -587,13 +681,12 @@ export default function ChatShell() {
           onStop={stopGeneration}
           disabled={!authChecked}
         />
-      </div>
+      </main>
 
-      {/* لوحة الأرتيفاكت الجانبية — زي Claude: بتقسم الشاشة جنب الشات على الديسكتوب،
-          وبتاخد الشاشة كلها overlay على الموبايل. أثناء البث بتاخد نسخة لايف من الملفات. */}
       {panelOpen && panelFiles.length > 0 && (
         <ArtifactPanel
           files={liveStreamFiles && liveStreamFiles.length > 0 ? liveStreamFiles : panelFiles}
+          focusPath={panelFocusPath}
           onClose={() => setPanelOpen(false)}
         />
       )}
@@ -606,10 +699,6 @@ export default function ChatShell() {
         />
       )}
 
-      {showRecharge && user && (
-        <RechargeModal user={user} onClose={() => setShowRecharge(false)} />
-      )}
-
       {runnerOpen && (
         <CodeRunnerModal
           onClose={() => setRunnerOpen(false)}
@@ -618,12 +707,25 @@ export default function ChatShell() {
         />
       )}
 
-      {showSettings && (
+      {settingsTab && (
         <SettingsModal
           user={user}
-          onClose={() => setShowSettings(false)}
+          quota={quota}
+          initialTab={settingsTab}
+          sessionsCount={sessions.length}
+          onClose={() => setSettingsTab(null)}
           onNameUpdated={handleNameUpdated}
+          onLogout={handleLogout}
+          onOpenRecharge={openRecharge}
+          onClearAll={handleClearAll}
+          onToast={showToast}
         />
+      )}
+
+      {showShortcuts && <ShortcutsDialog onClose={() => setShowShortcuts(false)} />}
+
+      {showRecharge && (
+        <RechargeModal user={user} quota={quota} onClose={() => setShowRecharge(false)} />
       )}
 
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}

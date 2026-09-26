@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 /** تغيير اسم المستخدم — بيحدّث الداتابيز + كوكي الجلسة
  * (الجلسة فيها الاسم، فتحديثها ضروري عشان النموذج يعرف الاسم الجديد في الرسايل الجاية) */
 export async function POST(req: NextRequest) {
-  const user = getSessionUser();
+  const user = await getSessionUser();
   if (!user) {
     return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
   }

@@ -17,9 +17,8 @@ function currentRoute(): Route {
 }
 
 /**
- * راوتر بسيط بالـ hash: `/#/admin` يفتح لوحة الأدمن، `/#/api` يفتح صفحة
- * API للمطورين، وأي حاجة تانية تفتح الشات. بيعمل listen على hashchange
- * عشان التنقل بين اللوحتين يبقى فوري.
+ * راوتر بسيط بالـ hash: `/#/admin` لوحة الأدمن، `/#/api` لوحة الـ API للمطورين،
+ * وأي حاجة تانية الشات. كل الشاشات جوه SettingsProvider عشان الثيم يبقى واحد.
  */
 export default function AppRouter() {
   const [route, setRoute] = useState<Route>("chat");
@@ -34,12 +33,17 @@ export default function AppRouter() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
-  if (route === "admin") return <AdminRoot />;
-  if (route === "api") return <ApiKeysPage />;
-
   return (
     <SettingsProvider>
-      <ChatShell />
+      {route === "admin" ? (
+        <div dir="rtl" lang="ar">
+          <AdminRoot />
+        </div>
+      ) : route === "api" ? (
+        <ApiKeysPage />
+      ) : (
+        <ChatShell />
+      )}
     </SettingsProvider>
   );
 }

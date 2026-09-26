@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 /** سجل إجراءات الأدمن — آخر 150 إجراء */
 export async function GET() {
-  const guard = requireAdmin();
+  const guard = await requireAdmin();
   if (!guard.ok) return guard.res;
 
   await ensureSchema();

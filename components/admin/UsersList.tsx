@@ -16,7 +16,7 @@ import { formatDate, initialOf, usagePercent } from "./helpers";
 /** شارة حالة صغيرة */
 function Badge({ children, className }: { children: React.ReactNode; className: string }) {
   return (
-    <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${className}`}>{children}</span>
+    <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${className}`}>{children}</span>
   );
 }
 
@@ -51,58 +51,58 @@ export default function UsersList({ onSelect }: { onSelect: (id: string) => void
     <div className="space-y-4">
       {/* شريط البحث */}
       <div className="flex items-center gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-line2 bg-panel px-3 py-2 focus-within:border-green/40">
-          <Search size={15} className="shrink-0 text-txt3" />
+        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-hair bg-surface px-3 py-2 focus-within:border-accent-line">
+          <Search size={15} className="shrink-0 text-ink-3" />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="دور بالاسم أو البريد الإلكتروني…"
-            className="w-full bg-transparent text-[12.5px] text-txt placeholder:text-txt3 focus:outline-none"
+            className="w-full bg-transparent text-[13.5px] text-ink placeholder:text-ink-3 focus:outline-none"
           />
         </div>
         <button
           onClick={() => load(q)}
           title="تحديث القايمة"
-          className="shrink-0 rounded-md border border-line2 bg-panel p-2 text-txt2 transition-colors hover:text-green"
+          className="shrink-0 rounded-md border border-hair bg-surface p-2 text-ink-2 transition-colors hover:text-accent"
         >
           <RefreshCw size={15} />
         </button>
       </div>
 
-      <p className="mono text-[11px] text-txt3">
+      <p className="tnum text-[12px] text-ink-3">
         {loading ? "جاري التحميل…" : `${formatTokens(users.length)} مستخدم`}
       </p>
 
       {error && (
-        <div className="rounded-lg border border-rose/40 bg-rose/5 p-4 text-center text-xs text-rose">
+        <div className="rounded-lg border border-hair bg-danger-soft p-4 text-center text-[13px] text-danger">
           {error}
         </div>
       )}
 
       {/* قايمة المستخدمين */}
-      <div className="overflow-hidden rounded-lg border border-line bg-panel">
+      <div className="overflow-hidden rounded-lg border border-hair bg-surface shadow-1">
         {users.length === 0 && !loading && !error && (
-          <p className="px-4 py-8 text-center text-[12px] text-txt3">
+          <p className="px-4 py-8 text-center text-[13px] text-ink-3">
             {q ? `مفيش نتائج للبحث عن "${q}"` : "مفيش مستخدمين مسجلين لسه"}
           </p>
         )}
-        <div className="divide-y divide-line">
+        <div className="divide-y divide-hair">
           {users.map((u) => {
             const pct = usagePercent(u.usedTokens, u.totalAllocatedTokens);
             return (
               <button
                 key={u.id}
                 onClick={() => onSelect(u.id)}
-                className="flex w-full items-center gap-3 px-3 py-3 text-right transition-colors hover:bg-panel2 md:px-4"
+                className="flex w-full items-center gap-3 px-3 py-3 text-right transition-colors hover:bg-surface-2 md:px-4"
               >
                 {/* avatar */}
                 <span
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[13px] font-bold ${
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold ${
                     u.isAdmin
-                      ? "bg-purple/15 text-purple"
+                      ? "bg-accent-soft text-accent"
                       : u.isBanned
-                        ? "bg-rose/15 text-rose"
-                        : "bg-green/15 text-green"
+                        ? "bg-danger-soft text-danger"
+                        : "bg-accent-soft text-accent"
                   }`}
                 >
                   {initialOf(u.displayName)}
@@ -111,27 +111,27 @@ export default function UsersList({ onSelect }: { onSelect: (id: string) => void
                 {/* الاسم والإيميل */}
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-1.5">
-                    <span className="truncate text-[12.5px] font-bold text-txt">
+                    <span className="truncate text-[13.5px] font-semibold text-ink">
                       {u.displayName}
                     </span>
-                    {u.isAdmin && <Badge className="bg-purple/15 text-purple">أدمن</Badge>}
-                    {u.isBanned && <Badge className="bg-rose/15 text-rose">محظور</Badge>}
+                    {u.isAdmin && <Badge className="bg-accent-soft text-accent">أدمن</Badge>}
+                    {u.isBanned && <Badge className="bg-danger-soft text-danger">محظور</Badge>}
                   </span>
-                  <span className="mono block truncate text-[10.5px] text-txt3" dir="ltr">
+                  <span className="tnum block truncate text-[11.5px] text-ink-3" dir="ltr">
                     {u.email}
                   </span>
                 </span>
 
                 {/* الرصيد */}
                 <span className="hidden w-36 shrink-0 sm:block">
-                  <span className="mono mb-1 flex items-center justify-between text-[10px] text-txt3">
-                    <span className="text-amber">{formatTokens(u.usedTokens)} مستخدم</span>
+                  <span className="tnum mb-1 flex items-center justify-between text-[11px] text-ink-3">
+                    <span className="text-warn">{formatTokens(u.usedTokens)} مستخدم</span>
                     <span>{pct}%</span>
                   </span>
-                  <span className="block h-1.5 overflow-hidden rounded-full bg-panel3">
+                  <span className="block h-1.5 overflow-hidden rounded-full bg-surface-3">
                     <span
                       className={`block h-full rounded-full ${
-                        pct >= 90 ? "bg-rose" : pct >= 60 ? "bg-amber" : "bg-green"
+                        pct >= 90 ? "bg-danger" : pct >= 60 ? "bg-warn" : "bg-accent"
                       }`}
                       style={{ width: `${pct}%` }}
                     />
@@ -139,7 +139,7 @@ export default function UsersList({ onSelect }: { onSelect: (id: string) => void
                 </span>
 
                 {/* أرقام سريعة */}
-                <span className="hidden shrink-0 items-center gap-3 text-[10.5px] text-txt3 md:flex">
+                <span className="hidden shrink-0 items-center gap-3 text-[11.5px] text-ink-3 md:flex">
                   <span className="flex items-center gap-1" title="المحادثات">
                     <MessageCircle size={11} />
                     {formatTokens(u.sessionsCount)}
@@ -151,14 +151,14 @@ export default function UsersList({ onSelect }: { onSelect: (id: string) => void
                   <span title="تاريخ التسجيل">{formatDate(u.createdAt)}</span>
                 </span>
 
-                <ChevronLeft size={15} className="shrink-0 text-txt3" />
+                <ChevronLeft size={15} className="shrink-0 text-ink-3" />
               </button>
             );
           })}
         </div>
       </div>
 
-      <p className="text-center text-[10.5px] text-txt3">
+      <p className="text-center text-[11.5px] text-ink-3">
         اضغط على أي مستخدم لعرض كل تفاصيله وإدارة حسابه
       </p>
     </div>

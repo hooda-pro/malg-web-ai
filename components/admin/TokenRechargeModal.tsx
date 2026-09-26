@@ -60,37 +60,37 @@ export default function TokenRechargeModal({
   const quick = mode === "set" ? QUICK_SET : QUICK_ADD;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
-      <div className="w-full max-w-sm overflow-hidden rounded-lg border border-line2 bg-panel glow-cyan animate-slideUp">
-        <div className="flex items-center justify-between border-b border-line px-3 py-2.5">
+    <div className="animate-fade fixed inset-0 z-modal flex items-end justify-center bg-black/25 px-0 backdrop-blur-md sm:items-center sm:px-4">
+      <div className="glass animate-sheet-in sm:animate-materialize w-full overflow-hidden rounded-t-3xl border border-hair shadow-3 sm:max-w-[420px] sm:rounded-3xl">
+        <div className="flex items-center justify-between px-6 pb-2 pt-6">
           <div className="flex items-center gap-2">
-            <Coins size={15} className="text-cyan" />
-            <h3 className="mono text-[12.5px] font-bold text-txt">إدارة رصيد التوكنز</h3>
+            <Coins size={15} className="text-accent" />
+            <h3 className="text-[18px] font-semibold tracking-title text-ink">إدارة رصيد التوكنز</h3>
           </div>
-          <button onClick={onClose} className="text-txt3 hover:text-txt">
+          <button onClick={onClose} aria-label="إغلاق" className="-me-2 grid h-8 w-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-3 hover:text-ink">
             <X size={15} />
           </button>
         </div>
 
-        <div className="px-4 py-4">
+        <div className="px-6 pb-6 pt-3">
           {/* الرصيد الحالي */}
-          <div className="mb-4 rounded-md border border-line bg-panel2 px-3 py-2.5">
-            <div className="mono flex items-center justify-between text-[11px]">
-              <span className="text-txt3">الرصيد الحالي</span>
-              <span className="text-txt">
+          <div className="mb-4 rounded-md border border-hair bg-surface-2 px-3 py-2.5">
+            <div className="tnum flex items-center justify-between text-[12px]">
+              <span className="text-ink-3">الرصيد الحالي</span>
+              <span className="text-ink">
                 {formatTokens(user.usedTokens)} / {formatTokens(user.totalAllocatedTokens)}
               </span>
             </div>
-            <div className="mono mt-1 flex items-center justify-between text-[11px]">
-              <span className="text-txt3">المتبقي</span>
-              <span className="text-green">
+            <div className="tnum mt-1 flex items-center justify-between text-[12px]">
+              <span className="text-ink-3">المتبقي</span>
+              <span className="text-accent">
                 {formatTokens(Math.max(user.totalAllocatedTokens - user.usedTokens, 0))}
               </span>
             </div>
           </div>
 
           {/* نوع العملية */}
-          <div className="mb-3 flex rounded-md border border-line2 p-0.5">
+          <div className="mb-3 flex rounded-md border border-hair p-0.5">
             {(
               [
                 { id: "add", label: "شحن إضافي" },
@@ -101,8 +101,8 @@ export default function TokenRechargeModal({
               <button
                 key={id}
                 onClick={() => setMode(id)}
-                className={`flex-1 rounded py-1.5 text-[11px] transition-colors ${
-                  mode === id ? "bg-cyan/15 font-bold text-cyan" : "text-txt3 hover:text-txt2"
+                className={`flex-1 rounded py-1.5 text-[12px] transition-colors ${
+                  mode === id ? "bg-accent-soft font-semibold text-accent" : "text-ink-3 hover:text-ink-2"
                 }`}
               >
                 {label}
@@ -111,20 +111,20 @@ export default function TokenRechargeModal({
           </div>
 
           {mode === "reset" ? (
-            <p className="mb-3 rounded-md border border-purple/30 bg-purple/10 px-3 py-2 text-[11.5px] leading-5 text-purple">
+            <p className="mb-3 rounded-md border border-accent-line bg-accent-soft px-3 py-2 text-[12.5px] leading-5 text-accent">
               هيتم تصفير الاستهلاك لـ صفر — المستخدم يرجع رصيده كامل من غير تغيير التخصيص الكلي.
             </p>
           ) : (
             <>
-              <div className="mb-2 flex items-center gap-2 rounded-md border border-line2 bg-panel2 px-2.5 py-2">
-                <Coins size={14} className="shrink-0 text-txt3" />
+              <div className="mb-2 flex items-center gap-2 rounded-md border border-hair bg-surface-2 px-2.5 py-2">
+                <Coins size={14} className="shrink-0 text-ink-3" />
                 <input
                   value={amount}
                   onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ""))}
                   inputMode="numeric"
                   dir="ltr"
                   autoFocus
-                  className="w-full bg-transparent text-[12.5px] text-txt focus:outline-none"
+                  className="w-full bg-transparent text-[13.5px] text-ink focus:outline-none"
                   placeholder="عدد التوكنز"
                   onKeyDown={(e) => e.key === "Enter" && submit()}
                 />
@@ -134,7 +134,7 @@ export default function TokenRechargeModal({
                   <button
                     key={v}
                     onClick={() => setAmount(String(v))}
-                    className="mono rounded border border-line2 px-2 py-1 text-[10.5px] text-txt2 transition-colors hover:border-cyan/40 hover:text-cyan"
+                    className="tnum rounded border border-hair px-2 py-1 text-[11.5px] text-ink-2 transition-colors hover:border-accent-line hover:text-accent"
                   >
                     {mode === "add" ? "+" : "="}
                     {formatTokens(v)}
@@ -144,12 +144,12 @@ export default function TokenRechargeModal({
             </>
           )}
 
-          {error && <p className="mb-2 text-[11.5px] text-rose">{error}</p>}
+          {error && <p className="mb-2 text-[12.5px] text-danger">{error}</p>}
 
           <button
             onClick={submit}
             disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-md bg-cyan/15 py-2.5 text-[12.5px] font-bold text-cyan hover:bg-cyan/25 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-md bg-accent-soft py-2.5 text-[13.5px] font-semibold text-accent hover:bg-accent-soft disabled:opacity-50"
           >
             {loading && <Loader2 size={14} className="animate-spin" />}
             {mode === "add" ? "شحن الرصيد" : mode === "set" ? "تعيين الرصيد" : "تصفير الاستهلاك"}

@@ -17,8 +17,9 @@ function mapMessage(row: any): ChatMessage {
   };
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { sessionId: string } }) {
-  const user = getSessionUser();
+export async function GET(_req: NextRequest, { params: paramsPromise }: { params: Promise<{ sessionId: string }> }) {
+  const params = await paramsPromise;
+  const user = await getSessionUser();
   if (!user) return NextResponse.json({ messages: [] });
 
   await ensureSchema();

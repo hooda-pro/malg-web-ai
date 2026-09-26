@@ -222,6 +222,8 @@ export function Dialog({
   footer,
   labelledBy = "mlag-dialog-title",
   className,
+  size = "sm",
+  bodyClassName,
 }: {
   open: boolean;
   onClose: () => void;
@@ -231,6 +233,8 @@ export function Dialog({
   footer?: ReactNode;
   labelledBy?: string;
   className?: string;
+  size?: "sm" | "md" | "lg";
+  bodyClassName?: string;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -273,7 +277,8 @@ export function Dialog({
         aria-labelledby={labelledBy}
         className={cn(
           "animate-sheet-in sm:animate-materialize glass relative flex max-h-[92dvh] w-full flex-col",
-          "rounded-t-3xl border border-hair shadow-3 sm:rounded-3xl sm:max-w-[420px]",
+          "rounded-t-3xl border border-hair shadow-3 sm:rounded-3xl",
+          { sm: "sm:max-w-[420px]", md: "sm:max-w-[560px]", lg: "sm:max-w-[780px]" }[size],
           className
         )}
       >
@@ -293,7 +298,9 @@ export function Dialog({
             <X size={17} />
           </IconButton>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-2">{children}</div>
+        <div className={cn("min-h-0 flex-1 overflow-y-auto", bodyClassName ?? "px-6 pb-2")}>
+          {children}
+        </div>
         {footer && (
           <div className="border-t border-hair px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
             {footer}
@@ -302,4 +309,26 @@ export function Dialog({
       </div>
     </div>
   );
+}
+
+/** مفتاح كيبورد صغير لعرض الاختصارات */
+export function Kbd({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <kbd
+      dir="ltr"
+      className={cn(
+        "inline-flex h-5 min-w-5 items-center justify-center rounded-[6px] border border-hair bg-surface-2 px-1.5",
+        "font-sans text-[11px] font-medium leading-none text-ink-3 shadow-edge",
+        className
+      )}
+    >
+      {children}
+    </kbd>
+  );
+}
+
+/** بيرجع "⌘" على الماك و"Ctrl" على باقي الأنظمة */
+export function modKeyLabel(): string {
+  if (typeof navigator === "undefined") return "Ctrl";
+  return /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent) ? "⌘" : "Ctrl";
 }

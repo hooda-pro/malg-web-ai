@@ -5,7 +5,7 @@ import { ensureUserQuota } from "@/lib/quota";
 import { REGISTERED_TOKEN_QUOTA } from "@/lib/systemPrompt";
 
 export async function GET() {
-  const user = getSessionUser();
+  const user = await getSessionUser();
   if (!user) return NextResponse.json({ quota: null });
 
   await ensureSchema();

@@ -50,7 +50,7 @@ export async function checkAndMaybeRenewQuota(
     `;
     return {
       blocked: true,
-      message: `لقد استنفذت رصيد التوكنز المتاح لك (${formatTokens(totalAllocated)} توكنز). هيتجدد الرصيد تلقائيًا بعد 10 ساعات من دلوقتي.`,
+      message: `لقد استنفذت رصيد التوكنز المتاح لك (${formatTokens(totalAllocated)} توكنز). هيتجدد الرصيد تلقائيًا بعد 10 ساعات من دلوقتي، أو اشحن رصيدك فورًا من «شراء توكنز» في قايمة حسابك.`,
     };
   }
 
@@ -64,11 +64,18 @@ export async function checkAndMaybeRenewQuota(
   }
 
   const remainingMs = QUOTA_RENEWAL_INTERVAL_MS - elapsed;
-  const remainingHours = Math.floor(remainingMs / 3_600_000);
+  const remainingDays = Math.floor(remainingMs / 86_400_000);
+  const remainingHours = Math.floor((remainingMs % 86_400_000) / 3_600_000);
   const remainingMinutes = Math.floor((remainingMs % 3_600_000) / 60_000);
+  const remainingText =
+    remainingDays > 0
+      ? `${remainingDays} يوم و ${remainingHours} ساعة`
+      : remainingHours > 0
+        ? `${remainingHours} ساعة و ${remainingMinutes} دقيقة`
+        : `${remainingMinutes} دقيقة`;
   return {
     blocked: true,
-    message: `لقد استنفذت رصيد التوكنز المتاح لك (${formatTokens(totalAllocated)} توكنز). هيتجدد الرصيد تلقائيًا خلال ${remainingHours} ساعة و ${remainingMinutes} دقيقة.`,
+    message: `لقد استنفذت رصيد التوكنز المتاح لك (${formatTokens(totalAllocated)} توكنز). هيتجدد الرصيد تلقائيًا خلال ${remainingText}، أو اشحن رصيدك فورًا من «شراء توكنز» في قايمة حسابك.`,
   };
 }
 

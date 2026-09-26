@@ -9,8 +9,8 @@ export type AdminGuardResult =
   | { ok: false; res: NextResponse };
 
 /** حارس مسارات لوحة الأدمن — بيرجع الأدمن الحالي أو Response بخطأ 403 جاهزة. */
-export function requireAdmin(): AdminGuardResult {
-  const admin = getAdminUser();
+export async function requireAdmin(): Promise<AdminGuardResult> {
+  const admin = await getAdminUser();
   if (!admin) {
     return {
       ok: false,

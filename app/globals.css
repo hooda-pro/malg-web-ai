@@ -43,7 +43,9 @@
     --accent-soft: rgba(0, 113, 227, 0.1);
     --accent-line: rgba(0, 113, 227, 0.28);
     --live: #1d9e5b;
+    --live-soft: rgba(29, 158, 91, 0.1);
     --warn: #b25000;
+    --warn-soft: rgba(178, 80, 0, 0.09);
     --danger: #d70015;
     --danger-soft: rgba(215, 0, 21, 0.08);
 
@@ -98,7 +100,9 @@
     --accent-soft: rgba(10, 132, 255, 0.16);
     --accent-line: rgba(10, 132, 255, 0.4);
     --live: #32d583;
+    --live-soft: rgba(50, 213, 131, 0.14);
     --warn: #ff9f45;
+    --warn-soft: rgba(255, 159, 69, 0.14);
     --danger: #ff453a;
     --danger-soft: rgba(255, 69, 58, 0.14);
 
@@ -392,7 +396,8 @@
 }
 
 /* Live caret while tokens stream in */
-.caret::after {
+.caret::after,
+.caret-last > :last-child::after {
   content: "";
   display: inline-block;
   width: 2px;

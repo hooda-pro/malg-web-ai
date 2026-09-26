@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 /** تغيير كلمة مرور حساب الأدمن الحالي */
 export async function POST(req: NextRequest) {
-  const guard = requireAdmin();
+  const guard = await requireAdmin();
   if (!guard.ok) return guard.res;
 
   await ensureSchema();

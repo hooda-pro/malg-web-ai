@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Check, Coins, Copy, ExternalLink, MessageCircle, X, Zap } from "lucide-react";
+import { useState } from "react";
+import { Check, Copy, MessageCircle, Zap } from "lucide-react";
 import { formatTokens } from "@/lib/ai";
 import type { SessionUser } from "@/lib/types";
 import {
@@ -11,35 +11,38 @@ import {
   RECHARGE_PACKAGES,
   type RechargePackage,
 } from "@/lib/recharge";
+import { Button, Dialog } from "./ui/Controls";
+import { cn } from "@/lib/utils";
+
+const STEPS = [
+  "اختار الباقة المناسبة ليك",
+  "واتساب هيفتح برسالة جاهزة فيها بيانات حسابك والباقة",
+  "ابعت الرسالة والدعم هيأكد معاك طريقة الدفع",
+  "بعد تأكيد الدفع الرصيد بيتضاف لحسابك على طول",
+];
+
+function perMillion(pkg: RechargePackage): number {
+  return Math.round((pkg.price / pkg.tokens) * 1_000_000);
+}
 
 /**
- * مودال شحن الرصيد للمستخدم — باقات التوكنز + زر تحويل على واتساب الدعم
- * بصيغة wa.me/<username> مع رسالة جاهزة فيها بيانات الحساب والباقة.
+ * شحن الرصيد: باقات توكنز + تحويل على واتساب الدعم برسالة جاهزة
+ * فيها بيانات الحساب والباقة المختارة.
  */
 export default function RechargeModal({
   user,
+  quota,
   onClose,
 }: {
   user: SessionUser | null;
+  quota: { total: number; used: number } | null;
   onClose: () => void;
 }) {
-  const [quota, setQuota] = useState<{ total: number; used: number } | null>(null);
+  const defaultPkg = RECHARGE_PACKAGES.find((p) => p.badge) ?? RECHARGE_PACKAGES[0];
+  const [selectedId, setSelectedId] = useState<string>(defaultPkg.id);
   const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      try {
-        const res = await fetch("/api/quota");
-        const data = await res.json();
-        if (data?.quota) {
-          setQuota({ total: data.quota.totalAllocatedTokens, used: data.quota.usedTokens });
-        }
-      } catch {
-        // تجاهل — الرصيد مش أساسي لعملية الشحن
-      }
-    })();
-  }, [user]);
+  const selected = RECHARGE_PACKAGES.find((p) => p.id === selectedId) ?? defaultPkg;
+  const basePerMillion = perMillion(RECHARGE_PACKAGES[0]);
 
   const openWhatsApp = (pkg: RechargePackage | null) => {
     const url = buildWhatsAppLink(buildRechargeMessage(pkg, user));
@@ -56,135 +59,129 @@ export default function RechargeModal({
     }
   };
 
+  const remaining = quota ? Math.max(quota.total - quota.used, 0) : null;
+
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4 py-6">
-      <div className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-lg border border-line2 bg-panel glow-green animate-slideUp">
-        {/* الهيدر */}
-        <div className="terminal-dots sticky top-0 z-10 flex items-center justify-between border-b border-line bg-panel px-3 py-2.5">
-          <div className="flex items-center gap-2">
-            <span className="flex gap-1">
-              <span className="h-2 w-2 rounded-full bg-rose/70" />
-              <span className="h-2 w-2 rounded-full bg-amber/70" />
-              <span className="h-2 w-2 rounded-full bg-green/70" />
-            </span>
-            <span className="mono text-[11px] text-txt3">recharge.sh — شحن الرصيد</span>
-          </div>
-          <button onClick={onClose} className="text-txt3 hover:text-txt">
-            <X size={16} />
-          </button>
-        </div>
-
-        <div className="px-4 py-4">
-          {/* الرصيد الحالي */}
-          {user ? (
-            <div className="mb-4 rounded-md border border-line bg-panel2 px-3 py-2.5">
-              <div className="mono flex items-center justify-between text-[11px]">
-                <span className="text-txt3">رصيدك الحالي</span>
-                <span className="text-txt">
-                  {quota
-                    ? `${formatTokens(quota.used)} / ${formatTokens(quota.total)}`
-                    : "جاري التحميل…"}
+    <Dialog
+      open
+      onClose={onClose}
+      size="md"
+      labelledBy="mlag-recharge-title"
+      title="شحن الرصيد"
+      subtitle="زوّد رصيد التوكنز بتاعك وكمّل شغلك من غير ما تستنى التجديد."
+      footer={
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="tnum text-[12.5px] text-ink-3">
+            {remaining !== null ? (
+              <>
+                رصيدك الحالي{" "}
+                <span className="font-semibold text-ink">{formatTokens(remaining)}</span>
+                {" → "}
+                <span className="font-semibold text-accent">
+                  {formatTokens(remaining + selected.tokens)}
                 </span>
-              </div>
-              {quota && (
-                <div className="mono mt-1 flex items-center justify-between text-[11px]">
-                  <span className="text-txt3">المتبقي</span>
-                  <span className="text-green">
-                    {formatTokens(Math.max(quota.total - quota.used, 0))}
-                  </span>
-                </div>
+              </>
+            ) : (
+              "سجّل دخول الأول عشان الشحن يتضاف لحسابك"
+            )}
+          </p>
+          <Button variant="primary" onClick={() => openWhatsApp(selected)} className="shrink-0">
+            <MessageCircle size={15} />
+            {`ادفع ${selected.price} جنيه عبر واتساب`}
+          </Button>
+        </div>
+      }
+    >
+      <div role="radiogroup" aria-label="الباقات" className="grid grid-cols-1 gap-2.5 pb-4 xs:grid-cols-2">
+        {RECHARGE_PACKAGES.map((pkg) => {
+          const active = pkg.id === selectedId;
+          const pm = perMillion(pkg);
+          const saving = Math.round(((basePerMillion - pm) / basePerMillion) * 100);
+          return (
+            <button
+              key={pkg.id}
+              role="radio"
+              aria-checked={active}
+              onClick={() => setSelectedId(pkg.id)}
+              className={cn(
+                "relative flex flex-col rounded-lg border bg-surface p-4 text-start shadow-1 transition-all duration-2 ease-soft",
+                active
+                  ? "border-accent shadow-[0_0_0_3.5px_var(--accent-soft)]"
+                  : "border-hair hover:border-hair-2"
               )}
-            </div>
-          ) : (
-            <p className="mb-4 rounded-md border border-cyan/30 bg-cyan/10 px-3 py-2 text-[11.5px] leading-5 text-cyan">
-              سجل دخول بحساب الأول، واشتري أي باقة — وهنشحنها لحسابك على طول.
-            </p>
-          )}
-
-          {/* الباقات */}
-          <div className="mb-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-            {RECHARGE_PACKAGES.map((pkg) => (
-              <div
-                key={pkg.id}
-                className={`relative flex flex-col rounded-lg border p-3 transition-colors ${
-                  pkg.badge ? "border-amber/40 bg-amber/[0.04]" : "border-line bg-panel2 hover:border-line2"
-                }`}
-              >
-                {pkg.badge && (
-                  <span className="absolute -top-2 start-3 rounded-full bg-amber px-2 py-0.5 text-[9px] font-bold text-black">
+            >
+              <span className="flex items-start justify-between gap-2">
+                <span className="text-[13px] font-medium text-ink-2">{pkg.label}</span>
+                <span
+                  className={cn(
+                    "grid h-5 w-5 shrink-0 place-items-center rounded-full border transition-colors duration-1",
+                    active ? "border-accent bg-accent text-accent-ink" : "border-hair-2"
+                  )}
+                  aria-hidden="true"
+                >
+                  {active && <Check size={12} strokeWidth={3} />}
+                </span>
+              </span>
+              <span className="mt-2 flex items-baseline gap-1.5">
+                <Zap size={14} className="self-center text-accent" />
+                <span className="tnum text-[24px] font-semibold leading-none tracking-display text-ink">
+                  {formatTokens(pkg.tokens)}
+                </span>
+                <span className="text-[12px] text-ink-3">توكنز</span>
+              </span>
+              <span className="mt-3 flex items-center justify-between gap-2 border-t border-hair pt-3">
+                <span className="tnum text-[15px] font-semibold text-ink">{pkg.price} جنيه</span>
+                {pkg.badge ? (
+                  <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent">
                     {pkg.badge}
                   </span>
+                ) : saving > 0 ? (
+                  <span className="tnum text-[11.5px] font-medium text-live">وفّر {saving}%</span>
+                ) : (
+                  <span className="tnum text-[11.5px] text-ink-3">{pm} ج / مليون</span>
                 )}
-                <div className="mb-1.5 flex items-center gap-2">
-                  <span className="text-lg">{pkg.emoji}</span>
-                  <span className="text-[13px] font-bold text-txt">{pkg.label}</span>
-                </div>
-                <p className="mb-2 text-[10.5px] leading-4 text-txt3">{pkg.hint}</p>
-                <div className="mono mb-3 mt-auto flex items-baseline justify-between">
-                  <span className="flex items-center gap-1 text-[12px] font-bold text-cyan">
-                    <Zap size={11} />
-                    {formatTokens(pkg.tokens)}
-                  </span>
-                  <span className="text-[14px] font-bold text-amber">{pkg.price} جنيه</span>
-                </div>
-                <button
-                  onClick={() => openWhatsApp(pkg)}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-md bg-green/15 py-2 text-[11.5px] font-bold text-green transition-colors hover:bg-green/25"
-                >
-                  <MessageCircle size={13} />
-                  اشحن عبر واتساب
-                </button>
-              </div>
-            ))}
-          </div>
-
-          {/* كمية مخصصة */}
-          <button
-            onClick={() => openWhatsApp(null)}
-            className="mb-4 flex w-full items-center justify-center gap-1.5 rounded-md border border-line2 py-2.5 text-[12px] text-txt2 transition-colors hover:border-cyan/40 hover:text-cyan"
-          >
-            <ExternalLink size={13} />
-            عايز كمية مخصصة؟ كلمنا واتساب
-          </button>
-
-          {/* خطوات الشحن */}
-          <div className="mb-4 rounded-md border border-line bg-panel2 px-3 py-3">
-            <p className="mb-2 flex items-center gap-1.5 text-[12px] font-bold text-txt">
-              <Coins size={13} className="text-amber" />
-              إزاي بتحصل على توكنزك؟
-            </p>
-            <ol className="space-y-1.5 text-[11px] leading-5 text-txt2">
-              <li>١. اختار الباقة المناسبة ودوس «اشحن عبر واتساب».</li>
-              <li>٢. هيفتحلك واتساب برسالة جاهزة فيها بيانات حسابك والباقة.</li>
-              <li>٣. ابعث الرسالة وهيتواصل معاك الدعم لتأكيد الدفع.</li>
-              <li>٤. أول ما يتأكد الدفع، رصيدك بيتضاف لحسابك فورًا 🎉</li>
-            </ol>
-          </div>
-
-          {/* يوزر الدعم — احتياط لو الرابط مشفتح عند حد */}
-          <div className="flex items-center justify-between rounded-md border border-line bg-panel2 px-3 py-2">
-            <span className="text-[11px] text-txt3">
-              يوزر واتساب الدعم:{" "}
-              <span className="mono font-bold text-green" dir="ltr">
-                @{WHATSAPP_USERNAME}
               </span>
-            </span>
-            <button
-              onClick={copyUsername}
-              title="نسخ اليوزر"
-              className="flex items-center gap-1 text-[11px] text-txt3 transition-colors hover:text-green"
-            >
-              {copied ? <Check size={12} className="text-green" /> : <Copy size={12} />}
-              {copied ? "اتنسخ" : "نسخ"}
             </button>
-          </div>
-
-          <p className="mt-2 text-center text-[10px] leading-4 text-txt3">
-            الشحن بيتضاف لحسابك يدويًا بعد تأكيد الدفع — لو الرابط مافتحش عندك، دوس «نسخ» ودور على
-            اليوزر في واتساب وابعتله.
-          </p>
-        </div>
+          );
+        })}
       </div>
-    </div>
+
+      <div className="mb-4 rounded-lg border border-hair bg-surface-2 p-4">
+        <p className="mb-3 text-[13px] font-semibold text-ink">إزاي الشحن بيتم؟</p>
+        <ol className="flex flex-col gap-2.5">
+          {STEPS.map((s, i) => (
+            <li key={s} className="flex items-start gap-3 text-[13px] leading-6 text-ink-2">
+              <span className="tnum mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-surface-3 text-[11px] font-semibold text-ink">
+                {i + 1}
+              </span>
+              {s}
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-[12.5px] text-ink-3">
+        <button
+          onClick={() => openWhatsApp(null)}
+          className="font-medium text-accent underline decoration-accent-line underline-offset-[3px] hover:decoration-accent"
+        >
+          محتاج كمية مخصصة؟ كلّمنا
+        </button>
+        <span className="inline-flex items-center gap-1.5">
+          واتساب الدعم
+          <span dir="ltr" className="font-mono text-ink-2">
+            @{WHATSAPP_USERNAME}
+          </span>
+          <button
+            onClick={copyUsername}
+            aria-label="نسخ يوزر الدعم"
+            title={copied ? "اتنسخ" : "نسخ"}
+            className="grid h-7 w-7 place-items-center rounded-full transition-colors duration-1 hover:bg-surface-3 hover:text-ink"
+          >
+            {copied ? <Check size={13} className="text-live" /> : <Copy size={13} />}
+          </button>
+        </span>
+      </div>
+    </Dialog>
   );
 }

@@ -5,7 +5,7 @@ import { requireAdmin } from "@/lib/adminGuard";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const guard = requireAdmin();
+  const guard = await requireAdmin();
   if (!guard.ok) return guard.res;
 
   await ensureSchema();

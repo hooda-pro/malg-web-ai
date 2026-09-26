@@ -36,7 +36,7 @@ function serializeKey(row: ApiKeyRowRaw) {
 
 /** GET: كل مفاتيح المستخدم الحالي + رصيد الـ API بتاعه */
 export async function GET() {
-  const user = getSessionUser();
+  const user = await getSessionUser();
   if (!user) {
     return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
   }
@@ -72,7 +72,7 @@ export async function GET() {
  * ومفيش أي راوت هيرجعه تاني كامل.
  */
 export async function POST(req: NextRequest) {
-  const user = getSessionUser();
+  const user = await getSessionUser();
   if (!user) {
     return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
   }
