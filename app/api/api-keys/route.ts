@@ -6,8 +6,11 @@ import { ensureUserApiQuota } from "@/lib/apiQuota";
 
 export const dynamic = "force-dynamic";
 
-/** لازم تتطابق مع الموديلات المتاحة في components/SettingsContext.tsx و lib/ai.ts */
-const VALID_MODEL_IDS = new Set(["malg-2", "malg-2.1", "malg-2.2"]);
+/** لازم تتطابق مع الموديلات المتاحة في components/SettingsContext.tsx و lib/ai.ts.
+ * بعد الدمج بقى فيه موديل واحد بس (Malg-A3)، بس بنسيب القيم القديمة هنا كمان
+ * عشان مفاتيح API القديمة اللي متسجلة عليها ما تبقاش "غير صالحة" فجأة —
+ * lib/ai.ts بيحول أي قيمة منهم تلقائيًا لـ Malg-A3 وقت التنفيذ الفعلي. */
+const VALID_MODEL_IDS = new Set(["malg-a3", "malg-2", "malg-2.1", "malg-2.2"]);
 const MAX_LABEL_LENGTH = 60;
 /** حد أقصى معقول لعدد المفاتيح النشطة لكل مستخدم — يمنع إنشاء مفاتيح بلا داعي */
 const MAX_ACTIVE_KEYS_PER_USER = 20;

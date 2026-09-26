@@ -30,12 +30,10 @@ import { useSettings } from "./SettingsContext";
 import { formatDateTime, timeAgo } from "./admin/helpers";
 import { cn } from "@/lib/utils";
 
-type ModelId = "malg-2" | "malg-2.1" | "malg-2.2";
+type ModelId = "malg-a3";
 
 const API_MODELS: { id: ModelId; hint: string; recommended?: boolean }[] = [
-  { id: "malg-2", hint: "الموديل الأساسي — سريع ومتوازن", recommended: true },
-  { id: "malg-2.1", hint: "موديل تجريبي جديد" },
-  { id: "malg-2.2", hint: "تجريبي — أداء أقوى في مهام معينة" },
+  { id: "malg-a3", hint: "الموديل الموحّد — بيدمج كل المزوّدين الداخليين في نموذج واحد", recommended: true },
 ];
 
 interface ApiKeyRow {
@@ -90,7 +88,7 @@ client = OpenAI(
 )
 
 res = client.chat.completions.create(
-    model="malg-2",
+    model="malg-a3",
     messages=[{"role": "user", "content": "أهلاً"}],
 )
 print(res.choices[0].message.content)`,
@@ -106,7 +104,7 @@ const client = new OpenAI({
 });
 
 const res = await client.chat.completions.create({
-  model: "malg-2",
+  model: "malg-a3",
   messages: [{ role: "user", content: "أهلاً" }],
 });
 console.log(res.choices[0].message.content);`,
@@ -116,7 +114,7 @@ console.log(res.choices[0].message.content);`,
         code: `API Provider   OpenAI Compatible
 Base URL       ${url}
 API Key        <مفتاحك>
-Model ID       malg-2`,
+Model ID       malg-a3`,
         note: "من إعدادات Cline في VS Code أو JetBrains. اسم الـ Model ID شكلي بس — الموديل محدد من المفتاح.",
       };
     case "opencode":
@@ -127,16 +125,16 @@ Model ID       malg-2`,
       "npm": "@ai-sdk/openai-compatible",
       "name": "mlag AI",
       "options": { "baseURL": "${url}" },
-      "models": { "malg-2": {} }
+      "models": { "malg-a3": {} }
     }
   }
 }`,
-        note: "حطه في opencode.json، وبعدين opencode auth login ← Other ← اكتب mlag ← الصق مفتاحك، واختار mlag/malg-2 من /models.",
+        note: "حطه في opencode.json، وبعدين opencode auth login ← Other ← اكتب mlag ← الصق مفتاحك، واختار mlag/malg-a3 من /models.",
       };
     case "codex":
       return {
         code: `# ~/.codex/config.toml
-model = "malg-2"
+model = "malg-a3"
 model_provider = "mlag"
 
 [model_providers.mlag]
@@ -177,7 +175,7 @@ export default function ApiKeysPage() {
 
   const [showCreate, setShowCreate] = useState(false);
   const [newLabel, setNewLabel] = useState("");
-  const [newModelId, setNewModelId] = useState<ModelId>("malg-2");
+  const [newModelId, setNewModelId] = useState<ModelId>("malg-a3");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -302,7 +300,7 @@ export default function ApiKeysPage() {
   const openCreate = () => {
     setCreateError(null);
     setNewLabel("");
-    setNewModelId("malg-2");
+    setNewModelId("malg-a3");
     setShowCreate(true);
   };
 

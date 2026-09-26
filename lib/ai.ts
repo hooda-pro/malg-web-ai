@@ -21,14 +21,24 @@ const XKIRO_MODEL = "qwen/qwen3.8-max:free";
 // حد الإخراج الحقيقي لـ Qwen3.8 Max هو 131,072 توكن — نفس منطق GLM فوق.
 const XKIRO_MAX_TOKENS = 128000;
 
-/** الموديلات المتاحة للمستخدم من الواجهة — لازم تتطابق مع components/SettingsContext.tsx */
-export type ModelId = "malg-2" | "malg-2.1" | "malg-2.2";
-export const DEFAULT_MODEL: ModelId = "malg-2";
+/**
+ * الموديل المتاح للمستخدم من الواجهة — لازم يتطابق مع components/SettingsContext.tsx
+ *
+ * ملحوظة دمج مهمة: كان عندنا 3 موديلات منفصلة يختارهم المستخدم من القايمة
+ * (malg-2 / malg-2.1 / malg-2.2)، كل واحد فيهم فعليًا مزوّد خارجي مختلف
+ * (GLM / OpenRouter / xKiro). دلوقتي اتدمجوا كلهم في موديل واحد بس بره،
+ * اسمه "Malg-A3"، وبقى هو الموديل الافتراضي والوحيد. جوه، هو مش بيلغي
+ * المزوّدين التلاتة — العكس: بيستخدمهم التلاتة مع بعض كسلسلة fallback واحدة
+ * (شوف negotiateMalgA3 تحت) عشان المستخدم ياخد رد فعلي دايمًا حتى لو مزوّد
+ * واحد وقع، من غير ما يحتاج يختار موديل تاني بنفسه يدويًا زي الأول.
+ */
+export type ModelId = "malg-a3";
+export const DEFAULT_MODEL: ModelId = "malg-a3";
 
-export function normalizeModelId(raw: unknown): ModelId {
-  if (raw === "malg-2.1") return "malg-2.1";
-  if (raw === "malg-2.2") return "malg-2.2";
-  return "malg-2";
+/** لسه بتقبل القيم القديمة (malg-2 / malg-2.1 / malg-2.2) من جلسات/localStorage
+ * قديمة قبل الدمج، وبترجعها كلها لنفس الموديل الموحّد الجديد. */
+export function normalizeModelId(_raw: unknown): ModelId {
+  return "malg-a3";
 }
 
 export interface ApiMessage {
@@ -654,18 +664,48 @@ async function negotiateXkiro(
 }
 
 /**
- * نقطة الدخول الموحدة: بتوجه الطلب لموديل malg-2 (GLM) أو malg-2.1 (OpenRouter)
- * أو malg-2.2 (xKiro) حسب اختيار المستخدم من قايمة الموديلات فوق في الواجهة.
+ * Malg-A3 — الموديل الموحّد الجديد بعد دمج الثلاثة موديلات القديمة
+ * (malg-2 / malg-2.1 / malg-2.2) في هوية واحدة بره.
  *
- * ملحوظة مهمة (السبب الحقيقي وراء "malg-2.1 بطل يكتب" اللي ظهر في اللوج):
- * minimax-m3:free على OpenRouter ليه سقف طلبات يومي (limit_rpd) مش لحظي —
- * لما السقف اليومي يخلص، كل مفاتيحنا بترجع 429 مهما جربنا نعيد المحاولة أو
- * ندور مفاتيح، والمستخدم كان بياخد رسالة خطأ ويقف بلا رد خالص. بما إن هوية
- * "mlag" اللي المستخدم بيتكلم معاها واحدة بغض النظر عن المزوّد الحقيقي تحتها
- * (شوف lib/systemPrompt.ts)، لما malg-2.1 أو malg-2.2 يفشلوا فشل كامل (كل
- * المفاتيح خلصت/اتقفلت)، بنرجع تلقائيًا لموديل malg-2 (GLM) — اللي فيه أصلاً
- * منطق fallback داخلي لنفسه — عشان المستخدم ياخد رد فعلي دايمًا بدل ما يوصله
- * خطأ من غير أي تفسير واضح.
+ * جوه، بيجرب المزوّدين التلاتة بالترتيب ده كسلسلة fallback واحدة متصلة:
+ *   1) GLM   (كان malg-2)   — أعلى استقرارًا، وله fallback داخلي لموديل مجاني
+ *      لو الموديل الأساسي فشل (شوف negotiateGLM فوق).
+ *   2) OpenRouter/minimax (كان malg-2.1) — تجربة لو GLM فشل بالكامل.
+ *   3) xKiro/Qwen (كان malg-2.2) — آخر محاولة لو الاتنين اللي قبله فشلوا.
+ *
+ * لو الثلاثة فشلوا، بترجع رسالة الخطأ بتاعت آخر مزوّد اتجرب (GLM عادةً، لأنه
+ * أكتر مزوّد فيه تفاصيل واضحة عن سبب الفشل). المستخدم مش بيشوف أي اسم مزوّد
+ * في أي حالة — بالنسبة له فيه موديل واحد بس اسمه Malg-A3.
+ */
+async function negotiateMalgA3(
+  apiMessages: ApiMessage[],
+  signal: AbortSignal,
+  options: NegotiateOptions = {}
+): Promise<NegotiationResult> {
+  const glmResult = await negotiateGLM(apiMessages, signal, options);
+  if (glmResult.ok) return glmResult;
+  console.error("[Malg-A3] المزوّد الأول (GLM) فشل بالكامل — بنجرب المزوّد التاني:", glmResult.errorMessage);
+
+  const openRouterResult = await negotiateOpenRouter(apiMessages, signal, options);
+  if (openRouterResult.ok) return openRouterResult;
+  console.error(
+    "[Malg-A3] المزوّد التاني (OpenRouter) فشل بالكامل — بنجرب المزوّد التالت:",
+    openRouterResult.errorMessage
+  );
+
+  const xkiroResult = await negotiateXkiro(apiMessages, signal, options);
+  if (xkiroResult.ok) return xkiroResult;
+  console.error("[Malg-A3] المزوّد التالت (xKiro) فشل بالكامل كمان:", xkiroResult.errorMessage);
+
+  // الثلاثة فشلوا — نرجّع رسالة GLM لأنها الأكتر تفصيلًا ووضوحًا للمستخدم.
+  return glmResult;
+}
+
+/**
+ * نقطة الدخول الموحدة: بما إن الموديل بقى واحد بس (Malg-A3) بعد الدمج،
+ * الباراميتر modelId اتسيب هنا للتوافق مع أي كود قديم (سيرفرات API عامة
+ * قديمة، جلسات محفوظة) بيبعت قيمة موديل، لكنه اتجاهل فعليًا — كل طلب بيتوجه
+ * لـ negotiateMalgA3 اللي بيدمج المزوّدين التلاتة تلقائيًا في سلسلة واحدة.
  */
 export async function negotiateUpstream(
   apiMessages: ApiMessage[],
@@ -673,17 +713,6 @@ export async function negotiateUpstream(
   modelId: ModelId = DEFAULT_MODEL,
   options: NegotiateOptions = {}
 ): Promise<NegotiationResult> {
-  if (modelId === "malg-2.1") {
-    const result = await negotiateOpenRouter(apiMessages, signal, options);
-    if (result.ok) return result;
-    console.error("[mlag] malg-2.1 (provider A) فشل بالكامل — رجعنا لـ malg-2:", result.errorMessage);
-    return negotiateGLM(apiMessages, signal, options);
-  }
-  if (modelId === "malg-2.2") {
-    const result = await negotiateXkiro(apiMessages, signal, options);
-    if (result.ok) return result;
-    console.error("[mlag] malg-2.2 (provider C) فشل بالكامل — رجعنا لـ malg-2:", result.errorMessage);
-    return negotiateGLM(apiMessages, signal, options);
-  }
-  return negotiateGLM(apiMessages, signal, options);
+  void modelId;
+  return negotiateMalgA3(apiMessages, signal, options);
 }

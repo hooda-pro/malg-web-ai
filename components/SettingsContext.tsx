@@ -5,18 +5,17 @@ import type { ReactNode } from "react";
 import { translate, type Lang } from "@/lib/i18n";
 
 export type Theme = "system" | "light" | "dark";
-export type ModelId = "malg-2" | "malg-2.1" | "malg-2.2";
+/** بعد الدمج، الموديلات القديمة (malg-2 / malg-2.1 / malg-2.2) بقت موديل واحد
+ * اسمه Malg-A3 — بيجرب كل المزوّدين القدامى تلقائيًا من وراء الكواليس (شوف
+ * negotiateUpstream في lib/ai.ts) من غير ما المستخدم يختار بينهم يدويًا. */
+export type ModelId = "malg-a3";
 
 export const AVAILABLE_MODELS: {
   id: ModelId;
   label: string;
   hintKey: string;
   badgeKey?: string;
-}[] = [
-  { id: "malg-2", label: "malg-2", hintKey: "model2Hint" },
-  { id: "malg-2.1", label: "malg-2.1", hintKey: "model21Hint", badgeKey: "modelBadgeBeta" },
-  { id: "malg-2.2", label: "malg-2.2", hintKey: "model22Hint", badgeKey: "modelBadgeBeta" },
-];
+}[] = [{ id: "malg-a3", label: "Malg-A3", hintKey: "modelA3Hint" }];
 
 export const CUSTOM_INSTRUCTIONS_MAX = 1500;
 
@@ -39,7 +38,7 @@ const DEFAULTS: Settings = {
   theme: "system",
   animations: true,
   showTime: true,
-  model: "malg-2",
+  model: "malg-a3",
   enterToSend: true,
   customInstructions: "",
   nickname: "",
@@ -76,6 +75,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<Settings>;
+        // ترحيل: أي إعداد قديم متخزّن (من قبل دمج الموديلات) بقيمة موديل غير
+        // "malg-a3" (زي malg-2 / malg-2.1 / malg-2.2) بيتحول تلقائيًا للموديل
+        // الموحّد الجديد، عشان القايمة في الإعدادات ما تفضلش فاضية.
+        if (parsed.model && parsed.model !== "malg-a3") {
+          parsed.model = "malg-a3";
+        }
         setSettings((prev) => ({ ...prev, ...parsed }));
       }
     } catch {
