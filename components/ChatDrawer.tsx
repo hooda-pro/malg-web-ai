@@ -1,18 +1,6 @@
 "use client";
 
-import {
-  Code2,
-  LogIn,
-  LogOut,
-  MessageSquare,
-  Plus,
-  Settings2,
-  ShieldCheck,
-  Trash2,
-  Wallet,
-  X,
-} from "lucide-react";
-import Link from "next/link";
+import { LayoutDashboard, LogIn, LogOut, MessageSquare, Plus, Settings2, ShieldCheck, Trash2, X } from "lucide-react";
 import type { ChatSession, SessionUser } from "@/lib/types";
 import { formatTime } from "@/lib/utils";
 import { Button, IconButton } from "./ui/Controls";
@@ -157,36 +145,15 @@ export default function ChatDrawer({
         )}
 
         <div className="border-t border-hair p-3">
-          {/* روابط سريعة — واجهة المطوّرين، شحن الرصيد، ولوحة الأدمن للأدمن بس */}
-          <nav className="mb-2 space-y-0.5">
-            <Link
-              href="/developers"
-              onClick={onClose}
-              className="flex items-center gap-2.5 rounded-md px-2 py-2 text-[13px] text-ink-2 transition-colors duration-1 hover:bg-surface-3 hover:text-ink"
+          {user?.isAdmin && (
+            <a
+              href="/#/admin"
+              className="mb-1.5 flex items-center gap-2.5 rounded-md px-2 py-2 text-[13px] font-medium text-ink-2 transition-colors duration-1 hover:bg-surface-3 hover:text-ink"
             >
-              <Code2 size={15} className="shrink-0" />
-              واجهة المطوّرين · API
-            </Link>
-            <Link
-              href="/topup"
-              onClick={onClose}
-              className="flex items-center gap-2.5 rounded-md px-2 py-2 text-[13px] text-ink-2 transition-colors duration-1 hover:bg-surface-3 hover:text-ink"
-            >
-              <Wallet size={15} className="shrink-0" />
-              شحن الرصيد
-            </Link>
-            {user?.isAdmin && (
-              <Link
-                href="/admin"
-                onClick={onClose}
-                className="flex items-center gap-2.5 rounded-md px-2 py-2 text-[13px] text-ink-2 transition-colors duration-1 hover:bg-surface-3 hover:text-ink"
-              >
-                <ShieldCheck size={15} className="shrink-0 text-accent" />
-                لوحة التحكم
-              </Link>
-            )}
-          </nav>
-
+              <LayoutDashboard size={15} className="shrink-0 text-accent" />
+              {t("drawerAdmin")}
+            </a>
+          )}
           {user ? (
             <div className="flex items-center gap-1">
               <button

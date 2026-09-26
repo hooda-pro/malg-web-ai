@@ -2,61 +2,82 @@ import { NextResponse } from "next/server";
 import { sql, ensureSchema } from "@/lib/db";
 import { requireAdmin } from "@/lib/adminGuard";
 
-/** أرقام لوحة الأدمن: عدد المستخدمين، الجلسات، التوكنز المستهلكة، وآخر ٧ أيام. */
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const guard = requireAdmin();
   if (!guard.ok) return guard.res;
 
   await ensureSchema();
 
-  const [counts] = await sql`
+  const userRows = (await sql`
     SELECT
-      (SELECT COUNT(*)::int FROM users) AS users,
-      (SELECT COUNT(*)::int FROM users WHERE is_admin = TRUE) AS admins,
-      (SELECT COUNT(*)::int FROM users WHERE created_at >= now() - interval '7 days') AS new_users,
-      (SELECT COUNT(*)::int FROM chat_sessions) AS sessions,
-      (SELECT COUNT(*)::int FROM chat_messages) AS messages,
-      (SELECT COUNT(*)::int FROM api_keys WHERE is_active = TRUE) AS active_keys,
-      (SELECT COALESCE(SUM(used_tokens), 0)::int FROM user_quota) AS chat_tokens_used,
-      (SELECT COALESCE(SUM(total_allocated_tokens), 0)::int FROM user_quota) AS chat_tokens_allocated,
-      (SELECT COALESCE(SUM(used_tokens), 0)::int FROM user_api_quota) AS api_tokens_used,
-      (SELECT COALESCE(SUM(total_allocated_tokens), 0)::int FROM user_api_quota) AS api_tokens_allocated
-  `;
+      COUNT(*)::int AS total_users,
+      COUNT(*) FILTER (WHERE is_banned)::int AS banned_users,
+      COUNT(*) FILTER (WHERE is_admin)::int AS admin_users,
+      COUNT(*) FILTER (WHERE created_at > now() - interval '24 hours')::int AS new_today,
+      COUNT(*) FILTER (WHERE created_at > now() - interval '7 days')::int AS new_week
+    FROM users
+  `)[0] as {
+    total_users: number;
+    banned_users: number;
+    admin_users: number;
+    new_today: number;
+    new_week: number;
+  };
 
-  // استهلاك التوكنز لكل يوم في آخر ٧ أيام (الرسم البياني)
-  const daily = await sql`
+  const chatRows = (await sql`
     SELECT
-      to_char(d.day, 'YYYY-MM-DD') AS day,
-      COALESCE(SUM(m.tokens_used), 0)::int AS tokens
-    FROM generate_series(
-      (now() - interval '6 days')::date,
-      now()::date,
-      interval '1 day'
-    ) AS d(day)
-    LEFT JOIN chat_messages m
-      ON m.created_at >= d.day
-     AND m.created_at < d.day + interval '1 day'
-    GROUP BY d.day
-    ORDER BY d.day ASC
-  `;
+      (SELECT COUNT(*)::int FROM chat_sessions) AS total_sessions,
+      (SELECT COUNT(*)::int FROM chat_messages) AS total_messages,
+      (SELECT COALESCE(SUM(total_allocated_tokens), 0) FROM user_quota) AS total_allocated,
+      (SELECT COALESCE(SUM(used_tokens), 0) FROM user_quota) AS total_used
+  `)[0] as {
+    total_sessions: number;
+    total_messages: number;
+    total_allocated: unknown;
+    total_used: unknown;
+  };
 
-  const c = (counts ?? {}) as Record<string, unknown>;
+  const topUsers = (await sql`
+    SELECT u.id, u.display_name, u.email, q.used_tokens, q.total_allocated_tokens
+    FROM users u
+    JOIN user_quota q ON q.user_id = u.id
+    ORDER BY q.used_tokens DESC
+    LIMIT 5
+  `) as { id: string; display_name: string; email: string; used_tokens: unknown; total_allocated_tokens: unknown }[];
+
+  const recentUsers = (await sql`
+    SELECT id, display_name, email, created_at
+    FROM users
+    ORDER BY created_at DESC
+    LIMIT 6
+  `) as { id: string; display_name: string; email: string; created_at: string }[];
+
   return NextResponse.json({
     stats: {
-      users: Number(c.users ?? 0),
-      admins: Number(c.admins ?? 0),
-      newUsers: Number(c.new_users ?? 0),
-      sessions: Number(c.sessions ?? 0),
-      messages: Number(c.messages ?? 0),
-      activeKeys: Number(c.active_keys ?? 0),
-      chatTokensUsed: Number(c.chat_tokens_used ?? 0),
-      chatTokensAllocated: Number(c.chat_tokens_allocated ?? 0),
-      apiTokensUsed: Number(c.api_tokens_used ?? 0),
-      apiTokensAllocated: Number(c.api_tokens_allocated ?? 0),
+      totalUsers: Number(userRows?.total_users ?? 0),
+      bannedUsers: Number(userRows?.banned_users ?? 0),
+      adminUsers: Number(userRows?.admin_users ?? 0),
+      newToday: Number(userRows?.new_today ?? 0),
+      newWeek: Number(userRows?.new_week ?? 0),
+      totalSessions: Number(chatRows?.total_sessions ?? 0),
+      totalMessages: Number(chatRows?.total_messages ?? 0),
+      totalAllocated: Number(chatRows?.total_allocated ?? 0),
+      totalUsed: Number(chatRows?.total_used ?? 0),
+      topUsers: topUsers.map((r) => ({
+        id: r.id,
+        displayName: r.display_name,
+        email: r.email,
+        usedTokens: Number(r.used_tokens ?? 0),
+        totalAllocatedTokens: Number(r.total_allocated_tokens ?? 0),
+      })),
+      recentUsers: recentUsers.map((r) => ({
+        id: r.id,
+        displayName: r.display_name,
+        email: r.email,
+        createdAt: r.created_at,
+      })),
     },
-    daily: daily.map((r) => {
-      const row = r as Record<string, unknown>;
-      return { day: String(row.day), tokens: Number(row.tokens ?? 0) };
-    }),
   });
 }

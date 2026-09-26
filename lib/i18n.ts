@@ -120,6 +120,19 @@ const ar: Dict = {
   hidePassword: "إخفاء كلمة المرور",
   runnerTitle: "بيئة تشغيل الكود",
   runnerLanguage: "لغة الكود",
+  authWelcomeTitle: "أهلاً بيك في mlag AI",
+  authProfileTitle: "كمّل بياناتك",
+  authProfileHint: "خطوة أخيرة بسيطة قبل ما تبدأ.",
+  authGoogleHint: "سجّل دخولك بحساب جوجل — مفيش تسجيل بالبريد وكلمة السر، بسرعة وأمان.",
+  btnGoogle: "المتابعة بحساب Google",
+  errGoogle: "تعذر تسجيل الدخول بجوجل، حاول تاني",
+  errAge: "يرجى إدخال عمر صحيح بين 8 و120 سنة",
+  btnContinue: "متابعة",
+  phAge: "عمرك",
+  topbarApi: "واجهة API للمطورين",
+  topbarRecharge: "شحن الرصيد",
+  topbarRechargeShort: "شحن",
+  drawerAdmin: "لوحة الإدارة",
 };
 
 const en: Dict = {
@@ -228,6 +241,19 @@ const en: Dict = {
   hidePassword: "Hide password",
   runnerTitle: "Code runner",
   runnerLanguage: "Code language",
+  authWelcomeTitle: "Welcome to mlag AI",
+  authProfileTitle: "Finish your profile",
+  authProfileHint: "One last quick step before you start.",
+  authGoogleHint: "Sign in with your Google account — no email or password needed, fast and secure.",
+  btnGoogle: "Continue with Google",
+  errGoogle: "Couldn't sign in with Google, try again",
+  errAge: "Please enter a valid age between 8 and 120",
+  btnContinue: "Continue",
+  phAge: "Your age",
+  topbarApi: "Developer API",
+  topbarRecharge: "Recharge balance",
+  topbarRechargeShort: "Recharge",
+  drawerAdmin: "Admin panel",
 };
 
 const fr: Dict = {
@@ -336,6 +362,19 @@ const fr: Dict = {
   hidePassword: "Masquer le mot de passe",
   runnerTitle: "Exécuteur de code",
   runnerLanguage: "Langage du code",
+  authWelcomeTitle: "Bienvenue sur mlag AI",
+  authProfileTitle: "Complétez votre profil",
+  authProfileHint: "Une dernière petite étape avant de commencer.",
+  authGoogleHint: "Connectez-vous avec votre compte Google — pas besoin d'e-mail ni de mot de passe.",
+  btnGoogle: "Continuer avec Google",
+  errGoogle: "Échec de la connexion avec Google, réessayez",
+  errAge: "Veuillez entrer un âge valide entre 8 et 120 ans",
+  btnContinue: "Continuer",
+  phAge: "Votre âge",
+  topbarApi: "API pour développeurs",
+  topbarRecharge: "Recharger le solde",
+  topbarRechargeShort: "Recharger",
+  drawerAdmin: "Panneau d'administration",
 };
 
 const es: Dict = {
@@ -444,6 +483,19 @@ const es: Dict = {
   hidePassword: "Ocultar contraseña",
   runnerTitle: "Ejecutor de código",
   runnerLanguage: "Lenguaje del código",
+  authWelcomeTitle: "Bienvenido a mlag AI",
+  authProfileTitle: "Completa tu perfil",
+  authProfileHint: "Un último paso rápido antes de empezar.",
+  authGoogleHint: "Inicia sesión con tu cuenta de Google — sin correo ni contraseña, rápido y seguro.",
+  btnGoogle: "Continuar con Google",
+  errGoogle: "No se pudo iniciar sesión con Google, inténtalo de nuevo",
+  errAge: "Introduce una edad válida entre 8 y 120 años",
+  btnContinue: "Continuar",
+  phAge: "Tu edad",
+  topbarApi: "API para desarrolladores",
+  topbarRecharge: "Recargar saldo",
+  topbarRechargeShort: "Recargar",
+  drawerAdmin: "Panel de administración",
 };
 
 export const DICT: Record<Lang, Dict> = { ar, en, fr, es };

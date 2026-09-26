@@ -20,6 +20,21 @@
 | `JWT_SECRET` | نص عشوائي طويل وسري لتوقيع جلسات الدخول |
 | `MLAG_API_KEY` | مفتاح API بتاع GLM (من bigmodel.cn) |
 | `MLAG_MODEL` | (اختياري) اسم الموديل، افتراضيًا `glm-4.7-flash` |
+| `ADMIN_EMAIL` | إيميل حساب الأدمن الافتراضي (بيتعمل تلقائيًا أول مرة) |
+| `ADMIN_PASSWORD` | باسورد حساب الأدمن (12 حرف على الأقل) — تسجيل دخول الأدمن بس، مش المستخدمين العاديين |
+| `NEXT_PUBLIC_FIREBASE_API_KEY` | من Firebase Console > Project settings > Web app |
+| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | نفس المكان فوق |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | نفس المكان فوق |
+| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | نفس المكان فوق |
+| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | نفس المكان فوق |
+| `NEXT_PUBLIC_FIREBASE_APP_ID` | نفس المكان فوق |
+| `FIREBASE_PROJECT_ID` | من ملف Service Account (Firebase Console > Service accounts) |
+| `FIREBASE_CLIENT_EMAIL` | نفس ملف الـ Service Account |
+| `FIREBASE_PRIVATE_KEY` | نفس ملف الـ Service Account — خلي الأسطر الجديدة `\n` زي ما هي |
+
+> تسجيل حساب جديد للمستخدمين العاديين بقى عن طريق Google فقط (لازم تفعّل Google
+> Sign-In في Firebase Console > Authentication > Sign-in method). حساب الأدمن لوحده
+> بيسجل دخول بإيميل/باسورد عادي من `/#/admin`.
 
 الجداول بتتنشئ تلقائيًا في أول طلب يوصل للسيرفر (مفيش سكريبت لازم تشغّله يدويًا).
 

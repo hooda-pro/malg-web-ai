@@ -1,6 +1,6 @@
 "use client";
 
-import { Moon, PanelRight, Settings2, Sparkles, Sun, Zap } from "lucide-react";
+import { Code2, Coins, Moon, PanelRight, Settings2, Sparkles, Sun, Zap } from "lucide-react";
 import { formatTokens } from "@/lib/ai";
 import { IconButton } from "./ui/Controls";
 import { useSettings } from "./SettingsContext";
@@ -11,11 +11,13 @@ export default function TopBar({
   remainingTokens,
   onOpenRunner,
   onOpenSettings,
+  onOpenRecharge,
 }: {
   onToggleDrawer: () => void;
   remainingTokens: number | null;
   onOpenRunner: () => void;
   onOpenSettings: () => void;
+  onOpenRecharge: () => void;
 }) {
   const { t, theme, setTheme } = useSettings();
   const isDark = theme === "dark";
@@ -50,6 +52,21 @@ export default function TopBar({
             <span className="tnum text-[12px] font-medium">{formatTokens(remainingTokens)}</span>
           </div>
         )}
+
+        <IconButton label={t("topbarRecharge")} onClick={onOpenRecharge}>
+          <Coins size={17} />
+        </IconButton>
+
+        <a
+          href="/#/api"
+          title={t("topbarApi")}
+          className={cn(
+            "grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-2",
+            "transition-colors duration-1 ease-soft hover:bg-surface-2 hover:text-ink"
+          )}
+        >
+          <Code2 size={17} />
+        </a>
 
         <IconButton
           label={t("topbarTheme")}

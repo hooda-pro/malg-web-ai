@@ -10,6 +10,7 @@ import ChatDrawer from "./ChatDrawer";
 import MessageList from "./MessageList";
 import BottomInputBar from "./BottomInputBar";
 import AuthModal from "./AuthModal";
+import RechargeModal from "./RechargeModal";
 import CodeRunnerModal from "./CodeRunnerModal";
 import ArtifactPanel from "./ArtifactPanel";
 import SettingsModal from "./SettingsModal";
@@ -45,6 +46,7 @@ export default function ChatShell() {
   const [authChecked, setAuthChecked] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showRecharge, setShowRecharge] = useState(false);
 
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -136,7 +138,7 @@ export default function ChatShell() {
         const res = await fetch("/api/auth/me");
         const data = await res.json();
         setUser(data.user || null);
-        if (!data.user) setShowAuthModal(true);
+        if (!data.user || data.user.profileComplete === false) setShowAuthModal(true);
       } finally {
         setAuthChecked(true);
       }
@@ -451,6 +453,7 @@ export default function ChatShell() {
           remainingTokens={remainingTokens}
           onOpenRunner={openRunnerDemo}
           onOpenSettings={() => setShowSettings(true)}
+          onOpenRecharge={() => setShowRecharge(true)}
         />
 
         <MessageList
@@ -486,7 +489,15 @@ export default function ChatShell() {
       )}
 
       {showAuthModal && (
-        <AuthModal onClose={() => setShowAuthModal(false)} onAuthenticated={handleAuthenticated} />
+        <AuthModal
+          pendingUser={user && user.profileComplete === false ? user : null}
+          onClose={() => setShowAuthModal(false)}
+          onAuthenticated={handleAuthenticated}
+        />
+      )}
+
+      {showRecharge && user && (
+        <RechargeModal user={user} onClose={() => setShowRecharge(false)} />
       )}
 
       {runnerOpen && (
