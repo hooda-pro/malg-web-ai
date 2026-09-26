@@ -8,7 +8,7 @@ import {
   MessageSquare,
   ScrollText,
   ShieldCheck,
-  Terminal,
+  Sparkles,
   Users,
   XCircle,
 } from "lucide-react";
@@ -58,14 +58,18 @@ export default function AdminPanel({
   }, []);
 
   return (
-    <div className="flex h-[100dvh] overflow-hidden bg-bg text-txt">
+    <div className="flex h-[100dvh] overflow-hidden bg-ground text-ink">
       {/* ——— القايمة الجانبية ——— */}
-      <aside className="flex w-16 shrink-0 flex-col border-l border-line bg-panel md:w-60">
-        <div className="flex items-center justify-center gap-2 border-b border-line px-3 py-4 md:justify-start md:px-4">
-          <Terminal size={20} className="shrink-0 text-green" />
+      <aside className="flex w-16 shrink-0 flex-col border-l border-hair bg-surface md:w-60">
+        <div className="flex items-center justify-center gap-2.5 border-b border-hair px-3 py-4 md:justify-start md:px-4">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-accent text-accent-ink shadow-accent">
+            <Sparkles size={16} />
+          </span>
           <div className="hidden md:block">
-            <p className="mono text-[13px] font-bold leading-tight text-txt">mlag ADMIN</p>
-            <p className="mono text-[10px] leading-tight text-txt3">لوحة الإدارة</p>
+            <p className="text-[13px] font-semibold leading-tight tracking-title text-ink">
+              mlag admin
+            </p>
+            <p className="text-[11px] leading-tight text-ink-3">لوحة الإدارة</p>
           </div>
         </div>
 
@@ -80,10 +84,10 @@ export default function AdminPanel({
                   if (id !== "users") setSelectedUserId(null);
                 }}
                 title={label}
-                className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-[12.5px] transition-colors md:px-3 ${
+                className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-colors duration-1 md:px-3 ${
                   active
-                    ? "bg-green/10 font-bold text-green"
-                    : "text-txt2 hover:bg-panel3 hover:text-txt"
+                    ? "bg-accent-soft font-medium text-accent"
+                    : "text-ink-2 hover:bg-surface-3 hover:text-ink"
                 }`}
               >
                 <Icon size={17} className="shrink-0" />
@@ -93,11 +97,11 @@ export default function AdminPanel({
           })}
         </nav>
 
-        <div className="space-y-1 border-t border-line px-2 py-3">
+        <div className="space-y-1 border-t border-hair px-2 py-3">
           <a
             href="/#"
             title="رجوع للموقع"
-            className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-[12.5px] text-txt2 transition-colors hover:bg-panel3 hover:text-txt md:px-3"
+            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-ink-2 transition-colors duration-1 hover:bg-surface-3 hover:text-ink md:px-3"
           >
             <MessageSquare size={17} className="shrink-0" />
             <span className="hidden md:inline">رجوع للموقع</span>
@@ -105,7 +109,7 @@ export default function AdminPanel({
           <button
             onClick={onLogout}
             title="تسجيل خروج الأدمن"
-            className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-[12.5px] text-txt2 transition-colors hover:bg-rose/10 hover:text-rose md:px-3"
+            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-ink-2 transition-colors duration-1 hover:bg-danger-soft hover:text-danger md:px-3"
           >
             <LogOut size={17} className="shrink-0" />
             <span className="hidden md:inline">خروج</span>
@@ -115,16 +119,16 @@ export default function AdminPanel({
 
       {/* ——— المحتوى ——— */}
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-line bg-panel/60 px-4 py-3 md:px-6">
-          <h1 className="mono text-sm font-bold text-txt">
+        <header className="flex items-center justify-between border-b border-hair bg-surface/70 px-4 py-3 md:px-6">
+          <h1 className="text-[15px] font-semibold tracking-title text-ink">
             {section === "users" && selectedUserId ? "تفاصيل المستخدم" : SECTION_TITLES[section]}
           </h1>
-          <div className="flex items-center gap-2 rounded-md border border-line2 bg-panel2 px-2.5 py-1.5">
-            <ShieldCheck size={14} className="text-green" />
-            <span className="hidden text-[11.5px] text-txt2 sm:inline" dir="ltr">
+          <div className="flex items-center gap-2 rounded-full border border-hair bg-surface px-3 py-1.5 shadow-1">
+            <ShieldCheck size={14} className="text-accent" />
+            <span className="hidden text-[12px] text-ink-2 sm:inline" dir="ltr">
               {admin.email}
             </span>
-            <span className="rounded bg-green/15 px-1.5 py-0.5 text-[10px] font-bold text-green">
+            <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[10.5px] font-medium text-accent">
               ADMIN
             </span>
           </div>
@@ -150,20 +154,20 @@ export default function AdminPanel({
 
       {/* ——— إشعار عائم ——— */}
       {notice && (
-        <div className="fixed bottom-6 left-1/2 z-[70] w-[92%] max-w-sm -translate-x-1/2 animate-slideUp">
+        <div className="fixed bottom-6 left-1/2 z-toast w-[92%] max-w-sm -translate-x-1/2 animate-rise">
           <div
-            className={`flex items-center gap-2 rounded-md border px-3 py-2.5 shadow-lg backdrop-blur ${
+            className={`flex items-center gap-2 rounded-lg border px-3.5 py-2.5 shadow-2 backdrop-blur ${
               notice.type === "ok"
-                ? "border-green/40 bg-panel/95 glow-green"
-                : "border-rose/50 bg-panel/95"
+                ? "border-hair bg-surface/95"
+                : "border-danger/30 bg-surface/95"
             }`}
           >
             {notice.type === "ok" ? (
-              <CheckCircle2 size={16} className="shrink-0 text-green" />
+              <CheckCircle2 size={16} className="shrink-0 text-live" />
             ) : (
-              <XCircle size={16} className="shrink-0 text-rose" />
+              <XCircle size={16} className="shrink-0 text-danger" />
             )}
-            <p className="flex-1 text-xs leading-5 text-txt">{notice.text}</p>
+            <p className="flex-1 text-[12.5px] leading-5 text-ink">{notice.text}</p>
           </div>
         </div>
       )}

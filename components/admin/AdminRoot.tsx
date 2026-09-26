@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Terminal } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import type { SessionUser } from "@/lib/types";
 import AdminLogin from "./AdminLogin";
 import AdminPanel from "./AdminPanel";
@@ -38,9 +38,9 @@ export default function AdminRoot() {
 
   if (checking) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-bg">
-        <Loader2 size={22} className="animate-spin text-green" />
-        <p className="mono text-xs text-txt3">جاري التحقق من الصلاحيات…</p>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-ground">
+        <Loader2 size={22} className="animate-spin text-accent" />
+        <p className="text-[13px] text-ink-2">جاري التحقق من الصلاحيات…</p>
       </div>
     );
   }
