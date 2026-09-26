@@ -1,6 +1,20 @@
 "use client";
 
-import { LayoutDashboard, LogIn, LogOut, MessageSquare, Plus, Settings2, ShieldCheck, Trash2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  ChevronUp,
+  Code2,
+  Coins,
+  LayoutDashboard,
+  LogIn,
+  LogOut,
+  MessageSquare,
+  Plus,
+  Settings2,
+  ShieldCheck,
+  Trash2,
+  X,
+} from "lucide-react";
 import type { ChatSession, SessionUser } from "@/lib/types";
 import { formatTime } from "@/lib/utils";
 import { Button, IconButton } from "./ui/Controls";
@@ -20,6 +34,7 @@ export default function ChatDrawer({
   onOpenAuth,
   onLogout,
   onOpenSettings,
+  onOpenRecharge,
 }: {
   open: boolean;
   onClose: () => void;
@@ -33,8 +48,32 @@ export default function ChatDrawer({
   onOpenAuth: () => void;
   onLogout: () => void;
   onOpenSettings: () => void;
+  onOpenRecharge: () => void;
 }) {
   const { t, dir } = useSettings();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+
+  // اقفل القايمة تلقائيًا لو الدرج اتقفل (على الموبايل مثلاً)
+  useEffect(() => {
+    if (!open) setMenuOpen(false);
+  }, [open]);
 
   return (
     <>
@@ -144,40 +183,92 @@ export default function ChatDrawer({
           </div>
         )}
 
-        <div className="border-t border-hair p-3">
-          {user?.isAdmin && (
-            <a
-              href="/#/admin"
-              className="mb-1.5 flex items-center gap-2.5 rounded-md px-2 py-2 text-[13px] font-medium text-ink-2 transition-colors duration-1 hover:bg-surface-3 hover:text-ink"
+        {/* ——— منطقة الحساب: زرار بيفتح قايمة فيها API/إعدادات/شحن/أدمن/خروج ——— */}
+        <div className="relative border-t border-hair p-3" ref={menuRef}>
+          {menuOpen && user && (
+            <div
+              className={cn(
+                "animate-materialize absolute inset-x-3 bottom-[calc(100%-4px)] z-modal",
+                "overflow-hidden rounded-lg border border-hair bg-surface py-1.5 shadow-2"
+              )}
             >
-              <LayoutDashboard size={15} className="shrink-0 text-accent" />
-              {t("drawerAdmin")}
-            </a>
-          )}
-          {user ? (
-            <div className="flex items-center gap-1">
-              <button
-                onClick={onOpenSettings}
-                title={t("accountSettings")}
-                className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-2 py-2 text-start transition-colors duration-1 hover:bg-surface-3"
+              <a
+                href="/#/api"
+                onClick={() => setMenuOpen(false)}
+                className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-start text-[13px] text-ink-2 transition-colors duration-1 hover:bg-surface-3 hover:text-ink"
               >
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent-soft text-[12px] font-semibold text-accent">
-                  {user.isAdmin ? <ShieldCheck size={14} /> : user.displayName[0]?.toUpperCase()}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-medium text-ink">
-                    {user.displayName}
-                  </span>
-                  <span className="block truncate text-[11px] text-ink-3" dir="ltr">
-                    {user.email}
-                  </span>
-                </span>
-                <Settings2 size={15} className="shrink-0 text-ink-3" />
+                <Code2 size={15} className="shrink-0 text-accent" />
+                {t("accountMenuApiKeys")}
+              </a>
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  onOpenRecharge();
+                }}
+                className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-start text-[13px] text-ink-2 transition-colors duration-1 hover:bg-surface-3 hover:text-ink"
+              >
+                <Coins size={15} className="shrink-0 text-accent" />
+                {t("accountMenuRecharge")}
               </button>
-              <IconButton label={t("logout")} onClick={onLogout} size="sm">
-                <LogOut size={15} />
-              </IconButton>
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  onOpenSettings();
+                }}
+                className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-start text-[13px] text-ink-2 transition-colors duration-1 hover:bg-surface-3 hover:text-ink"
+              >
+                <Settings2 size={15} className="shrink-0 text-accent" />
+                {t("accountMenuSettings")}
+              </button>
+              {user.isAdmin && (
+                <a
+                  href="/#/admin"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-start text-[13px] text-ink-2 transition-colors duration-1 hover:bg-surface-3 hover:text-ink"
+                >
+                  <LayoutDashboard size={15} className="shrink-0 text-accent" />
+                  {t("accountMenuAdmin")}
+                </a>
+              )}
+              <div className="my-1 border-t border-hair" />
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  onLogout();
+                }}
+                className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-start text-[13px] text-danger transition-colors duration-1 hover:bg-danger-soft"
+              >
+                <LogOut size={15} className="shrink-0" />
+                {t("accountMenuLogout")}
+              </button>
             </div>
+          )}
+
+          {user ? (
+            <button
+              onClick={() => setMenuOpen((o) => !o)}
+              title={t("accountSettings")}
+              className="flex w-full min-w-0 items-center gap-2.5 rounded-md px-2 py-2 text-start transition-colors duration-1 hover:bg-surface-3"
+            >
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent-soft text-[12px] font-semibold text-accent">
+                {user.isAdmin ? <ShieldCheck size={14} /> : user.displayName[0]?.toUpperCase()}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px] font-medium text-ink">
+                  {user.displayName}
+                </span>
+                <span className="block truncate text-[11px] text-ink-3" dir="ltr">
+                  {user.email}
+                </span>
+              </span>
+              <ChevronUp
+                size={15}
+                className={cn(
+                  "shrink-0 text-ink-3 transition-transform duration-1",
+                  menuOpen && "rotate-180"
+                )}
+              />
+            </button>
           ) : (
             <Button variant="primary" onClick={onOpenAuth} className="w-full">
               <LogIn size={16} />
