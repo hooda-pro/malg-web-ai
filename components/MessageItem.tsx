@@ -6,8 +6,10 @@ import type { ChatMessage } from "@/lib/types";
 import type { ProjectFile } from "@/lib/parseContent";
 import { extractProjectFiles, parseMessageContent } from "@/lib/parseContent";
 import { extractAttachmentsMeta, extractAttachmentsPromptSection, formatBytes } from "@/lib/attachments";
+import { extractAgentStepsMeta } from "@/lib/agentEvents";
 import { formatTime } from "@/lib/utils";
 import { renderFormattedText } from "@/lib/markdown";
+import ActivityBlock from "./ActivityBlock";
 import CodeBlock from "./CodeBlock";
 import ProjectFilesCard from "./ProjectFilesCard";
 import { useSettings } from "./SettingsContext";
@@ -34,7 +36,15 @@ export default function MessageItem({
   const [filesOpen, setFilesOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const displayContent = message.content + (continuationStreamingContent || "");
+  // رسايل المساعد ممكن تحمل بيانات خطوات Agent مخفية (كتابة ملفات + بحث حقيقي
+  // تم فعلاً في الرد ده) — بنفصلها عن النص عشان نعرض الـActivity Block فوق
+  // الرد، ونستخدم النص النظيف (من غير كتلة البيانات) في كل حاجة تانية.
+  const { visibleText: assistantCleanContent, steps: persistedAgentSteps } = useMemo(
+    () => (isUser ? { visibleText: message.content, steps: [] } : extractAgentStepsMeta(message.content)),
+    [isUser, message.content]
+  );
+
+  const displayContent = assistantCleanContent + (continuationStreamingContent || "");
   const projectFiles = useMemo(() => extractProjectFiles(displayContent), [displayContent]);
   const hasProjectFiles = !isUser && projectFiles.length > 0;
   const canPreview =
@@ -62,7 +72,7 @@ export default function MessageItem({
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(isUser ? userMainText : message.content);
+      await navigator.clipboard.writeText(isUser ? userMainText : assistantCleanContent);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -206,6 +216,10 @@ export default function MessageItem({
                 </div>
               )}
             </div>
+          )}
+
+          {persistedAgentSteps.length > 0 && (
+            <ActivityBlock steps={persistedAgentSteps} isActive={false} />
           )}
 
           {hasProjectFiles && (

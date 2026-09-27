@@ -1,6 +1,12 @@
+import type { AgentEvent } from "./agentEvents";
+
 export async function consumeSSEStream(
   reader: ReadableStreamDefaultReader<Uint8Array>,
-  handlers: { onContent?: (text: string) => void; onReasoning?: (text: string) => void }
+  handlers: {
+    onContent?: (text: string) => void;
+    onReasoning?: (text: string) => void;
+    onAgentEvent?: (event: AgentEvent) => void;
+  }
 ) {
   const decoder = new TextDecoder();
   let buffer = "";
@@ -17,6 +23,10 @@ export async function consumeSSEStream(
       if (data === "[DONE]") continue;
       try {
         const json = JSON.parse(data);
+        if (json?.agent_event) {
+          handlers.onAgentEvent?.(json.agent_event as AgentEvent);
+          continue;
+        }
         const delta = json?.choices?.[0]?.delta;
         if (delta?.reasoning_content) handlers.onReasoning?.(delta.reasoning_content);
         if (delta?.content) handlers.onContent?.(delta.content);

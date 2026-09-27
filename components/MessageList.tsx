@@ -5,7 +5,10 @@ import { ChevronRight, Eye, Sparkles } from "lucide-react";
 import type { ChatMessage } from "@/lib/types";
 import type { ProjectFile } from "@/lib/parseContent";
 import { extractProjectFiles, parseStreamingContent } from "@/lib/parseContent";
+import type { AgentEvent, AgentStep } from "@/lib/agentEvents";
+import { fileStepsFromStreamingSegments, reduceAgentEvents } from "@/lib/agentEvents";
 import { renderFormattedText } from "@/lib/markdown";
+import ActivityBlock from "./ActivityBlock";
 import MessageItem from "./MessageItem";
 import WelcomeHero from "./WelcomeHero";
 import { useSettings } from "./SettingsContext";
@@ -18,6 +21,7 @@ export default function MessageList({
   isGenerating,
   streamingContent,
   streamingReasoning,
+  streamingAgentEvents,
   totalTokens,
   userName,
   onPromptSelected,
@@ -30,6 +34,7 @@ export default function MessageList({
   isGenerating: boolean;
   streamingContent: string;
   streamingReasoning: string;
+  streamingAgentEvents: AgentEvent[];
   totalTokens: number;
   userName?: string | null;
   onPromptSelected: (prompt: string) => void;
@@ -83,7 +88,9 @@ export default function MessageList({
   const streamHasPreview = streamFiles.some((f) =>
     PREVIEWABLE_EXTS.has((f.path.split(".").pop() || "").toLowerCase())
   );
-  const isBuilding = streamSegments.some((s) => s.type === "fileblock");
+  const liveAgentSteps: AgentStep[] = isGenerating
+    ? [...reduceAgentEvents(streamingAgentEvents), ...fileStepsFromStreamingSegments(streamSegments)]
+    : [];
   const showThinking = !streamingContent || !!streamingReasoning;
 
   return (
@@ -144,12 +151,7 @@ export default function MessageList({
                   </div>
                 )}
 
-                {isBuilding && (
-                  <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-hair bg-surface px-3 py-1.5 shadow-1">
-                    <span className="h-2 w-2 rounded-full bg-live pulse-dot" />
-                    <span className="shimmer-text text-[12.5px] font-medium">{t("buildingLive")}</span>
-                  </div>
-                )}
+                <ActivityBlock steps={liveAgentSteps} isActive={true} />
 
                 <div className="measure flex flex-col gap-3" dir="auto">
                   {streamSegments.map((seg, i) =>
@@ -160,26 +162,7 @@ export default function MessageList({
                       >
                         {renderFormattedText(seg.text, `stream-${i}`)}
                       </div>
-                    ) : (
-                      <div
-                        key={i}
-                        className="flex items-center gap-2.5 rounded-md border border-hair bg-surface-2 px-3.5 py-2.5"
-                      >
-                        <span
-                          className={cn(
-                            "h-2.5 w-2.5 shrink-0 rounded-full border-2",
-                            seg.isComplete
-                              ? "border-live bg-live/20"
-                              : "animate-spin-slow border-accent border-t-transparent"
-                          )}
-                        />
-                        <span dir="ltr" className="truncate font-mono text-[12.5px] text-ink-2">
-                          {seg.isComplete
-                            ? t("fileDone", { path: seg.path })
-                            : t("fileWriting", { path: seg.path })}
-                        </span>
-                      </div>
-                    )
+                    ) : null
                   )}
                 </div>
 

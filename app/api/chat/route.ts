@@ -17,6 +17,8 @@ import {
   REGISTERED_TOKEN_QUOTA,
 } from "@/lib/systemPrompt";
 import { runDeepSearch } from "@/lib/webSearch";
+import { extractProjectFiles } from "@/lib/parseContent";
+import { buildAgentStepsMetaBlock, type AgentStep } from "@/lib/agentEvents";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -152,6 +154,23 @@ export async function POST(req: NextRequest) {
         }
       };
 
+      // حدث Agent حقيقي واحد بس ممكن يتحدد فعليًا قبل ما نبدأ نبعت أي محتوى:
+      // البحث العميق (لو حصل فعلاً) خلص شغله بالكامل قبل هذه اللحظة — فبنبعته
+      // كخطوة "مكتملة" من الأول، مش كأداة بتتنفذ لحظيًا (لأنها فعلاً خلصت).
+      // أي خطوات تانية (كتابة الملفات) بتتكشف على جهاز العميل من نفس الـ
+      // content deltas اللي بتتبعت هنا (lib/parseContent.ts بيعمل ده بالفعل)
+      // عشان نتجنب تكرار نفس منطق تحليل الكتل جوه السيرفر والعميل مع بعض.
+      if (deepSearch.performed) {
+        const agentPayload = {
+          agent_event: { type: "tool_result", tool: "web_search", id: "search-1" },
+        };
+        try {
+          streamController.enqueue(encoder.encode(`data: ${JSON.stringify(agentPayload)}\n\n`));
+        } catch {
+          // تجاهل
+        }
+      }
+
       let result = await readUpstreamStream(upstreamResponse, req.signal, emit);
 
       // *** الإصلاح الأساسي ***
@@ -203,13 +222,29 @@ export async function POST(req: NextRequest) {
           ? 0
           : estimateTokens(userPrompt, finalContent, finalReasoning ?? "");
         const assistantId = randomUUID();
+
+        // بناء خطوات الـAgent الحقيقية اللي حصلت في الرد ده (بحث فعلي تم +
+        // ملفات اتكتبت فعلاً)، وإلحاقها كبيانات مخفية في آخر النص المخزّن
+        // عشان الـActivity Block يترسم في حالته النهائية لما المحادثة تتفتح
+        // تاني — بدون أي خطوة وهمية (مفيش run_command/run_tests هنا خالص).
+        const agentSteps: AgentStep[] = [];
+        if (deepSearch.performed) {
+          agentSteps.push({ id: "search-1", tool: "web_search", status: "done" });
+        }
+        const writtenFiles = finalContent ? extractProjectFiles(finalContent) : [];
+        writtenFiles.forEach((f, i) => {
+          agentSteps.push({ id: `file-${i + 1}-${f.path}`, tool: "write_file", path: f.path, status: "done" });
+        });
+        const storedAssistantContent =
+          (finalContent || placeholderIfEmpty) + buildAgentStepsMetaBlock(agentSteps);
+
         try {
           await sql`
             INSERT INTO chat_messages
               (id, session_id, role, content, reasoning, thinking_duration_ms, is_truncated, tokens_used)
             VALUES (
               ${assistantId}, ${sessionId}, 'assistant',
-              ${finalContent || placeholderIfEmpty},
+              ${storedAssistantContent},
               ${finalReasoning}, ${thinkingDurationMs},
               ${!usedFallback && !result.stoppedByUser && result.finishReason === "length"},
               ${totalTokens}

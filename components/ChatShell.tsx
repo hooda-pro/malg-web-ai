@@ -18,6 +18,7 @@ import Toast from "./Toast";
 import type { SettingsTab } from "./AccountMenu";
 import { useSettings, type ModelId } from "./SettingsContext";
 import { buildAttachmentsMetaBlock, buildAttachmentsPromptBlock } from "@/lib/attachments";
+import type { AgentEvent } from "@/lib/agentEvents";
 
 const PREVIEWABLE_EXTS = new Set(["html", "htm", "css", "js"]);
 const SESSION_MODELS_KEY = "mlag-session-models";
@@ -80,6 +81,7 @@ export default function ChatShell() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [streamingReasoning, setStreamingReasoning] = useState("");
+  const [streamingAgentEvents, setStreamingAgentEvents] = useState<AgentEvent[]>([]);
 
   const [continuingMessageId, setContinuingMessageId] = useState<string | null>(null);
   const [continuationStreamingContent, setContinuationStreamingContent] = useState("");
@@ -414,10 +416,12 @@ export default function ChatShell() {
       setIsGenerating(true);
       setStreamingContent("");
       setStreamingReasoning("");
+      setStreamingAgentEvents([]);
 
       const controller = new AbortController();
       abortRef.current = controller;
       let accContent = "";
+      let accAgentEvents: AgentEvent[] = [];
 
       try {
         const res = await fetch("/api/chat", {
@@ -447,6 +451,10 @@ export default function ChatShell() {
             setStreamingContent((prev) => prev + chunk);
           },
           onReasoning: (chunk) => setStreamingReasoning((prev) => prev + chunk),
+          onAgentEvent: (event) => {
+            accAgentEvents = [...accAgentEvents, event];
+            setStreamingAgentEvents(accAgentEvents);
+          },
         });
       } catch (e: any) {
         if (e?.name !== "AbortError") showToast(t("toastDrop"));
@@ -467,6 +475,7 @@ export default function ChatShell() {
         setIsGenerating(false);
         setStreamingContent("");
         setStreamingReasoning("");
+        setStreamingAgentEvents([]);
         setTimeout(() => {
           void refreshMessages(sessionId);
           void refreshSessions();
@@ -666,6 +675,7 @@ export default function ChatShell() {
           isGenerating={isGenerating}
           streamingContent={streamingContent}
           streamingReasoning={streamingReasoning}
+          streamingAgentEvents={streamingAgentEvents}
           totalTokens={quota?.total ?? 500000}
           userName={user?.displayName}
           onPromptSelected={(p) => sendMessage(p)}
