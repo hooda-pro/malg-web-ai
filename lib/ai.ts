@@ -1,36 +1,25 @@
-import { MODEL_GLM_45_FLASH, MODEL_GLM_47_FLASH } from "./systemPrompt";
+// ---------------------------------------------------------------------------
+// Malg-A3 — بوابة موحّدة واحدة: Token Harbor (DeepSeek V4.1 Flash — مجاني)
+// ---------------------------------------------------------------------------
+// كان فيه قبل كده 3 مزوّدين خارجيين منفصلين (GLM / OpenRouter-minimax /
+// xKiro-Qwen) مجمّعين مع بعض كسلسلة fallback واحدة. اتشالوا الثلاثة، وبقى
+// كل طلب رايح على مزوّد واحد بس: Token Harbor (بوابة موحّدة متوافقة مع صيغة
+// OpenAI)، على موديل DeepSeek V4.1 Flash (مجاني بالكامل، سياق 1M توكن).
+// https://tokenharbor.ai/models/deepseek-v4.1-flash:free
 
-const GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
-// حد الإخراج الحقيقي لـ GLM-4.7-Flash (وكذلك الافتراضي glm-4.5-flash) هو
-// 131,072 توكن — بنطلب حد أعلى بأمان (128K) قريب منه عشان رد واحد طويل (زي
-// كتابة ملف كبير أو مشروع كامل في استدعاء أداة واحد) ما يتقطعش في نص الطريق.
-const GLM_MAX_TOKENS = 128000;
-
-const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions";
-const OPENROUTER_MODEL = "minimax/minimax-m3:free";
-// من غير max_tokens صريح، بعض مزوّدي OpenRouter (خصوصاً على المسارات المجانية)
-// بيرجعوا لحد افتراضي واطي جداً (زي 4096) فبيقطعوا الكود في نص الملف — ده كان
-// سبب رئيسي في ظهور أكواد ناقصة/مكسورة من موديل malg-2.1. الموديل بيدعم مخرجات
-// لغاية 512K توكن فعليًا، فبنطلب حد أعلى بأمان (128K) يغطي أي رد طويل حقيقي
-// (زي كتابة ملف كبير جوه استدعاء أداة واحد) من غير ما يتقطع في نص الطريق.
-const OPENROUTER_MAX_TOKENS = 128000;
-
-// malg-2.2 — Qwen3.8 Max (مجاني) عبر بوابة xKiro (متوافقة مع صيغة OpenAI)
-const XKIRO_BASE_URL = "https://api.xkiro.com/v1/chat/completions";
-const XKIRO_MODEL = "qwen/qwen3.8-max:free";
-// حد الإخراج الحقيقي لـ Qwen3.8 Max هو 131,072 توكن — نفس منطق GLM فوق.
-const XKIRO_MAX_TOKENS = 128000;
+const TOKENHARBOR_BASE_URL = "https://tokenharbor.ai/v1/chat/completions";
+const TOKENHARBOR_MODEL = "deepseek-v4.1-flash:free";
+// حد الإخراج الأقصى الموثّق للموديل هو 128,000 توكن بالظبط — بنطلبه زي ما هو.
+const TOKENHARBOR_MAX_TOKENS = 128000;
 
 /**
  * الموديل المتاح للمستخدم من الواجهة — لازم يتطابق مع components/SettingsContext.tsx
  *
  * ملحوظة دمج مهمة: كان عندنا 3 موديلات منفصلة يختارهم المستخدم من القايمة
- * (malg-2 / malg-2.1 / malg-2.2)، كل واحد فيهم فعليًا مزوّد خارجي مختلف
- * (GLM / OpenRouter / xKiro). دلوقتي اتدمجوا كلهم في موديل واحد بس بره،
- * اسمه "Malg-A3"، وبقى هو الموديل الافتراضي والوحيد. جوه، هو مش بيلغي
- * المزوّدين التلاتة — العكس: بيستخدمهم التلاتة مع بعض كسلسلة fallback واحدة
- * (شوف negotiateMalgA3 تحت) عشان المستخدم ياخد رد فعلي دايمًا حتى لو مزوّد
- * واحد وقع، من غير ما يحتاج يختار موديل تاني بنفسه يدويًا زي الأول.
+ * (malg-2 / malg-2.1 / malg-2.2)، كل واحد فيهم فعليًا مزوّد خارجي مختلف.
+ * دلوقتي اتدمجوا كلهم في موديل واحد بس بره، اسمه "Malg-A3"، وبقى هو الموديل
+ * الافتراضي والوحيد — وجوه، بقى شغال بالكامل على مزوّد واحد بس (Token Harbor
+ * / DeepSeek V4.1 Flash) بدل الثلاثة القدام.
  */
 export type ModelId = "malg-a3";
 export const DEFAULT_MODEL: ModelId = "malg-a3";
@@ -76,20 +65,18 @@ export interface UpstreamStreamResult {
 }
 
 /**
- * يقرأ ستريم SSE من أي مزوّد (GLM / OpenRouter / xKiro) ويجمّع الـ content و
- * الـ reasoning تدريجيًا، مع استدعاء onDelta لحظيًا لكل جزء يوصل (عشان نقدر
- * نبعته للعميل فورًا زي ما كنا بنعمل بالـ passthrough الخام قديمًا). بيجمّع
- * كمان أي tool_calls (function calling) لو الموديل طلب استدعاء أداة — دي
- * بتوصل مجزّأة عبر عدة أجزاء ستريم (id/name مرة واحدة، والـ arguments بيتبني
- * تدريجيًا نص JSON فوق نص) فبنجمعها هنا بالـ index وترجع كاملة في النهاية.
+ * يقرأ ستريم SSE بصيغة OpenAI-compatible (اللي بترجعها بوابة Token Harbor)
+ * ويجمّع الـ content و الـ reasoning تدريجيًا، مع استدعاء onDelta لحظيًا لكل
+ * جزء يوصل (عشان نقدر نبعته للعميل فورًا). بيجمّع كمان أي tool_calls
+ * (function calling) لو الموديل طلب استدعاء أداة — دي بتوصل مجزّأة عبر عدة
+ * أجزاء ستريم (id/name مرة واحدة، والـ arguments بيتبني تدريجيًا نص JSON فوق
+ * نص) فبنجمعها هنا بالـ index وترجع كاملة في النهاية.
  *
- * ملحوظة مهمة (سبب رئيسي لمشكلة "malg-2.1 معتش بيكتب كود"): الموديلات
- * المجانية زي minimax-m3:free بترجع أحيانًا استجابة HTTP سليمة (200) لكن
- * الستريم نفسه بيوصل فاضي تمامًا (من غير content ولا حتى reasoning) — ده مش
- * خطأ شبكة، فالكود القديم كان بيعتبره "نجاح" ويحفظ رسالة وهمية "تمت المعالجة
- * بنجاح" من غير أي محتوى حقيقي، فالمستخدم يحس إن الموديل "بطل يكتب" من غير أي
- * تفسير. الدالة دي بترجع stoppedByUser بشكل منفصل عشان نفرّق بين إيقاف
- * المستخدم المتعمد وبين استجابة فاضية فعلاً محتاجة إعادة محاولة.
+ * ملحوظة مهمة: بعض الموديلات المجانية بترجع أحيانًا استجابة HTTP سليمة (200)
+ * لكن الستريم نفسه بيوصل فاضي تمامًا (من غير content ولا حتى reasoning) — ده
+ * مش خطأ شبكة، فمهم منعتبروش "نجاح" ونحفظ رسالة وهمية من غير أي محتوى حقيقي.
+ * الدالة دي بترجع stoppedByUser بشكل منفصل عشان نفرّق بين إيقاف المستخدم
+ * المتعمد وبين استجابة فاضية فعلاً محتاجة إعادة محاولة.
  */
 export async function readUpstreamStream(
   response: Response,
@@ -179,35 +166,6 @@ export async function readUpstreamStream(
 export const EMPTY_RESPONSE_FALLBACK_MESSAGE =
   "معنديش رد فعلي أقدر أكتبهولك دلوقتي 🙏 — الموديل مارجعش أي محتوى بعد أكتر من محاولة (مشكلة مؤقتة في المزوّد الخارجي، مش في سؤالك). جرب تبعت رسالتك تاني كمان شوية، أو اختار موديل تاني من القايمة لو الموضوع مستعجل.";
 
-export function parseErrorMessage(httpCode: number, rawJson: string): string {
-  // ملحوظة أمان/خصوصية مهمة: كانت الدالة دي بترجع نص الخطأ الخام والمعرّف
-  // للمزوّد الحقيقي (GLM) مباشرة لواجهة المستخدم — يعني أي حد كان يقدر
-  // يعرف إن mlag شغال فوق موديل خارجي بس من رسالة الخطأ. دلوقتي: بنسجل
-  // التفاصيل الكاملة في الـ server logs بس (console.error) ونرجّع للمستخدم
-  // رسالة عامة بهوية mlag بس، من غير أي اسم مزوّد أو كود داخلي أو JSON خام.
-  console.error("[mlag upstream error]", httpCode, rawJson.slice(0, 500));
-  try {
-    if (rawJson.includes("1302") || rawJson.includes("速率限制") || httpCode === 429) {
-      return "الخدمة مزدحمة شوية دلوقتي — استنى ثانيتين وابعت تاني وهيشتغل.";
-    }
-    if (rawJson.includes("1113") || rawJson.includes("余额不足") || httpCode === 402) {
-      return "في مشكلة مؤقتة في تشغيل الرد دلوقتي — جرب تاني كمان شوية.";
-    }
-    if (rawJson.includes("1211") || rawJson.includes("模型不存在")) {
-      return "حصلت مشكلة تقنية داخلية — فريق mlag شغال على حلها، جرب موديل تاني أو حاول تاني بعد شوية.";
-    }
-    if (rawJson.includes("1001") || rawJson.includes("1002") || rawJson.includes("未收到Authorization")) {
-      return "حصلت مشكلة في الاتصال بالخدمة دلوقتي — جرب تاني بعد شوية.";
-    }
-    if (rawJson.includes("1301") || rawJson.includes("并发")) {
-      return "في ضغط على الخدمة دلوقتي — استنى ثانية واحدة وابعت تاني.";
-    }
-    return "حصل خطأ غير متوقع أثناء توليد الرد — جرب تاني، ولو المشكلة استمرت جرب موديل تاني من القايمة.";
-  } catch {
-    return "حصلت مشكلة في الاتصال بالخدمة — جرب تاني.";
-  }
-}
-
 /** تقدير تقريبي لعدد التوكنز (نفس منطق ChatRepository.estimateTokens في تطبيق الأندرويد). */
 export function estimateTokens(...texts: (string | null | undefined)[]): number {
   const sum = texts.reduce((acc, t) => acc + Math.floor((t?.length ?? 0) / 3), 0);
@@ -216,10 +174,6 @@ export function estimateTokens(...texts: (string | null | undefined)[]): number 
 
 export function formatTokens(n: number): string {
   return new Intl.NumberFormat("en-US").format(n);
-}
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export type NegotiationResult =
@@ -233,116 +187,17 @@ export type NegotiationResult =
  * القديم لـ /api/chat و /api/chat/continue فاضل زي ما هو بالظبط.
  */
 export interface NegotiateOptions {
-  /** تعريفات أدوات على نمط OpenAI — بتتبعت زي ما هي من غير أي تعديل. لو
-   * موجودة لـ GLM/OpenRouter، بتحل محل أداة البحث المدمجة بتاعت الموقع
-   * (مش بتتخلط معاها)، عشان منلخبطش الموديل بين سياق الموقع وسياق الأداة
-   * الخارجية المستدعية. */
+  /** تعريفات أدوات على نمط OpenAI — بتتبعت زي ما هي من غير أي تعديل. */
   tools?: unknown[];
   toolChoice?: unknown;
 }
 
-/**
- * يجرب الاتصال بموديل mlag (GLM) بنفس منطق إعادة المحاولة والتراجع
- * (fallback) الموجود في ApiClient.kt / ChatRepository.kt الأصلي:
- * 1) الموديل المختار + أدوات البحث على الإنترنت
- * 2) لو 429 ينتظر 1.5 ثانية ويعيد المحاولة
- * 3) لو فشل، يعيد المحاولة بدون tools
- * 4) لو لسه فاشل، يجرب الموديل المجاني الاحتياطي glm-4.5-flash بدون tools
- */
-async function negotiateGLM(
-  apiMessages: ApiMessage[],
-  signal: AbortSignal,
-  options: NegotiateOptions = {}
-): Promise<NegotiationResult> {
-  const apiKey = process.env.MLAG_API_KEY || "";
-  const model = process.env.MLAG_MODEL?.trim() || MODEL_GLM_47_FLASH;
-
-  // لو المستدعي (نقطة الـ API العامة) بعت أدوات بتاعته هو (زي Cline)، بنستخدمها
-  // هي بدل أداة البحث المدمجة بتاعت الموقع — مش بنخلطهم مع بعض.
-  const externalTools = options.tools && options.tools.length > 0 ? options.tools : null;
-  const builtInTools = [{ type: "web_search", web_search: { enable: true, search_result: true } }];
-
-  const buildBody = (m: string, useTools: boolean) =>
-    JSON.stringify({
-      model: m,
-      messages: apiMessages,
-      temperature: 0.4,
-      max_tokens: GLM_MAX_TOKENS,
-      stream: true,
-      ...(useTools
-        ? {
-            tools: externalTools || builtInTools,
-            ...(externalTools && options.toolChoice ? { tool_choice: options.toolChoice } : {}),
-          }
-        : {}),
-    });
-
-  const call = (m: string, useTools: boolean) =>
-    fetch(GLM_BASE_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: buildBody(m, useTools),
-      signal,
-    });
-
-  let response: Response;
-  try {
-    response = await call(model, true);
-  } catch (e) {
-    if (signal.aborted) throw e;
-    return { ok: false, errorMessage: "تعذر الاتصال بخادم mlag، تأكد من اتصالك بالإنترنت وحاول تاني." };
-  }
-
-  if (response.status === 429) {
-    await sleep(1500);
-    try {
-      response = await call(model, true);
-    } catch (e) {
-      if (signal.aborted) throw e;
-    }
-  }
-
-  if (!response.ok) {
-    try {
-      const retryResp = await call(model, false);
-      if (retryResp.ok) response = retryResp;
-    } catch (e) {
-      if (signal.aborted) throw e;
-    }
-  }
-
-  if (!response.ok && model !== MODEL_GLM_45_FLASH) {
-    try {
-      const fallbackResp = await call(MODEL_GLM_45_FLASH, false);
-      if (fallbackResp.ok) response = fallbackResp;
-    } catch (e) {
-      if (signal.aborted) throw e;
-    }
-  }
-
-  if (!response.ok) {
-    let rawError = "";
-    try {
-      rawError = await response.text();
-    } catch {
-      // تجاهل
-    }
-    return { ok: false, errorMessage: parseErrorMessage(response.status, rawError) };
-  }
-
-  return { ok: true, response };
-}
-
 // ---------------------------------------------------------------------------
-// قارئ عام لمفاتيح API (مشترك بين malg-2.1 و malg-2.2)
+// قارئ عام لمفاتيح API — بيدعم أي عدد من المفاتيح مع تدوير (round robin)
 // ---------------------------------------------------------------------------
 
 /**
- * قارئ عام لمفاتيح API بيدعم أي عدد من المفاتيح لأي مزوّد — استخدمه أي مكان
- * محتاج فيه تدوير مفاتيح، بنفس الطريقتين اللي شرحناها فوق لـ OpenRouter:
+ * قارئ عام لمفاتيح API بيدعم أي عدد من المفاتيح لأي مزوّد:
  *
  * 1) متغيرات مرقمة منفصلة (الأسهل لو عايز تضيف/تشيل مفتاح لوحده من غير ما تلمس الباقي):
  *      <PREFIX>1 = key-1
@@ -352,8 +207,8 @@ async function negotiateGLM(
  * 2) أو متغير واحد فيه كل المفاتيح مفصولة بفاصلة/سطر جديد/فاصلة منقوطة:
  *      <PREFIX> = key-1,key-2,key-3
  *
- * @param numberedPrefix جزء الـ regex لاسم المتغير قبل الرقم، مثلاً "OPENROUTER_API_KEYS?"
- *   (الـ "?" بعد الـ S بتخليه يقبل الصيغتين KEY و KEYS) أو "XKIRO_API_KEYS?"
+ * @param numberedPrefix جزء الـ regex لاسم المتغير قبل الرقم، مثلاً "TOKENHARBOR_API_KEYS?"
+ *   (الـ "?" بعد الـ S بتخليه يقبل الصيغتين KEY و KEYS)
  * @param bulkVarNames أسماء المتغيرات اللي ممكن تحتوي على كل المفاتيح مع بعض (بالترتيب)
  */
 function collectApiKeys(numberedPrefix: string, ...bulkVarNames: string[]): string[] {
@@ -385,239 +240,92 @@ function collectApiKeys(numberedPrefix: string, ...bulkVarNames: string[]): stri
   return [...new Set(keys)];
 }
 
-// ---------------------------------------------------------------------------
-// malg-2.1 — OpenRouter (minimax/minimax-m3:free) مع تدوير عدة مفاتيح API
-// ---------------------------------------------------------------------------
-
 /**
- * بيقرأ كل مفاتيح OpenRouter — أضف واحد أو أكتر بأي من الطريقتين:
+ * بيقرأ كل مفاتيح Token Harbor — أضف واحد أو أكتر بأي من الطريقتين:
  *
- *      OPENROUTER_API_KEYS1 = sk-or-key-1
- *      OPENROUTER_API_KEYS2 = sk-or-key-2
- *      OPENROUTER_API_KEYS3 = sk-or-key-3
+ *      TOKENHARBOR_API_KEYS1 = th-key-1
+ *      TOKENHARBOR_API_KEYS2 = th-key-2
+ *      TOKENHARBOR_API_KEYS3 = th-key-3
  *      ... أو
- *      OPENROUTER_API_KEYS  = sk-or-key-1,sk-or-key-2,sk-or-key-3
+ *      TOKENHARBOR_API_KEYS  = th-key-1,th-key-2,th-key-3
  *
- * الكود بيجمع الاتنين مع بعض لو موجودين، وبيشيل أي تكرار.
+ * ولسه بتقبل TOKENHARBOR_API_KEY (مفرد) لو مفتاح واحد بس.
  */
-function getOpenRouterKeys(): string[] {
-  return collectApiKeys("OPENROUTER_API_KEYS?", "OPENROUTER_API_KEYS", "OPENROUTER_API_KEY");
+function getTokenHarborKeys(): string[] {
+  return collectApiKeys("TOKENHARBOR_API_KEYS?", "TOKENHARBOR_API_KEYS", "TOKENHARBOR_API_KEY");
 }
 
 // عداد بسيط في الذاكرة لتدوير المفاتيح (Round Robin) بين الطلبات المختلفة —
 // كل طلب بيبدأ من مفتاح مختلف عن اللي قبله عشان الحمل يتوزع على كل المفاتيح بالتساوي.
-let openRouterCursor = 0;
+let tokenHarborCursor = 0;
 
-function parseOpenRouterError(httpCode: number, rawJson: string): string {
-  // نفس مبدأ التصحيح فوق: نسجل التفاصيل في السيرفر بس، ونرجع رسالة عامة
-  // بهوية mlag للمستخدم من غير أي اسم مزوّد خارجي.
-  console.error("[mlag upstream error - provider A]", httpCode, rawJson.slice(0, 500));
+function parseTokenHarborError(httpCode: number, rawJson: string): string {
+  // نسجل التفاصيل الكاملة في الـ server logs بس، ونرجّع للمستخدم رسالة عامة
+  // بهوية mlag، من غير أي اسم مزوّد خارجي أو كود داخلي أو JSON خام.
+  console.error("[mlag upstream error]", httpCode, rawJson.slice(0, 500));
   try {
-    // سقف يومي (مش لحظي) — "استنى ثانيتين" هنا رسالة غلط ومضللة، لازم نوضح
-    // إنه سقف يومي وإن أفضل حل فوري هو موديل تاني، مش إعادة المحاولة بعد شوية.
-    const isDailyLimit = /limit_rpd|daily limit/i.test(rawJson);
-    if (httpCode === 429 && isDailyLimit) {
-      return "موديل mlag-2.1 وصل للحد اليومي المجاني بتاعه دلوقتي — بنحولّك تلقائيًا لموديل تاني عشان تكمل عادي، وممكن تختار mlag-2.1 تاني بكرة لما السقف يترفع.";
+    const isDailyLimit = /limit|quota|rate.?limit/i.test(rawJson) && httpCode === 429;
+    if (isDailyLimit) {
+      return "الخدمة مزدحمة شوية دلوقتي — استنى ثانيتين وابعت تاني وهيشتغل.";
     }
     if (httpCode === 401 || httpCode === 403) {
-      return "حصلت مشكلة مؤقتة في الاتصال بالخدمة — جرب تاني بعد شوية أو اختار موديل تاني.";
+      return "حصلت مشكلة مؤقتة في الاتصال بالخدمة — جرب تاني بعد شوية.";
     }
     if (httpCode === 402) {
-      return "الخدمة مش متاحة مؤقتًا دلوقتي — جرب موديل تاني من القايمة.";
+      return "في مشكلة مؤقتة في تشغيل الرد دلوقتي — جرب تاني كمان شوية.";
     }
     if (httpCode === 429) {
       return "الخدمة مزدحمة شوية دلوقتي — استنى ثانيتين وابعت تاني.";
     }
-    return "حصل خطأ غير متوقع أثناء توليد الرد — جرب تاني، ولو المشكلة استمرت جرب موديل تاني من القايمة.";
+    return "حصل خطأ غير متوقع أثناء توليد الرد — جرب تاني كمان شوية.";
   } catch {
     return "حصلت مشكلة في الاتصال بالخدمة — جرب تاني.";
   }
 }
 
 /**
- * يجرب موديل malg-2.1 (minimax/minimax-m3:free عبر OpenRouter):
+ * يجرب موديل Malg-A3 (DeepSeek V4.1 Flash — مجاني — عبر بوابة Token Harbor):
  * بيدور على المفاتيح المتاحة واحد ورا التاني (تدوير + تجاوز أي مفتاح فشل بسبب
  * انتهاء رصيده أو معدل طلباته) لحد ما يلاقي مفتاح شغال أو يخلص كل المفاتيح.
+ *
+ * ملحوظة عن البحث في الإنترنت: بوابة Token Harbor مالهاش أداة بحث جاهزة
+ * تشتغل من عندها هي (زي ما كان GLM/OpenRouter عندهم) — بتدعم بس "function
+ * calling" عادي. طبقة البحث الحقيقي (lib/webSearch.ts، عن طريق Tavily) هي
+ * اللي بتغطي ده: بتجيب النتايج وتحقنها كـ context في الرسايل قبل ما نكلم
+ * الموديل، فمفيش حاجة إضافية لازمة هنا.
  */
-async function negotiateOpenRouter(
+async function negotiateTokenHarbor(
   apiMessages: ApiMessage[],
   signal: AbortSignal,
   options: NegotiateOptions = {}
 ): Promise<NegotiationResult> {
-  const keys = getOpenRouterKeys();
+  const keys = getTokenHarborKeys();
   if (keys.length === 0) {
-    // ملحوظة: الرسالة القديمة كانت بتقول للمستخدم النهائي اسم المزوّد
-    // الخارجي (OpenRouter) واسم متغيرات البيئة — دي معلومة لصاحب الموقع بس
-    // مش للمستخدم. بنسجلها في اللوج ونرجع رسالة عامة للمستخدم.
-    console.error("[mlag config] provider B keys missing — set OPENROUTER_API_KEYS in env");
+    console.error("[mlag config] Token Harbor keys missing — set TOKENHARBOR_API_KEYS in env");
     return {
       ok: false,
-      errorMessage: "موديل mlag-2.1 مش متاح حاليًا — جرب موديل تاني من القايمة.",
-    };
-  }
-
-  const externalTools = options.tools && options.tools.length > 0 ? options.tools : null;
-
-  const call = (key: string, useTools: boolean) =>
-    fetch(OPENROUTER_BASE_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": process.env.OPENROUTER_SITE_URL || "https://mlag.ai",
-        "X-Title": "mlag AI",
-      },
-      body: JSON.stringify({
-        model: OPENROUTER_MODEL,
-        messages: apiMessages,
-        temperature: 0.4,
-        max_tokens: OPENROUTER_MAX_TOKENS,
-        stream: true,
-        // أداة بحث الإنترنت المدمجة في OpenRouter نفسه (server-side): الموديل هو
-        // اللي بيقرر لو محتاج يبحث ولا لأ، والبحث بيتنفذ عند OpenRouter مباشرة —
-        // مفيش حاجة إضافية لازم نعملها هنا، النتيجة بترجع جوه نفس الستريم العادي.
-        // لو المستدعي (نقطة الـ API العامة) بعت أدوات بتاعته هو، بنستخدمها هي بدلها.
-        ...(useTools
-          ? externalTools
-            ? { tools: externalTools, ...(options.toolChoice ? { tool_choice: options.toolChoice } : {}) }
-            : { tools: [{ type: "openrouter:web_search" }] }
-          : {}),
-      }),
-      signal,
-    });
-
-  let lastErrorCode = 0;
-  let lastErrorText = "";
-
-  for (let i = 0; i < keys.length; i++) {
-    const key = keys[(openRouterCursor + i) % keys.length];
-    let response: Response;
-    try {
-      response = await call(key, true);
-    } catch (e) {
-      if (signal.aborted) throw e;
-      continue; // مشكلة شبكة مؤقتة — جرّب المفتاح اللي بعده
-    }
-
-    // لو الخطأ مش بسبب المفتاح نفسه (401/402/403/429)، جرب نفس المفتاح تاني
-    // بدون أداة البحث، تحسبًا إن أداة البحث (لسه beta) مش مدعومة على المسار ده
-    if (!response.ok && ![401, 402, 403, 429].includes(response.status)) {
-      try {
-        const retryResp = await call(key, false);
-        if (retryResp.ok) response = retryResp;
-      } catch (e) {
-        if (signal.aborted) throw e;
-      }
-    }
-
-    if (response.ok) {
-      openRouterCursor = (openRouterCursor + i + 1) % keys.length;
-      return { ok: true, response };
-    }
-
-    lastErrorCode = response.status;
-    // 429 (تجاوز الحد) أو 402 (رصيد خلص) أو 401/403 (مفتاح لاغي) — جرّب المفتاح اللي بعده
-    if ([401, 402, 403, 429].includes(response.status)) {
-      try {
-        lastErrorText = await response.text();
-      } catch {
-        // تجاهل
-      }
-      continue;
-    }
-
-    // أي خطأ تاني (500 مثلاً) — سيبه ونجرب مفتاح تاني برضو، بس نسجله
-    try {
-      lastErrorText = await response.text();
-    } catch {
-      // تجاهل
-    }
-  }
-
-  return { ok: false, errorMessage: parseOpenRouterError(lastErrorCode || 502, lastErrorText) };
-}
-
-// ---------------------------------------------------------------------------
-// malg-2.2 — Qwen3.8 Max (مجاني) عبر بوابة xKiro، مع تدوير عدة مفاتيح API
-// ---------------------------------------------------------------------------
-
-/**
- * بيقرأ كل مفاتيح xKiro — أضف واحد أو أكتر بأي من الطريقتين (زي بالظبط OpenRouter فوق):
- *
- *      XKIRO_API_KEYS1 = sk-xt-key-1
- *      XKIRO_API_KEYS2 = sk-xt-key-2
- *      XKIRO_API_KEYS3 = sk-xt-key-3
- *      ... أو
- *      XKIRO_API_KEYS  = sk-xt-key-1,sk-xt-key-2,sk-xt-key-3
- */
-function getXkiroKeys(): string[] {
-  return collectApiKeys("XKIRO_API_KEYS?", "XKIRO_API_KEYS", "XKIRO_API_KEY");
-}
-
-// عداد تدوير منفصل عن OpenRouter — كل موديل بيدور على مفاتيحه لوحده
-let xkiroCursor = 0;
-
-function parseXkiroError(httpCode: number, rawJson: string): string {
-  console.error("[mlag upstream error - provider C]", httpCode, rawJson.slice(0, 500));
-  try {
-    if (httpCode === 401 || httpCode === 403) {
-      return "حصلت مشكلة مؤقتة في الاتصال بالخدمة — جرب تاني بعد شوية أو اختار موديل تاني.";
-    }
-    if (httpCode === 402) {
-      return "الخدمة مش متاحة مؤقتًا دلوقتي — جرب موديل تاني من القايمة.";
-    }
-    if (httpCode === 429) {
-      return "الخدمة مزدحمة شوية دلوقتي — استنى ثانيتين وابعت تاني.";
-    }
-    return "حصل خطأ غير متوقع أثناء توليد الرد — جرب تاني، ولو المشكلة استمرت جرب موديل تاني من القايمة.";
-  } catch {
-    return "حصلت مشكلة في الاتصال بالخدمة — جرب تاني.";
-  }
-}
-
-/**
- * يجرب موديل malg-2.2 (qwen/qwen3.8-max:free عبر xKiro):
- * نفس منطق تدوير المفاتيح بتاع malg-2.1 بالظبط.
- *
- * ملحوظة عن البحث في الإنترنت: على عكس malg-2 (GLM) و malg-2.1 (OpenRouter)،
- * بوابة xKiro مالهاش أداة بحث جاهزة تشتغل من عندها هي — بتدعم بس "function calling"
- * عادي (يعني إنت اللي تجيب دالة وتنفذها بنفسك لما الموديل يطلبها). عشان Qwen هنا
- * يبحث فعليًا في الإنترنت، لازم نضيف مزوّد بحث خارجي (زي Tavily أو Serper) ونعمل
- * دورة كاملة: نبعت الدالة، الموديل يطلبها، إحنا ننفذ البحث الحقيقي، وبعدين نرجعله
- * النتيجة في طلب تاني. ده أكبر من مجرد "فلاج" زي الموديلين التانيين، فسبناه لتحديث
- * لاحق لو حابب تضيفه.
- */
-async function negotiateXkiro(
-  apiMessages: ApiMessage[],
-  signal: AbortSignal,
-  options: NegotiateOptions = {}
-): Promise<NegotiationResult> {
-  const keys = getXkiroKeys();
-  if (keys.length === 0) {
-    console.error("[mlag config] provider C keys missing — set XKIRO_API_KEYS in env");
-    return {
-      ok: false,
-      errorMessage: "موديل mlag-2.2 مش متاح حاليًا — جرب موديل تاني من القايمة.",
+      errorMessage: "موديل mlag مش متاح حاليًا — تأكد من إعداد الخدمة وحاول تاني.",
     };
   }
 
   const externalTools = options.tools && options.tools.length > 0 ? options.tools : null;
 
   const call = (key: string) =>
-    fetch(XKIRO_BASE_URL, {
+    fetch(TOKENHARBOR_BASE_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${key}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: XKIRO_MODEL,
+        model: TOKENHARBOR_MODEL,
         messages: apiMessages,
         temperature: 0.4,
-        max_tokens: XKIRO_MAX_TOKENS,
+        max_tokens: TOKENHARBOR_MAX_TOKENS,
         stream: true,
-        // بوابة xKiro بتدعم function calling عادي (على عكس أداة البحث المدمجة
-        // بتاعت GLM/OpenRouter فوق) — فبنبعت أدوات المستدعي زي ما هي لو موجودة.
+        // بوابة Token Harbor بتدعم function calling عادي — فبنبعت أدوات
+        // المستدعي زي ما هي لو موجودة (بحل محل أداة البحث المدمجة بتاعت
+        // الموقع، مش بيتخلط معاها).
         ...(externalTools
           ? { tools: externalTools, ...(options.toolChoice ? { tool_choice: options.toolChoice } : {}) }
           : {}),
@@ -629,7 +337,7 @@ async function negotiateXkiro(
   let lastErrorText = "";
 
   for (let i = 0; i < keys.length; i++) {
-    const key = keys[(xkiroCursor + i) % keys.length];
+    const key = keys[(tokenHarborCursor + i) % keys.length];
     let response: Response;
     try {
       response = await call(key);
@@ -639,73 +347,28 @@ async function negotiateXkiro(
     }
 
     if (response.ok) {
-      xkiroCursor = (xkiroCursor + i + 1) % keys.length;
+      tokenHarborCursor = (tokenHarborCursor + i + 1) % keys.length;
       return { ok: true, response };
     }
 
     lastErrorCode = response.status;
-    if ([401, 402, 403, 429].includes(response.status)) {
-      try {
-        lastErrorText = await response.text();
-      } catch {
-        // تجاهل
-      }
-      continue;
-    }
-
     try {
       lastErrorText = await response.text();
     } catch {
       // تجاهل
     }
+    // 429 (تجاوز الحد) أو 402 (رصيد خلص) أو 401/403 (مفتاح لاغي) — جرّب المفتاح اللي بعده
+    if ([401, 402, 403, 429].includes(response.status)) continue;
   }
 
-  return { ok: false, errorMessage: parseXkiroError(lastErrorCode || 502, lastErrorText) };
+  return { ok: false, errorMessage: parseTokenHarborError(lastErrorCode || 502, lastErrorText) };
 }
 
 /**
- * Malg-A3 — الموديل الموحّد الجديد بعد دمج الثلاثة موديلات القديمة
- * (malg-2 / malg-2.1 / malg-2.2) في هوية واحدة بره.
- *
- * جوه، بيجرب المزوّدين التلاتة بالترتيب ده كسلسلة fallback واحدة متصلة:
- *   1) GLM   (كان malg-2)   — أعلى استقرارًا، وله fallback داخلي لموديل مجاني
- *      لو الموديل الأساسي فشل (شوف negotiateGLM فوق).
- *   2) OpenRouter/minimax (كان malg-2.1) — تجربة لو GLM فشل بالكامل.
- *   3) xKiro/Qwen (كان malg-2.2) — آخر محاولة لو الاتنين اللي قبله فشلوا.
- *
- * لو الثلاثة فشلوا، بترجع رسالة الخطأ بتاعت آخر مزوّد اتجرب (GLM عادةً، لأنه
- * أكتر مزوّد فيه تفاصيل واضحة عن سبب الفشل). المستخدم مش بيشوف أي اسم مزوّد
- * في أي حالة — بالنسبة له فيه موديل واحد بس اسمه Malg-A3.
- */
-async function negotiateMalgA3(
-  apiMessages: ApiMessage[],
-  signal: AbortSignal,
-  options: NegotiateOptions = {}
-): Promise<NegotiationResult> {
-  const glmResult = await negotiateGLM(apiMessages, signal, options);
-  if (glmResult.ok) return glmResult;
-  console.error("[Malg-A3] المزوّد الأول (GLM) فشل بالكامل — بنجرب المزوّد التاني:", glmResult.errorMessage);
-
-  const openRouterResult = await negotiateOpenRouter(apiMessages, signal, options);
-  if (openRouterResult.ok) return openRouterResult;
-  console.error(
-    "[Malg-A3] المزوّد التاني (OpenRouter) فشل بالكامل — بنجرب المزوّد التالت:",
-    openRouterResult.errorMessage
-  );
-
-  const xkiroResult = await negotiateXkiro(apiMessages, signal, options);
-  if (xkiroResult.ok) return xkiroResult;
-  console.error("[Malg-A3] المزوّد التالت (xKiro) فشل بالكامل كمان:", xkiroResult.errorMessage);
-
-  // الثلاثة فشلوا — نرجّع رسالة GLM لأنها الأكتر تفصيلًا ووضوحًا للمستخدم.
-  return glmResult;
-}
-
-/**
- * نقطة الدخول الموحدة: بما إن الموديل بقى واحد بس (Malg-A3) بعد الدمج،
- * الباراميتر modelId اتسيب هنا للتوافق مع أي كود قديم (سيرفرات API عامة
- * قديمة، جلسات محفوظة) بيبعت قيمة موديل، لكنه اتجاهل فعليًا — كل طلب بيتوجه
- * لـ negotiateMalgA3 اللي بيدمج المزوّدين التلاتة تلقائيًا في سلسلة واحدة.
+ * نقطة الدخول الموحدة: بما إن الموديل بقى واحد بس (Malg-A3) وبيشتغل بالكامل
+ * على مزوّد واحد (Token Harbor / DeepSeek V4.1 Flash)، الباراميتر modelId
+ * اتسيب هنا للتوافق مع أي كود قديم (سيرفرات API عامة قديمة، جلسات محفوظة)
+ * بيبعت قيمة موديل، لكنه اتجاهل فعليًا — كل طلب بيتوجه لـ negotiateTokenHarbor.
  */
 export async function negotiateUpstream(
   apiMessages: ApiMessage[],
@@ -714,5 +377,5 @@ export async function negotiateUpstream(
   options: NegotiateOptions = {}
 ): Promise<NegotiationResult> {
   void modelId;
-  return negotiateMalgA3(apiMessages, signal, options);
+  return negotiateTokenHarbor(apiMessages, signal, options);
 }

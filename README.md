@@ -18,8 +18,8 @@
 |---|---|
 | `DATABASE_URL` | رابط الاتصال بقاعدة بيانات Neon (Postgres) |
 | `JWT_SECRET` | نص عشوائي طويل وسري لتوقيع جلسات الدخول |
-| `MLAG_API_KEY` | مفتاح API بتاع GLM (من bigmodel.cn) |
-| `MLAG_MODEL` | (اختياري) اسم الموديل، افتراضيًا `glm-4.7-flash` |
+| `TOKENHARBOR_API_KEY` | مفتاح API بتاع Token Harbor (من tokenharbor.ai) — الموديل شغال على `deepseek-v4.1-flash:free` |
+| `TOKENHARBOR_API_KEYS` أو `TOKENHARBOR_API_KEYS1`/`2`/... | (اختياري) أكتر من مفتاح Token Harbor للتدوير بينهم لو حابب |
 | `ADMIN_EMAIL` | إيميل حساب الأدمن الافتراضي (بيتعمل تلقائيًا أول مرة) |
 | `ADMIN_PASSWORD` | باسورد حساب الأدمن (12 حرف على الأقل) — تسجيل دخول الأدمن بس، مش المستخدمين العاديين |
 | `NEXT_PUBLIC_FIREBASE_API_KEY` | من Firebase Console > Project settings > Web app |
@@ -75,10 +75,8 @@ git push -u origin main
 
 ## ملاحظة أمان
 
-مفتاح `MLAG_API_KEY` في `.env.example` هو نفسه اللي كان موجود في مشروع الأندرويد الأصلي.
-لو المشروع القديم اترفع على مكان عام (زي GitHub عام) قبل كده والمفتاح ظهر فيه،
-يفضل تعمل له **Rotate** من لوحة تحكم bigmodel.cn قبل ما تستخدمه هنا، وميتحطش أبدًا
-كمتغير `NEXT_PUBLIC_*` (المتغيرات العادية هنا سيرفر-فقط، آمنة).
+مفتاح `TOKENHARBOR_API_KEY` لازم ياخد من [tokenharbor.ai](https://tokenharbor.ai) بعد إنشاء حساب،
+وميتحطش أبدًا كمتغير `NEXT_PUBLIC_*` (المتغيرات العادية هنا سيرفر-فقط، آمنة).
 
 ## بنية المشروع
 
@@ -96,7 +94,7 @@ lib/
   db.ts            ← الاتصال بـ Neon + إنشاء الجداول
   auth.ts           ← جلسات JWT
   systemPrompt.ts   ← شخصية mlag وتعليماته (نفس التطبيق الأصلي)
-  ai.ts             ← الاتصال بموديل GLM + fallback + رسائل الأخطاء
+  ai.ts             ← الاتصال بموديل Token Harbor (DeepSeek V4.1 Flash) + رسائل الأخطاء
   quota.ts          ← منطق رصيد التوكنز والتجديد كل 10 ساعات
   parseContent.ts   ← استخراج ملفات المشروع من رد الموديل
 components/         ← واجهة المستخدم (React)
