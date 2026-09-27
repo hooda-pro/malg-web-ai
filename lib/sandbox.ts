@@ -9,7 +9,7 @@
  * بصمت أو تدّي نتايج وهمية.
  */
 
-import { Sandbox } from "e2b";
+import { Sandbox, CommandExitError } from "e2b";
 
 export interface SandboxFile {
   path: string;
@@ -114,6 +114,22 @@ export async function runInSandbox(
       timedOut: false,
     };
   } catch (e) {
+    // مهم جدًا: E2B بيعمل throw لـ CommandExitError (مش بيرجّع نتيجة عادية)
+    // لما الأمر يخلص بـ exit code مش صفر — وده أمر طبيعي وشائع جدًا (زي أمر
+    // بيدور على ملف مش موجود، أو أداة رجّعت "مفيش نتايج"). من غير المعالجة
+    // دي، كنا بنضيع stdout/stderr الحقيقيين ونرجّع رسالة عامة "الأمر مانفذش"
+    // كأنه كراش فعلي في الـ sandbox نفسه — بينما هو مجرد فشل عادي للأمر، والموديل
+    // محتاج يشوف الـ stderr الحقيقي عشان يفهم السبب ويصلّح تلقائيًا.
+    if (e instanceof CommandExitError) {
+      return {
+        ok: false,
+        stdout: (e.stdout || "").slice(0, MAX_OUTPUT_CHARS),
+        stderr: (e.stderr || "").slice(0, MAX_OUTPUT_CHARS),
+        exitCode: typeof e.exitCode === "number" ? e.exitCode : null,
+        timedOut: false,
+      };
+    }
+
     const message = e instanceof Error ? e.message : String(e);
     const timedOut = /timeout/i.test(message);
     console.error("[sandbox] run_command failed", message);
@@ -125,7 +141,7 @@ export async function runInSandbox(
       timedOut,
       error: timedOut
         ? "الأمر خد وقت أطول من المسموح (90 ثانية) واتقطع."
-        : "حصلت مشكلة أثناء تشغيل الـ sandbox — الأمر مانفذش.",
+        : "حصلت مشكلة حقيقية في الاتصال بالـ sandbox نفسه (مش في الأمر) — الأمر مانفذش خالص.",
     };
   } finally {
     if (sbx) {
