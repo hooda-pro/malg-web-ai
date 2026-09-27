@@ -8,7 +8,7 @@ import type { ProjectFile } from "@/lib/parseContent";
 import TopBar from "./TopBar";
 import ChatDrawer from "./ChatDrawer";
 import MessageList from "./MessageList";
-import BottomInputBar from "./BottomInputBar";
+import BottomInputBar, { type ComposerAttachment } from "./BottomInputBar";
 import AuthModal from "./AuthModal";
 import RechargeModal from "./RechargeModal";
 import ArtifactPanel from "./ArtifactPanel";
@@ -17,6 +17,7 @@ import ShortcutsDialog from "./ShortcutsDialog";
 import Toast from "./Toast";
 import type { SettingsTab } from "./AccountMenu";
 import { useSettings, type ModelId } from "./SettingsContext";
+import { buildAttachmentsMetaBlock, buildAttachmentsPromptBlock } from "@/lib/attachments";
 
 const PREVIEWABLE_EXTS = new Set(["html", "htm", "css", "js"]);
 const SESSION_MODELS_KEY = "mlag-session-models";
@@ -351,15 +352,15 @@ export default function ChatShell() {
   const personalizationBody = { customInstructions, nickname };
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, attachments: ComposerAttachment[] = []) => {
       const trimmed = text.trim();
-      if (!trimmed || isGenerating) return;
+      if ((!trimmed && attachments.length === 0) || isGenerating) return;
       if (!user) {
         setShowAuthModal(true);
         return;
       }
 
-      if (isPreviewCommand(trimmed)) {
+      if (attachments.length === 0 && isPreviewCommand(trimmed)) {
         const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
         const files = lastAssistant ? extractProjectFiles(lastAssistant.content) : [];
         if (files.length > 0) {
@@ -379,11 +380,29 @@ export default function ChatShell() {
       const effectiveModel = sessionModels[sessionId] ?? model;
       lockSessionModel(sessionId, effectiveModel);
 
+      // نبني كتلة المرفقات (بيانات الصور Base64 + محتوى الملفات النصية المستخرج)
+      // ونحطها في نص الرسالة الفعلي المتخزّن — عشان الموديل يقدر يقرا محتوى
+      // الملفات في هذه الرسالة وفي أي رسالة تالية كمان (السياق بيتبني من
+      // رسايل الداتابيز)، والمستخدم يشوف صوره وملفاته في فقاعته. MessageItem
+      // بيفصل الجزء الشكلي (الصور + كارت الملفات) عن نص المستخدم وقت العرض
+      // عشان الفقاعة تفضل نضيفة بصريًا من غير ما يضيع محتوى الملف من الموديل.
+      const attachmentsMeta = buildAttachmentsMetaBlock(attachments);
+      const attachmentsPromptBlock = buildAttachmentsPromptBlock(
+        attachments.map((a) => ({
+          id: "",
+          file: a.file,
+          kind: a.kind,
+          extractedText: a.extractedText,
+          loading: false,
+        }))
+      );
+      const storedContent = trimmed + attachmentsMeta + attachmentsPromptBlock;
+
       const optimisticUser: ChatMessage = {
         id: `tmp-${Date.now()}`,
         sessionId,
         role: "user",
-        content: text,
+        content: storedContent,
         reasoning: null,
         thinkingDurationMs: null,
         isTruncated: false,
@@ -406,7 +425,7 @@ export default function ChatShell() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             sessionId,
-            message: trimmed,
+            message: storedContent,
             uiLanguage: lang,
             model: effectiveModel,
             ...personalizationBody,
