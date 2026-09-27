@@ -3,45 +3,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChatMessage, ChatSession, SessionUser } from "@/lib/types";
 import { consumeSSEStream } from "@/lib/streamClient";
-import { extractProjectFiles } from "@/lib/parseContent";
-import type { ProjectFile } from "@/lib/parseContent";
 import TopBar from "./TopBar";
 import ChatDrawer from "./ChatDrawer";
 import MessageList from "./MessageList";
 import BottomInputBar from "./BottomInputBar";
 import AuthModal from "./AuthModal";
 import RechargeModal from "./RechargeModal";
-import ArtifactPanel from "./ArtifactPanel";
 import SettingsModal from "./SettingsModal";
 import ShortcutsDialog from "./ShortcutsDialog";
 import Toast from "./Toast";
 import type { SettingsTab } from "./AccountMenu";
 import { useSettings, type ModelId } from "./SettingsContext";
 
-const PREVIEWABLE_EXTS = new Set(["html", "htm", "css", "js"]);
 const SESSION_MODELS_KEY = "mlag-session-models";
 const SIDEBAR_KEY = "mlag-sidebar-collapsed";
-
-function hasPreviewableFiles(content: string): boolean {
-  return extractProjectFiles(content).some((f) =>
-    PREVIEWABLE_EXTS.has((f.path.split(".").pop() || "").toLowerCase())
-  );
-}
-
-/** المستخدم كتب أمر معاينة («معاينة» / «عاين» / preview...)؟ */
-function isPreviewCommand(text: string): boolean {
-  const t = text
-    .trim()
-    .replace(/^[«"'\(\[]+/, "")
-    .replace(/[»"'\)\]]+$/, "")
-    .replace(/[.!؟?،,~*]+$/, "")
-    .trim();
-  return (
-    /^(?:ممكن|عايز|عاوز|أريد|اريد|ابدأ|إبدأ|افتح|إفتح|شغل|دوس|اعمل)?\s*(?:ال)?(?:معاينة|عاين|اعاين|إعاين)(?:\s+(?:الصفحة|الموقع|الكود|النتيجة|الملفات))?$/.test(
-      t
-    ) || /^(?:open\s+)?preview$/i.test(t)
-  );
-}
 
 function loadSessionModels(): Record<string, ModelId> {
   try {
@@ -82,10 +57,6 @@ export default function ChatShell() {
 
   const [continuingMessageId, setContinuingMessageId] = useState<string | null>(null);
   const [continuationStreamingContent, setContinuationStreamingContent] = useState("");
-
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [panelFiles, setPanelFiles] = useState<ProjectFile[]>([]);
-  const [panelFocusPath, setPanelFocusPath] = useState<string | undefined>(undefined);
 
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [showRecharge, setShowRecharge] = useState(false);
@@ -157,22 +128,6 @@ export default function ChatShell() {
     });
   }, []);
 
-  const openPanelWithFiles = useCallback((files: ProjectFile[], focusPath?: string) => {
-    if (!files.length) return;
-    setPanelFiles(files);
-    setPanelFocusPath(focusPath);
-    setPanelOpen(true);
-  }, []);
-
-  // أول ما ملف قابل للمعاينة يبدأ يتكتب أثناء البث — افتح المعاينة الحيّة على الديسكتوب
-  useEffect(() => {
-    if (!isGenerating || !streamingContent) return;
-    if (panelOpen) return;
-    if (typeof window !== "undefined" && window.innerWidth < 1024) return;
-    const files = extractProjectFiles(streamingContent);
-    if (hasPreviewableFiles(streamingContent) && files.length > 0) openPanelWithFiles(files);
-  }, [streamingContent, isGenerating, panelOpen, openPanelWithFiles]);
-
   const refreshQuota = useCallback(async () => {
     try {
       const res = await fetch("/api/quota");
@@ -231,7 +186,6 @@ export default function ChatShell() {
       setCurrentSessionId(null);
       setMessages([]);
       setQuota(null);
-      setPanelOpen(false);
       return;
     }
     (async () => {
@@ -281,7 +235,6 @@ export default function ChatShell() {
         setCurrentSessionId(data.session.id);
         setMessages([]);
         setDrawerOpen(false);
-        setPanelOpen(false);
         window.setTimeout(() => document.getElementById("mlag-composer")?.focus(), 50);
       }
     } catch {
@@ -292,7 +245,6 @@ export default function ChatShell() {
   const handleSelectSession = (id: string) => {
     setCurrentSessionId(id);
     setDrawerOpen(false);
-    setPanelOpen(false);
   };
 
   const handleDeleteSession = async (id: string) => {
@@ -302,7 +254,6 @@ export default function ChatShell() {
       const list = await refreshSessions();
       if (currentSessionId === id) {
         setCurrentSessionId(list.length > 0 ? list[0].id : null);
-        setPanelOpen(false);
       }
     } catch {
       showToast(t("toastDeleteFail"));
@@ -316,7 +267,6 @@ export default function ChatShell() {
       setSessions([]);
       setCurrentSessionId(null);
       setMessages([]);
-      setPanelOpen(false);
       setSessionModels({});
       try {
         localStorage.removeItem(SESSION_MODELS_KEY);
@@ -359,17 +309,6 @@ export default function ChatShell() {
         return;
       }
 
-      if (isPreviewCommand(trimmed)) {
-        const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
-        const files = lastAssistant ? extractProjectFiles(lastAssistant.content) : [];
-        if (files.length > 0) {
-          openPanelWithFiles(files);
-          return;
-        }
-        showToast(t("toastNoPreview"));
-        return;
-      }
-
       const sessionId = await ensureSessionId();
       if (!sessionId) {
         showToast(t("toastSessionFail"));
@@ -398,7 +337,6 @@ export default function ChatShell() {
 
       const controller = new AbortController();
       abortRef.current = controller;
-      let accContent = "";
 
       try {
         const res = await fetch("/api/chat", {
@@ -424,7 +362,6 @@ export default function ChatShell() {
         const reader = res.body!.getReader();
         await consumeSSEStream(reader, {
           onContent: (chunk) => {
-            accContent += chunk;
             setStreamingContent((prev) => prev + chunk);
           },
           onReasoning: (chunk) => setStreamingReasoning((prev) => prev + chunk),
@@ -433,15 +370,6 @@ export default function ChatShell() {
         if (e?.name !== "AbortError") showToast(t("toastDrop"));
       } finally {
         abortRef.current = null;
-        const producedFiles = accContent ? extractProjectFiles(accContent) : [];
-        if (producedFiles.length > 0) {
-          if (!panelOpen && hasPreviewableFiles(accContent)) {
-            openPanelWithFiles(producedFiles);
-            showToast(t("toastPreviewReady"));
-          } else {
-            setPanelFiles(producedFiles);
-          }
-        }
         // نجيب الرسالة المحفوظة الأول وبعدين نشيل فقاعة البث — عشان الرد ما يختفيش لحظة
         await refreshMessages(sessionId);
         await refreshQuota();
@@ -470,8 +398,6 @@ export default function ChatShell() {
       refreshMessages,
       refreshQuota,
       refreshSessions,
-      panelOpen,
-      openPanelWithFiles,
       showToast,
     ]
   );
@@ -484,7 +410,6 @@ export default function ChatShell() {
 
       const controller = new AbortController();
       abortRef.current = controller;
-      let accContent = "";
       const effectiveModel = sessionModels[currentSessionId] ?? model;
 
       try {
@@ -510,7 +435,6 @@ export default function ChatShell() {
         const reader = res.body!.getReader();
         await consumeSSEStream(reader, {
           onContent: (chunk) => {
-            accContent += chunk;
             setContinuationStreamingContent((prev) => prev + chunk);
           },
         });
@@ -518,17 +442,6 @@ export default function ChatShell() {
         if (e?.name !== "AbortError") showToast(t("toastContinueDrop"));
       } finally {
         abortRef.current = null;
-        const originalMsg = messages.find((m) => m.id === messageId);
-        const mergedContent = (originalMsg?.content || "") + accContent;
-        const producedFiles = mergedContent ? extractProjectFiles(mergedContent) : [];
-        if (producedFiles.length > 0) {
-          if (!panelOpen && hasPreviewableFiles(mergedContent)) {
-            openPanelWithFiles(producedFiles);
-            showToast(t("toastPreviewReady"));
-          } else {
-            setPanelFiles(producedFiles);
-          }
-        }
         await refreshMessages(currentSessionId);
         await refreshQuota();
         setContinuingMessageId(null);
@@ -543,7 +456,6 @@ export default function ChatShell() {
       user,
       currentSessionId,
       continuingMessageId,
-      messages,
       lang,
       model,
       sessionModels,
@@ -552,8 +464,6 @@ export default function ChatShell() {
       t,
       refreshMessages,
       refreshQuota,
-      panelOpen,
-      openPanelWithFiles,
       showToast,
     ]
   );
@@ -600,9 +510,6 @@ export default function ChatShell() {
 
   const remainingTokens = quota ? Math.max(quota.total - quota.used, 0) : null;
 
-  const liveStreamFiles =
-    isGenerating && streamingContent ? extractProjectFiles(streamingContent) : null;
-
   return (
     <div id="mlag-main" className="flex h-[100dvh] overflow-hidden bg-ground">
       <ChatDrawer
@@ -635,6 +542,7 @@ export default function ChatShell() {
           onToggleDrawer={toggleSidebar}
           sidebarCollapsed={sidebarCollapsed}
           remainingTokens={user?.isAdmin ? null : remainingTokens}
+          totalTokens={quota?.total ?? null}
           onOpenRecharge={openRecharge}
           onNewChat={handleNewChat}
           lockedModel={lockedModel}
@@ -652,7 +560,6 @@ export default function ChatShell() {
           onContinue={continueMessage}
           continuingMessageId={continuingMessageId}
           continuationStreamingContent={continuationStreamingContent}
-          onPreviewFiles={openPanelWithFiles}
         />
 
         <BottomInputBar
@@ -662,14 +569,6 @@ export default function ChatShell() {
           disabled={!authChecked}
         />
       </main>
-
-      {panelOpen && panelFiles.length > 0 && (
-        <ArtifactPanel
-          files={liveStreamFiles && liveStreamFiles.length > 0 ? liveStreamFiles : panelFiles}
-          focusPath={panelFocusPath}
-          onClose={() => setPanelOpen(false)}
-        />
-      )}
 
       {showAuthModal && (
         <AuthModal

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Lock, PanelLeft, SquarePen, Zap } from "lucide-react";
+import { Check, ChevronDown, Coins, Lock, PanelLeft, SquarePen, Zap } from "lucide-react";
 import { formatTokens } from "@/lib/ai";
 import { IconButton } from "./ui/Controls";
 import { AVAILABLE_MODELS, useSettings, type ModelId } from "./SettingsContext";
@@ -11,6 +11,7 @@ export default function TopBar({
   onToggleDrawer,
   sidebarCollapsed,
   remainingTokens,
+  totalTokens,
   onOpenRecharge,
   onNewChat,
   lockedModel,
@@ -19,6 +20,7 @@ export default function TopBar({
   onToggleDrawer: () => void;
   sidebarCollapsed: boolean;
   remainingTokens: number | null;
+  totalTokens?: number | null;
   onOpenRecharge: () => void;
   onNewChat: () => void;
   /** الموديل اللي الشات الحالي متثبت عليه (لو اتبعت فيه رسايل بالفعل) */
@@ -41,17 +43,11 @@ export default function TopBar({
 
       <div className="ms-auto flex items-center gap-1">
         {remainingTokens !== null && (
-          <button
-            onClick={onOpenRecharge}
-            title={t("topbarTokensHint")}
-            className={cn(
-              "hidden h-8 items-center gap-1.5 rounded-full border border-hair bg-surface px-3",
-              "text-ink-2 shadow-1 transition-colors duration-1 hover:border-hair-2 hover:text-ink xs:inline-flex"
-            )}
-          >
-            <Zap size={12} className="text-accent" />
-            <span className="tnum text-[12px] font-medium">{formatTokens(remainingTokens)}</span>
-          </button>
+          <TokensBadge
+            remainingTokens={remainingTokens}
+            totalTokens={totalTokens ?? null}
+            onOpenRecharge={onOpenRecharge}
+          />
         )}
 
         <IconButton
@@ -63,6 +59,127 @@ export default function TopBar({
         </IconButton>
       </div>
     </header>
+  );
+}
+
+/**
+ * أيقونة دائرية صغيرة بدل زرار التوكنز الطويل. بالضغط عليها (أو الـ hover
+ * على الديسكتوب) بتفتح كارت صغير فيه تفاصيل الاستخدام: المتبقي، الإجمالي،
+ * وشريط تقدم، مع زرار شحن سريع.
+ */
+function TokensBadge({
+  remainingTokens,
+  totalTokens,
+  onOpenRecharge,
+}: {
+  remainingTokens: number;
+  totalTokens: number | null;
+  onOpenRecharge: () => void;
+}) {
+  const { t } = useSettings();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const cancelClose = () => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
+  const scheduleClose = () => {
+    cancelClose();
+    closeTimer.current = setTimeout(() => setOpen(false), 200);
+  };
+
+  const total = totalTokens && totalTokens > 0 ? totalTokens : null;
+  const usedPct = total ? Math.min(100, Math.max(((total - remainingTokens) / total) * 100, 0)) : 0;
+
+  return (
+    <div
+      className="relative"
+      ref={ref}
+      onMouseEnter={() => {
+        cancelClose();
+        setOpen(true);
+      }}
+      onMouseLeave={scheduleClose}
+    >
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        title={t("topbarTokensHint")}
+        className={cn(
+          "grid h-8 w-8 shrink-0 place-items-center rounded-full border border-hair bg-surface",
+          "text-accent shadow-1 transition-colors duration-1 hover:border-hair-2"
+        )}
+      >
+        <Zap size={14} />
+      </button>
+
+      {open && (
+        <div
+          role="dialog"
+          aria-label={t("usageTitle")}
+          className="animate-materialize glass absolute end-0 top-[calc(100%+8px)] z-modal w-[240px] overflow-hidden rounded-lg border border-hair p-3.5 shadow-3"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[12px] font-medium text-ink-2">{t("usageTitle")}</span>
+            <span className="tnum text-[13px] font-semibold text-ink">
+              {t("tokensLeft", { n: formatTokens(remainingTokens) })}
+            </span>
+          </div>
+
+          {total !== null && (
+            <>
+              <span className="mt-2.5 block h-1.5 overflow-hidden rounded-full bg-surface-3">
+                <span
+                  className={cn(
+                    "block h-full rounded-full transition-[width] duration-3 ease-soft",
+                    usedPct >= 90 ? "bg-danger" : "bg-accent"
+                  )}
+                  style={{ width: `${Math.max(usedPct, 2)}%` }}
+                />
+              </span>
+              <p className="tnum mt-1.5 text-[11.5px] text-ink-3">
+                {t("tokensOutOf", { used: formatTokens(total - remainingTokens), total: formatTokens(total) })}
+              </p>
+            </>
+          )}
+
+          <button
+            onClick={() => {
+              setOpen(false);
+              onOpenRecharge();
+            }}
+            className={cn(
+              "mt-3 flex w-full items-center justify-center gap-1.5 rounded-full bg-accent-soft px-3 py-1.5",
+              "text-[12.5px] font-medium text-accent transition-colors duration-1 hover:bg-accent hover:text-accent-ink"
+            )}
+          >
+            <Coins size={13} />
+            {t("menuBuyTokens")}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -1,9 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, ChevronRight, Copy, Eye, Play, Sparkles, Zap } from "lucide-react";
+import { Check, ChevronRight, Copy, Play, Sparkles, Zap } from "lucide-react";
 import type { ChatMessage } from "@/lib/types";
-import type { ProjectFile } from "@/lib/parseContent";
 import { extractProjectFiles, parseMessageContent } from "@/lib/parseContent";
 import { formatTime } from "@/lib/utils";
 import { renderFormattedText } from "@/lib/markdown";
@@ -12,20 +11,16 @@ import ProjectFilesCard from "./ProjectFilesCard";
 import { useSettings } from "./SettingsContext";
 import { cn } from "@/lib/utils";
 
-const PREVIEWABLE_EXTS = new Set(["html", "htm", "css", "js"]);
-
 export default function MessageItem({
   message,
   onContinue,
   isContinuing,
   continuationStreamingContent,
-  onPreviewFiles,
 }: {
   message: ChatMessage;
   onContinue: () => void;
   isContinuing: boolean;
   continuationStreamingContent: string | null;
-  onPreviewFiles: (files: ProjectFile[], focusPath?: string) => void;
 }) {
   const { t, showTime } = useSettings();
   const isUser = message.role === "user";
@@ -35,9 +30,6 @@ export default function MessageItem({
   const displayContent = message.content + (continuationStreamingContent || "");
   const projectFiles = useMemo(() => extractProjectFiles(displayContent), [displayContent]);
   const hasProjectFiles = !isUser && projectFiles.length > 0;
-  const canPreview =
-    hasProjectFiles &&
-    projectFiles.some((f) => PREVIEWABLE_EXTS.has((f.path.split(".").pop() || "").toLowerCase()));
   const segments = useMemo(() => parseMessageContent(displayContent), [displayContent]);
 
   const thinkingLabel = useMemo(() => {
@@ -133,7 +125,7 @@ export default function MessageItem({
 
           {hasProjectFiles && (
             <div className="measure mb-3">
-              <ProjectFilesCard messageId={message.id} files={projectFiles} onOpen={onPreviewFiles} />
+              <ProjectFilesCard messageId={message.id} files={projectFiles} />
             </div>
           )}
 
@@ -151,17 +143,8 @@ export default function MessageItem({
             )}
           </div>
 
-          {(canPreview || message.isTruncated || isContinuing) && (
+          {(message.isTruncated || isContinuing) && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              {canPreview && (
-                <button
-                  onClick={() => onPreviewFiles(projectFiles)}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1.5 text-[12.5px] font-medium text-accent transition-colors duration-1 hover:bg-accent hover:text-accent-ink"
-                >
-                  <Eye size={13} />
-                  {t("previewPage")}
-                </button>
-              )}
               {isContinuing ? (
                 <span className="inline-flex items-center gap-2 text-[12.5px] text-ink-3">
                   <span className="h-3 w-3 animate-spin-slow rounded-full border-2 border-accent border-t-transparent" />
