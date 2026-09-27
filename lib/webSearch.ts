@@ -95,31 +95,29 @@ async function searchOnce(query: string, maxResults = 8): Promise<WebSearchResul
 }
 
 /**
- * هل الرسالة تستاهل بحث فعلي؟ — بعد التحديث ده، البحث بقى الوضع الافتراضي
- * لأي رسالة فيها محتوى حقيقي محتاج معلومة (مش مقتصر على كلمات مفتاحية زي
- * "اليوم"/"سعر"/"latest" بس زي قبل كده). بنستثني بس الرسائل القصيرة اللي
- * هي كلام مجاملة/محادثة بحتة (تحية، شكر، موافقة) عشان مفيش داعي نستهلك
- * استعلامات بحث عليها، وأي سؤال برمجي/إبداعي بحت ما فيهوش أي مطلب معلومة
- * واقعية (زي "اكتب لي كود لفرز مصفوفة").
+ * هل الرسالة تستاهل بحث فعلي؟ — البحث هنا مش الوضع الافتراضي: بيتفعّل بس
+ * لو فيه إشارة واضحة إن الرسالة محتاجة معلومة حقيقية "حالية/متغيرة" (سعر،
+ * خبر، نتيجة، منصب حالي...) أو المستخدم طلب البحث صراحةً. أي كلام تاني —
+ * محادثة عادية، رأي، نصيحة، شرح مفهوم، سؤال شخصي، كود، إبداع — بيتسيب
+ * للموديل يرد عليه طبيعي من غير ما يفضح إنه "بيشتغل على مشروعك"/"بيبحث"
+ * في بلوك النشاط للمستخدم من غير أي داعي.
  */
 export function shouldDeepSearch(userMessage: string): boolean {
   const text = userMessage.trim().toLowerCase();
   if (text.length < 2) return false;
 
-  const wordCount = text.split(/\s+/).filter(Boolean).length;
+  // طلب صريح إن المستخدم عايز بحث فعلي — دايمًا نبحث
+  const explicitSearchRequest =
+    /(ابحث|دوّر لي|دور لي|سيرش|search (for|online|the web)|look (it |that )?up|google it|شوف (على|في) النت|شوف على الإنترنت)/i;
+  if (explicitSearchRequest.test(text)) return true;
 
-  // كلام مجاملة/محادثة قصير بحت — مفيش أي فايدة من بحث عليه
-  const chitchatOnly =
-    /^(?:hi|hey|hello|thanks|thank you|ok|okay|yes|no|sure|bye|good\s?(morning|night|evening)|مرحبا|أهلا|اهلا|هاي|صباح الخير|مساء الخير|شكرا|شكراً|تمام|ماشي|أوكي|اوكي|أيوه|ايوه|لا شكرا|تسلم|ربنا يخليك|إزيك|ازيك|كيف الحال|عامل ايه|عامل إيه)[\s!.،؟?]*$/i;
-  if (wordCount <= 3 && chitchatOnly.test(text)) return false;
+  // إشارات واضحة إن السؤال عن حاجة "حالية/متغيرة" فعلاً (سعر، تاريخ اليوم،
+  // حدث جاري، منصب حالي، طقس، نتيجة مباراة...) — دي بس اللي بتستاهل بحث.
+  const needsCurrentInfo =
+    /(اليوم|النهارده|النهاردة|دلوقتي|حاليًا|حاليا|الآن|دلوقت|احدث|أحدث|آخر أخبار|اخر اخبار|أخبار|اخبار|سعر|أسعار|اسعار|بورصة|عملة|سعر الدولار|سعر الذهب|نتيجة المباراة|نتيجة مباراة|الطقس|طقس النهاردة|مين رئيس|مين وزير|من هو رئيس|latest|current(ly)?|today|right now|breaking news|\bnews\b|stock price|exchange rate|\bweather\b|who is the current|\bscore\b)/i;
+  if (needsCurrentInfo.test(text)) return true;
 
-  // طلب كود/إبداع بحت من غير أي إشارة لمعلومة واقعية خارجية — سيبه للموديل
-  // من غير بحث (البحث هنا مش هيضيف حاجة، والاستعلام ممكن يجيب نتايج مضللة)
-  const pureCodeOrCreative =
-    /^(اكتب|صمم|ولد|generate|write|design)\s+(لي|لى)?\s*(كود|code|قصة|story|قصيدة|شعر|مقال إبداعي)/i;
-  if (pureCodeOrCreative.test(text) && wordCount < 12) return false;
-
-  return true;
+  return false;
 }
 
 /**
