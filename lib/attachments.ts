@@ -8,6 +8,8 @@
  *   بيتسرد اسمها بس من غير محتوى.
  */
 
+import type { ProjectFile } from "./parseContent";
+
 export type AttachmentKind = "image" | "text";
 
 export interface PendingAttachment {
@@ -310,4 +312,45 @@ export function extractAttachmentsPromptSection(text: string): {
     mainText: text.slice(0, idx).trimEnd(),
     filesSection: text.slice(idx + marker.length),
   };
+}
+
+const ATTACHMENT_FILE_BLOCK_RE = /### ملف مرفق: (.+)\n```\n([\s\S]*?)\n```/g;
+// كل entry جوه zip اتفكّ بيتسجل كـ "\n--- path ---\ncontent" (شوف extractZipContents فوق).
+const ZIP_ENTRY_RE = /\n--- (.+?) ---\n([\s\S]*?)(?=\n--- |$)/g;
+
+/**
+ * بيستخرج ملفات المشروع الحقيقية اللي المستخدم رفعها كمرفقات (كود/نصوص/PDF
+ * مستخرج/محتوى zip اتفكّ) من نص رسالة مستخدم مخزّنة — عشان الـ sandbox
+ * (run_command) يقدر يشتغل فعليًا على الملفات اللي المستخدم رفعها بنفسه،
+ * مش بس اللي الموديل كتبها في ردوده. الصور مالهاش محتوى نصي فبتتجاهل هنا.
+ */
+export function extractUserAttachmentFiles(content: string): ProjectFile[] {
+  const { visibleText } = extractAttachmentsMeta(content);
+  const { filesSection } = extractAttachmentsPromptSection(visibleText);
+  if (!filesSection) return [];
+
+  const files: ProjectFile[] = [];
+  const blockRe = new RegExp(ATTACHMENT_FILE_BLOCK_RE);
+  let m: RegExpExecArray | null;
+  while ((m = blockRe.exec(filesSection)) !== null) {
+    const name = m[1].trim();
+    const text = m[2];
+
+    if (extOf(name) === "zip") {
+      // ملف zip: كل entry نصي جواه بيتحط كملف منفصل بمساره الأصلي جوه الأرشيف.
+      const zipRe = new RegExp(ZIP_ENTRY_RE);
+      let zm: RegExpExecArray | null;
+      let any = false;
+      while ((zm = zipRe.exec(text)) !== null) {
+        any = true;
+        const entryPath = zm[1].trim();
+        const entryContent = zm[2].replace(/\n$/, "");
+        files.push({ path: entryPath, content: entryContent });
+      }
+      if (!any) files.push({ path: name, content: text });
+    } else {
+      files.push({ path: name, content: text });
+    }
+  }
+  return files;
 }
