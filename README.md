@@ -31,6 +31,7 @@
 | `FIREBASE_PROJECT_ID` | من ملف Service Account (Firebase Console > Service accounts) |
 | `FIREBASE_CLIENT_EMAIL` | نفس ملف الـ Service Account |
 | `FIREBASE_PRIVATE_KEY` | نفس ملف الـ Service Account — خلي الأسطر الجديدة `\n` زي ما هي |
+| `E2B_API_KEY` | (اختياري) مفتاح [E2B](https://e2b.dev) — لو متظبط، بيتفعّل تنفيذ أوامر حقيقي (`run_command`) جوه sandbox حقيقي أثناء الشات. لو مش متظبط، الميزة دي بتتعطل بنظافة والموديل عمره ما يستخدمها. |
 
 > تسجيل حساب جديد للمستخدمين العاديين بقى عن طريق Google فقط (لازم تفعّل Google
 > Sign-In في Firebase Console > Authentication > Sign-in method). حساب الأدمن لوحده
@@ -132,3 +133,25 @@ components/         ← واجهة المستخدم (React)
 - زرار إيقاف أثناء البث
 - بيئة تشغيل كود حي (HTML/CSS/JS) داخل iframe معزول
 - تخزين حقيقي لكل حاجة (المحادثات، الرسائل، الرصيد) على Neon بدل التخزين المحلي القديم
+
+## Activity Block + تنفيذ أوامر حقيقي (run_command)
+
+كل رد بيعرض فوقه بلوك نشاط قابل للطي (`components/ActivityBlock.tsx`) بيبين
+الخطوات الحقيقية اللي حصلت فعلاً في الرد ده — بحث، كتابة ملفات، وتنفيذ أوامر —
+كل واحدة بحالتها (`✓ Completed` / `→ Running` / `⚠ Error`)، وبيتقفل لوحده
+لما الرد يخلص. مفيش أي خطوة متخيّلة: كل حدث بيتبني من حاجة حصلت فعليًا.
+
+لو ضبطت `E2B_API_KEY` (env var فوق)، الموديل بياخد أداة `run_command` حقيقية
+(function calling) يقدر يستخدمها لما يحتاج يتأكد إن الكود اللي كتبه شغال —
+زي `npm install`, `npm run build`, `npm test`. لما يستدعيها:
+
+1. السيرفر بيجمع أحدث نسخة من كل ملفات المشروع اللي اتكتبت في نفس المحادثة
+   (`lib/agentTools.ts`).
+2. بيفتح sandbox حقيقي معزول على [E2B](https://e2b.dev) (`lib/sandbox.ts`)،
+   يكتب فيه الملفات، ويشغّل الأمر فعليًا.
+3. الـ stdout/stderr/exit code الحقيقيين بيترجعوا للموديل (دورة كاملة، لغاية
+   3 جولات كحد أقصى في نفس الرد)، وبيتسجلوا كخطوة `run_command`/`run_tests`
+   حقيقية في الـ Activity Block.
+
+من غير `E2B_API_KEY`، الأداة دي مش موجودة أصلاً بالنسبة للموديل — الموقع
+بيشتغل زي ما هو من غير أي تغيير. التفعيل اختياري بالكامل.
