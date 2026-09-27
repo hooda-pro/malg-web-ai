@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, FileCode2, FolderArchive } from "lucide-react";
+import { ArrowUpRight, Download, FileCode2, FolderArchive } from "lucide-react";
 import type { ProjectFile } from "@/lib/parseContent";
 import { sanitizeFileName } from "@/lib/utils";
 import { useSettings } from "./SettingsContext";
@@ -40,15 +40,17 @@ function lineCount(content: string): number {
 }
 
 /**
- * كارت الملفات جوا الرسالة: بيسرد كل ملف كود مع عدد أسطره، وكل ملف له
- * زرار تحميل لوحده، والمشروع كله (لو أكتر من ملف) زرار تحميل zip.
+ * كارت الملفات جوا الرسالة: الضغط على أي ملف بيفتحه في لوحة الأرتيفاكت
+ * (معاينة + كود)، وكل ملف له زرار تحميل لوحده، والمشروع كله zip.
  */
 export default function ProjectFilesCard({
   messageId,
   files,
+  onOpen,
 }: {
   messageId: string;
   files: ProjectFile[];
+  onOpen: (files: ProjectFile[], focusPath?: string) => void;
 }) {
   const isProject = files.length >= 2;
   const { t } = useSettings();
@@ -87,17 +89,22 @@ export default function ProjectFilesCard({
             key={f.path}
             className="group flex items-center border-b border-hair last:border-b-0"
           >
-            <span
+            <button
+              onClick={() => onOpen(files, f.path)}
               dir="ltr"
-              className="flex min-w-0 flex-1 items-center gap-3 px-3.5 py-2.5 text-start"
+              className="flex min-w-0 flex-1 items-center gap-3 px-3.5 py-2.5 text-start transition-colors duration-1 hover:bg-surface-3"
             >
-              <span className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-ink-2">
+              <span className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-ink-2 group-hover:text-ink">
                 {f.path}
               </span>
               <span className="tnum shrink-0 text-[11px] text-ink-3">
                 {lineCount(f.content)} L
               </span>
-            </span>
+              <ArrowUpRight
+                size={13}
+                className="shrink-0 text-ink-3 transition-colors duration-1 group-hover:text-accent"
+              />
+            </button>
             <button
               onClick={() =>
                 downloadTextFile(sanitizeFileName(f.path.split("/").pop() || f.path), f.content)

@@ -1,14 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, Sparkles } from "lucide-react";
+import { ChevronRight, Eye, Sparkles } from "lucide-react";
 import type { ChatMessage } from "@/lib/types";
-import { parseStreamingContent } from "@/lib/parseContent";
+import type { ProjectFile } from "@/lib/parseContent";
+import { extractProjectFiles, parseStreamingContent } from "@/lib/parseContent";
 import { renderFormattedText } from "@/lib/markdown";
 import MessageItem from "./MessageItem";
 import WelcomeHero from "./WelcomeHero";
 import { useSettings } from "./SettingsContext";
 import { cn } from "@/lib/utils";
+
+const PREVIEWABLE_EXTS = new Set(["html", "htm", "css", "js"]);
 
 export default function MessageList({
   messages,
@@ -21,6 +24,7 @@ export default function MessageList({
   onContinue,
   continuingMessageId,
   continuationStreamingContent,
+  onPreviewFiles,
 }: {
   messages: ChatMessage[];
   isGenerating: boolean;
@@ -32,6 +36,7 @@ export default function MessageList({
   onContinue: (messageId: string) => void;
   continuingMessageId: string | null;
   continuationStreamingContent: string;
+  onPreviewFiles: (files: ProjectFile[], focusPath?: string) => void;
 }) {
   const { t } = useSettings();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -74,6 +79,10 @@ export default function MessageList({
   }
 
   const streamSegments = isGenerating ? parseStreamingContent(streamingContent) : [];
+  const streamFiles = isGenerating ? extractProjectFiles(streamingContent) : [];
+  const streamHasPreview = streamFiles.some((f) =>
+    PREVIEWABLE_EXTS.has((f.path.split(".").pop() || "").toLowerCase())
+  );
   const isBuilding = streamSegments.some((s) => s.type === "fileblock");
   const showThinking = !streamingContent || !!streamingReasoning;
 
@@ -89,6 +98,7 @@ export default function MessageList({
             continuationStreamingContent={
               continuingMessageId === m.id ? continuationStreamingContent : null
             }
+            onPreviewFiles={onPreviewFiles}
           />
         ))}
 
@@ -172,6 +182,18 @@ export default function MessageList({
                     )
                   )}
                 </div>
+
+                {streamHasPreview && (
+                  <div className="mt-3">
+                    <button
+                      onClick={() => onPreviewFiles(streamFiles)}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1.5 text-[12.5px] font-medium text-accent transition-colors duration-1 hover:bg-accent hover:text-accent-ink"
+                    >
+                      <Eye size={13} />
+                      {t("previewPage")}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </article>

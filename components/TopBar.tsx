@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Coins, Lock, PanelLeft, SquarePen, Zap } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronDown, Coins, Lock, PanelLeft, SquarePen } from "lucide-react";
 import { formatTokens } from "@/lib/ai";
 import { IconButton } from "./ui/Controls";
 import { AVAILABLE_MODELS, useSettings, type ModelId } from "./SettingsContext";
@@ -111,6 +111,17 @@ function TokensBadge({
   const total = totalTokens && totalTokens > 0 ? totalTokens : null;
   const usedPct = total ? Math.min(100, Math.max(((total - remainingTokens) / total) * 100, 0)) : 0;
 
+  // هندسة الدائرة (progress ring): محيط الدائرة ناقص الجزء المستخدم بيدّي طول القوس الظاهر
+  const size = 32;
+  const stroke = 3;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const dashOffset = useMemo(() => {
+    if (!total) return circumference; // لسه محملناش الرصيد — دائرة فاضية
+    return circumference * (1 - usedPct / 100);
+  }, [circumference, total, usedPct]);
+  const ringColor = usedPct >= 90 ? "text-danger" : usedPct >= 70 ? "text-warn" : "text-accent";
+
   return (
     <div
       className="relative"
@@ -126,12 +137,30 @@ function TokensBadge({
         aria-haspopup="dialog"
         aria-expanded={open}
         title={t("topbarTokensHint")}
-        className={cn(
-          "grid h-8 w-8 shrink-0 place-items-center rounded-full border border-hair bg-surface",
-          "text-accent shadow-1 transition-colors duration-1 hover:border-hair-2"
-        )}
+        className="grid h-8 w-8 shrink-0 place-items-center rounded-full transition-opacity duration-1 hover:opacity-80"
       >
-        <Zap size={14} />
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            strokeWidth={stroke}
+            className="stroke-hair-2"
+          />
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={dashOffset}
+            className={cn("transition-[stroke-dashoffset] duration-3 ease-soft", ringColor)}
+            stroke="currentColor"
+          />
+        </svg>
       </button>
 
       {open && (
