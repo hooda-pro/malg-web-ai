@@ -22,6 +22,7 @@ import { extractProjectFiles } from "@/lib/parseContent";
 import { buildAgentStepsMetaBlock, type AgentStep } from "@/lib/agentEvents";
 import { isSandboxConfigured, runInSandbox } from "@/lib/sandbox";
 import { RUN_COMMAND_TOOL, classifyCommandTool, collectSessionProjectFiles } from "@/lib/agentTools";
+import { buildApiMessageContent } from "@/lib/attachments";
 
 // لو E2B_API_KEY متظبط، بنبعت أداة run_command الحقيقية للموديل في كل نداء —
 // لو مش متظبط، الموديل عمره ما يشوف الأداة دي أصلاً (مفيش استدعاء وهمي ممكن يحصل).
@@ -138,7 +139,13 @@ export async function POST(req: NextRequest) {
 
   const apiMessages: ApiMessage[] = [
     { role: "system", content: systemPromptContent },
-    ...existing.slice(-10).map((m) => ({ role: m.role, content: m.content })),
+    // بنحوّل رسايل المستخدم (فيها احتمال مرفقات صور/ملفات في كتلة meta مخفية)
+    // لصيغة الـ content الصح — نص عادي لو مفيش صور، أو مصفوفة (نص + صور
+    // حقيقية) لو المستخدم رفع صورة، عشان الموديل يشوفها فعليًا (vision).
+    ...existing.slice(-10).map((m) => ({
+      role: m.role,
+      content: m.role === "user" ? buildApiMessageContent(m.content) : m.content,
+    })),
   ];
 
   // 3) اتصل بالموديل (مع منطق إعادة المحاولة/التراجع) قبل ما نبدأ نبعت أي حاجة للعميل

@@ -1,6 +1,8 @@
 /**
  * مرفقات الشات (صور + ملفات نصية/كود/PDF/مضغوطة):
- * - الصور: بتترفع كمرفق شكلي بس (data URI) — الموديل مالوش رؤية، فبس بتتعرض للمستخدم.
+ * - الصور: بتترفع كـ data URI، وبتتعرض للمستخدم في فقاعته، وكمان بتتبعت فعليًا
+ *   للموديل كصورة حقيقية (مش بس اسمها) — Token Harbor / DeepSeek V4.1 Flash
+ *   بيدعم رؤية (vision) فعلاً، شوف buildApiMessageContent تحت وlib/ai.ts.
  * - الملفات النصية/الكود: بيتقرأ محتواها ويتحط في نص الرسالة قبل ما تتبعت.
  * - PDF: استخراج نص خفيف (بدون مكتبة خارجية) — بيشتغل مع أغلب الـ PDF البسيطة
  *   (نص غير مضغوط)، ومش مضمون 100% مع كل PDF (خصوصاً الممسوحة ضوئيًا/المصورة).
@@ -223,8 +225,9 @@ export async function processFile(file: File): Promise<PendingAttachment> {
 
 /**
  * بيبني الجزء اللي بيتضاف لنص الرسالة المرسلة فعليًا للموديل: محتوى كل ملف
- * نصي/كود/PDF/zip متسرد بوضوح تحت اسم الملف. الصور مالهاش نص هنا (الموديل
- * مايشوفهاش)، وبيتم تجاهل أي ملف فشل استخراجه أو من غير محتوى.
+ * نصي/كود/PDF/zip متسرد بوضوح تحت اسم الملف. الصور مالهاش نص هنا (بتتبعت
+ * كصورة حقيقية منفصلة عبر buildApiMessageContent، مش كنص)، وبيتم تجاهل أي
+ * ملف فشل استخراجه أو من غير محتوى.
  */
 export function buildAttachmentsPromptBlock(attachments: PendingAttachment[]): string {
   const withText = attachments.filter((a) => a.kind === "text" && a.extractedText && a.extractedText.trim());
@@ -312,6 +315,31 @@ export function extractAttachmentsPromptSection(text: string): {
     mainText: text.slice(0, idx).trimEnd(),
     filesSection: text.slice(idx + marker.length),
   };
+}
+
+export type ApiContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
+/**
+ * بيحوّل نص رسالة مستخدم مخزّنة (زي ما هي في الداتابيز، فيها كتلة meta
+ * مخفية لو فيها مرفقات) لصيغة الـ content اللي بتتبعت فعليًا للموديل:
+ * - مفيش صور مرفقة → نص عادي (string) زي ما كان الوضع قبل كده بالظبط.
+ * - فيه صور مرفقة → مصفوفة أجزاء (OpenAI-compatible vision format): جزء
+ *   نص واحد (النص المكتوب + محتوى أي ملفات نصية مرفقة) + جزء صورة لكل صورة
+ *   (data URI Base64 زي ما هي) — عشان الموديل (لو بيدعم رؤية فعليًا زي
+ *   DeepSeek V4.1 Flash عبر Token Harbor) يشوف الصورة فعليًا، مش بس اسمها.
+ */
+export function buildApiMessageContent(content: string): string | ApiContentPart[] {
+  const { visibleText, attachments } = extractAttachmentsMeta(content);
+  const images = attachments.filter((a) => a.kind === "image" && a.previewUrl);
+  if (images.length === 0) return visibleText;
+
+  const parts: ApiContentPart[] = [{ type: "text", text: visibleText }];
+  for (const img of images) {
+    parts.push({ type: "image_url", image_url: { url: img.previewUrl! } });
+  }
+  return parts;
 }
 
 const ATTACHMENT_FILE_BLOCK_RE = /### ملف مرفق: (.+)\n```\n([\s\S]*?)\n```/g;

@@ -11,6 +11,7 @@ import {
   type ApiMessage,
 } from "@/lib/ai";
 import { buildPersonalizationBlock, buildSystemPrompt } from "@/lib/systemPrompt";
+import { buildApiMessageContent } from "@/lib/attachments";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -79,7 +80,10 @@ export async function POST(req: NextRequest) {
         buildSystemPrompt({ userName: user.displayName, uiLanguage }) +
         (personalization ? `\n\n${personalization}` : ""),
     },
-    ...history.slice(-10).map((m) => ({ role: m.role, content: m.content })),
+    ...history.slice(-10).map((m) => ({
+      role: m.role,
+      content: m.role === "user" ? buildApiMessageContent(m.content) : m.content,
+    })),
     { role: "user", content: CONTINUE_INSTRUCTION },
   ];
 

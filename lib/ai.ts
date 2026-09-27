@@ -30,9 +30,18 @@ export function normalizeModelId(_raw: unknown): ModelId {
   return "malg-a3";
 }
 
+/** جزء واحد من محتوى رسالة متعدد الوسائط (نص أو صورة) — صيغة OpenAI-compatible
+ * القياسية للـ vision، ومدعومة من Token Harbor / DeepSeek V4.1 Flash (بيدعم
+ * الصور فعليًا — شوف lib/attachments.ts::buildApiMessageContent). */
+export type ApiContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 export interface ApiMessage {
   role: string;
-  content: string;
+  /** نص عادي غالبًا. ممكن يبقى مصفوفة أجزاء (نص + صور) لو الرسالة فيها صور
+   * مرفقة والموديل بيدعم رؤية — شوف buildApiMessageContent. */
+  content: string | ApiContentPart[];
   /** لازمة لرسايل role: "tool" (نتيجة تنفيذ أداة) عشان الموديل يعرف الرد ده
    * بتاع أنهي استدعاء أداة بالظبط — مهم خصوصًا لو أكتر من أداة اتطلبت مع بعض. */
   tool_call_id?: string;
