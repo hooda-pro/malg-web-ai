@@ -70,21 +70,26 @@ export default function BottomInputBar({
     const trimmed = text.trim();
     if ((!trimmed && attachments.length === 0) || isGenerating) return;
     if (attachments.some((a) => a.loading)) return; // استنى لحد ما كل الملفات تخلص قراءة
-    // مهم: منمسحش نص/مرفقات الكومبوزر إلا لما نتأكد إن الإرسال نجح فعلاً —
-    // لو مسحناهم فورًا وبعدين الإرسال فشل (شبكة، مرفق كبير، خطأ سيرفر...)،
-    // المستخدم بيضيع رسالته ومرفقاته من غير ما ياخد فرصة يبعتها تاني.
+    // مهم: بنمسح نص/مرفقات الكومبوزر فورًا لما الإرسال يتقبل — مش بعد ما
+    // البث يخلص (ده ممكن ياخد دقايق، والنص الطويل كان بيفضل في الـ textarea
+    // والمرفقات قايمة تحته طوال التوليد). لو الإرسال فشل فعلًا (شبكة، خطأ
+    // سيرفر...)، بنرجّع النص والمرفقات زي ما كانوا عشان المستخدم ما يضيعش حاجة.
+    const sentText = text;
+    const sentAttachments = attachments;
+    setText("");
+    setAttachments([]);
     const ok = await onSend(
       trimmed,
-      attachments.map((a) => ({
+      sentAttachments.map((a) => ({
         file: a.file,
         extractedText: a.extractedText,
         previewUrl: a.previewUrl,
         kind: a.kind,
       }))
     );
-    if (ok !== false) {
-      setText("");
-      setAttachments([]);
+    if (ok === false) {
+      setText(sentText);
+      setAttachments(sentAttachments);
     }
   };
 

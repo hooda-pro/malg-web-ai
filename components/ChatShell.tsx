@@ -109,6 +109,9 @@ export default function ChatShell() {
     : undefined;
 
   const abortRef = useRef<AbortController | null>(null);
+  // جلسة فيها إرسال شغّال حاليًا — بنمنع بيها refresh الرسايل (لما شات جديد
+  // بيتعمل مثلًا) من إنها تمسح الرسالة المتفائلة اللي لسه ضافتها الشاشة.
+  const inFlightSessionRef = useRef<string | null>(null);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -245,8 +248,15 @@ export default function ChatShell() {
   }, [authChecked, user, refreshSessions, refreshQuota]);
 
   useEffect(() => {
-    if (currentSessionId) refreshMessages(currentSessionId);
-    else setMessages([]);
+    if (!currentSessionId) {
+      setMessages([]);
+      return;
+    }
+    // لو الإرسال الجاري شغّال على الجلسة دي بالظبط، ما نعملش refresh دلوقتي —
+    // الـ fetch بيرجع بيانات قديمة (أو فاضية لشات جديد) فبيمسح رسالة المستخدم
+    // المتفائلة وبتختفي من الشاشة. الـ refresh النهائي بيحصل في نهاية الإرسال.
+    if (inFlightSessionRef.current === currentSessionId) return;
+    refreshMessages(currentSessionId);
   }, [currentSessionId, refreshMessages]);
 
   const ensureSessionId = useCallback(async (): Promise<string | null> => {
@@ -381,6 +391,7 @@ export default function ChatShell() {
         showToast(t("toastSessionFail"));
         return false;
       }
+      inFlightSessionRef.current = sessionId;
 
       const effectiveModel = sessionModels[sessionId] ?? model;
       lockSessionModel(sessionId, effectiveModel);
@@ -475,6 +486,7 @@ export default function ChatShell() {
         }
         // نجيب الرسالة المحفوظة الأول وبعدين نشيل فقاعة البث — عشان الرد ما يختفيش لحظة
         await refreshMessages(sessionId);
+        if (inFlightSessionRef.current === sessionId) inFlightSessionRef.current = null;
         await refreshQuota();
         setIsGenerating(false);
         setStreamingContent("");
