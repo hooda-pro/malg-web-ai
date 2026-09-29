@@ -25,6 +25,18 @@ export interface ChatMessage {
   isTruncated: boolean;
   tokensUsed: number;
   createdAt: string;
+  /**
+   * مفتاح React ثابت على مستوى الواجهة بس (مش بيتخزّن في الداتابيز). بنستخدمه عشان
+   * رسالة المستخدم المتفائلة (tmp-…) ورد المساعد الحيّ يفضلوا نفس عنصر الـDOM بعد ما
+   * السيرفر يرجّع نسختهم المحفوظة بـ id تاني — من غير إعادة تركيب ولا إعادة تشغيل
+   * للأنيميشن ولا وميض.
+   */
+  clientKey?: string;
+}
+
+/** رسالة لسه ما اتحفظتش في السيرفر (متفائلة أو محلية) — id بتاعها بيبدأ بـ tmp- أو local- */
+export function isLocalMessageId(id: string): boolean {
+  return id.startsWith("tmp-") || id.startsWith("local-");
 }
 
 export interface UserQuota {

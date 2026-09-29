@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Check, ChevronRight, Cog, FileCode2, Loader2, Search, Terminal } from "lucide-react";
 import type { AgentStep } from "@/lib/agentEvents";
 import { agentStepLabel } from "@/lib/agentEvents";
@@ -32,13 +32,18 @@ export default function ActivityBlock({
   isActive: boolean;
 }) {
   const { t } = useSettings();
-  const [open, setOpen] = useState(true);
+  // مهم: بيبدأ مفتوح بس لو التنفيذ لسه شغّال. قبل كده كان بيبدأ مفتوح دايمًا ثم
+  // يتقفل بعد أول رسم (useEffect) — فكل رسالة قديمة فيها خطوات كانت بتوميض مفتوحة
+  // لفريم وبعدين تنهار، وده كان بيعمل قفزة في الارتفاع عند فتح أي شات.
+  const [open, setOpen] = useState(isActive);
   const [userToggled, setUserToggled] = useState(false);
+  const wasActive = useRef(isActive);
 
-  // أول ما التنفيذ يخلص (isActive بيبقى false) نقفل البلوك تلقائيًا مرة واحدة،
-  // إلا لو المستخدم كان فعليًا فاتحه/قافله بنفسه أثناء التنفيذ.
+  // لما التنفيذ يخلص (active → غير active) نقفل البلوك مرة واحدة بانسيابية،
+  // إلا لو المستخدم كان فتحه/قفله بنفسه.
   useEffect(() => {
-    if (!isActive && !userToggled) setOpen(false);
+    if (wasActive.current && !isActive && !userToggled) setOpen(false);
+    wasActive.current = isActive;
   }, [isActive, userToggled]);
 
   if (steps.length === 0) return null;
@@ -80,25 +85,34 @@ export default function ActivityBlock({
         />
       </button>
 
-      {open && (
-        <ul className="animate-materialize border-t border-hair px-3.5 py-2.5">
-          {steps.map((step) => (
-            <li key={step.id} className="flex items-center gap-2 py-1 text-[12.5px] leading-6">
-              <StepIcon status={step.status} />
-              <ToolGlyph tool={step.tool} />
-              <span
-                dir="auto"
-                className={cn(
-                  "min-w-0 flex-1 truncate",
-                  step.status === "error" ? "text-danger" : "text-ink-2"
-                )}
-              >
-                {agentStepLabel(step)}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+      {/* فتح/قفل بارتفاع متحرّك (grid-rows) بدل ظهور/اختفاء مفاجئ */}
+      <div
+        aria-hidden={!open}
+        className={cn(
+          "grid transition-[grid-template-rows] duration-2 ease-soft",
+          open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+        )}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <ul className="border-t border-hair px-3.5 py-2.5">
+            {steps.map((step) => (
+              <li key={step.id} className="flex items-center gap-2 py-1 text-[12.5px] leading-6">
+                <StepIcon status={step.status} />
+                <ToolGlyph tool={step.tool} />
+                <span
+                  dir="auto"
+                  className={cn(
+                    "min-w-0 flex-1 truncate",
+                    step.status === "error" ? "text-danger" : "text-ink-2"
+                  )}
+                >
+                  {agentStepLabel(step)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
     </div>
   );
 }

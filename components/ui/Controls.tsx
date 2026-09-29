@@ -237,26 +237,65 @@ export function Dialog({
   bodyClassName?: string;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
+  // بنحتفظ بآخر onClose في ref بدل ما نحطه في deps الـeffect: الأهل بيمرروه كـ arrow
+  // جديدة في كل render، وكان ده بيعيد تشغيل الـeffect (وبالتالي "التركيز التلقائي")
+  // مع كل حرف بيتكتب في الإعدادات — فالفوكس كان بيقفز لأول حقل في الديالوج.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   useEffect(() => {
     if (!open) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      // فخ فوكس بسيط: Tab / Shift+Tab بيلفّوا جوه الديالوج بس
+      const card = cardRef.current;
+      if (!card) return;
+      const focusables = Array.from(
+        card.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((el) => el.getClientRects().length > 0);
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      const outside = !active || !card.contains(active) || active === card;
+      if (e.shiftKey && (active === first || outside)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (active === last || outside)) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKey);
+
+    // تركيز أولي مرة واحدة بس لما الديالوج يفتح: حقل مطلوب لو موجود، وإلا الديالوج نفسه
+    // (من غير ما نحط حلقة فوكس على زرار الإغلاق أو على قايمة اللغة).
     const t = window.setTimeout(() => {
       const card = cardRef.current;
+      if (!card || card.contains(document.activeElement)) return;
       const target =
-        card?.querySelector<HTMLElement>("input, textarea, select") ??
-        card?.querySelector<HTMLElement>("[data-autofocus]") ??
-        card?.querySelector<HTMLElement>("button");
-      target?.focus();
+        card.querySelector<HTMLElement>("[data-autofocus]") ??
+        card.querySelector<HTMLElement>("input:not([type=hidden]), textarea") ??
+        card;
+      target.focus({ preventScroll: true });
     }, 60);
+
     return () => {
       document.removeEventListener("keydown", onKey);
       window.clearTimeout(t);
+      previouslyFocused?.focus?.({ preventScroll: true });
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -275,8 +314,9 @@ export function Dialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={labelledBy}
+        tabIndex={-1}
         className={cn(
-          "animate-sheet-in sm:animate-materialize glass relative flex max-h-[92dvh] w-full flex-col",
+          "animate-sheet-in sm:animate-materialize glass relative flex max-h-[92dvh] w-full flex-col outline-none",
           "rounded-t-3xl border border-hair shadow-3 sm:rounded-3xl",
           { sm: "sm:max-w-[420px]", md: "sm:max-w-[560px]", lg: "sm:max-w-[780px]" }[size],
           className

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { ArrowUp, FileArchive, FileText, Paperclip, Square, X } from "lucide-react";
 import {
   formatBytes,
@@ -16,6 +16,16 @@ export interface ComposerAttachment {
   previewUrl?: string;
   kind: "image" | "text";
 }
+
+/**
+ * خانة الكتابة بتكبر وتصغر من غير أي JavaScript بيقيس ارتفاع: فيه "مرآة" مخفية
+ * (نفس النص ونفس الخط والحشو) واقفة في نفس خلية الـgrid مع الـtextarea، فالارتفاع
+ * بيتحدد من المرآة. لما النص يتمسح بعد الإرسال المرآة بترجع سطر واحد والخانة بترجع
+ * لحجمها الأصلي فورًا — مستحيل تفضل طويلة وفاضية. (الطريقة القديمة كانت بتحسب
+ * style.height يدويًا وبتعمل قفزة في القايمة اللي فوقها مع كل حرف.)
+ * الخط 16px على الموبايل عشان iOS ما يعملش zoom تلقائي أول ما تضغط على الخانة.
+ */
+const FIELD_TEXT = "px-4 pb-1 pt-3.5 text-[16px] leading-7 sm:text-[15px]";
 
 export default function BottomInputBar({
   isGenerating,
@@ -35,13 +45,6 @@ export default function BottomInputBar({
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
-
-  useEffect(() => {
-    const ta = taRef.current;
-    if (!ta) return;
-    ta.style.height = "0px";
-    ta.style.height = Math.min(ta.scrollHeight, 220) + "px";
-  }, [text]);
 
   const addFiles = (files: FileList | File[]) => {
     const list = Array.from(files);
@@ -184,23 +187,38 @@ export default function BottomInputBar({
           </div>
         )}
 
-        <textarea
-          ref={taRef}
-          id="mlag-composer"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          rows={1}
-          dir="auto"
-          placeholder={t("placeholder")}
-          disabled={disabled}
-          aria-label={t("placeholder")}
-          className={cn(
-            "max-h-[220px] w-full resize-none bg-transparent px-4 pb-1 pt-3.5 text-[15px]",
-            "leading-7 text-ink placeholder:text-ink-3 outline-none focus:outline-none focus-visible:outline-none disabled:opacity-50"
-          )}
-        />
+        <div className="grid max-h-[220px]">
+          <div
+            aria-hidden="true"
+            dir="auto"
+            className={cn(
+              FIELD_TEXT,
+              "pointer-events-none invisible col-start-1 row-start-1 max-h-[220px] overflow-hidden whitespace-pre-wrap break-words"
+            )}
+          >
+            {/* المرآة بتحجز مكان الـplaceholder كمان لو النص فاضي (لو لفّ على سطرين) */}
+            {(text || t("placeholder")) + "\u200b"}
+          </div>
+          <textarea
+            ref={taRef}
+            id="mlag-composer"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            rows={1}
+            dir="auto"
+            enterKeyHint={enterToSend ? "send" : "enter"}
+            placeholder={t("placeholder")}
+            disabled={disabled}
+            aria-label={t("placeholder")}
+            className={cn(
+              FIELD_TEXT,
+              "col-start-1 row-start-1 h-full min-h-0 w-full resize-none overflow-y-auto bg-transparent",
+              "text-ink outline-none placeholder:text-ink-3 focus:outline-none focus-visible:outline-none disabled:opacity-50"
+            )}
+          />
+        </div>
 
         <div className="flex items-center gap-1.5 px-2.5 pb-2.5 pt-1">
           <button
@@ -219,6 +237,7 @@ export default function BottomInputBar({
 
           {isGenerating ? (
             <button
+              onMouseDown={(e) => e.preventDefault()}
               onClick={onStop}
               title={t("stop")}
               aria-label={t("stop")}
@@ -228,6 +247,7 @@ export default function BottomInputBar({
             </button>
           ) : (
             <button
+              onMouseDown={(e) => e.preventDefault()}
               onClick={handleSend}
               disabled={!canSend || disabled}
               title={t("send")}
