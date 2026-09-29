@@ -32,6 +32,7 @@
 | `FIREBASE_CLIENT_EMAIL` | نفس ملف الـ Service Account |
 | `FIREBASE_PRIVATE_KEY` | نفس ملف الـ Service Account — خلي الأسطر الجديدة `\n` زي ما هي |
 | `E2B_API_KEY` | (اختياري) مفتاح [E2B](https://e2b.dev) — لو متظبط، بيتفعّل تنفيذ أوامر حقيقي (`run_command`) جوه sandbox حقيقي أثناء الشات. لو مش متظبط، الميزة دي بتتعطل بنظافة والموديل عمره ما يستخدمها. |
+| `E2B_TEMPLATE` / `E2B_SANDBOX_MEMORY_MB` | (اختياريين) اسم template مخصص للـ sandbox ورامه بالميجابايت. الافتراضي 512MB وده ضعيف على `npm install` لمشاريع Next — شوف `e2b-template/README.md`. |
 
 > تسجيل حساب جديد للمستخدمين العاديين بقى عن طريق Google فقط (لازم تفعّل Google
 > Sign-In في Firebase Console > Authentication > Sign-in method). حساب الأدمن لوحده

@@ -27,7 +27,7 @@ import {
   type AgentStep,
   type AgentStepDetail,
 } from "@/lib/agentEvents";
-import { isSandboxConfigured, SandboxSession } from "@/lib/sandbox";
+import { getSandboxMemoryMb, isSandboxConfigured, SandboxSession } from "@/lib/sandbox";
 import {
   LIST_FILES_TOOL,
   READ_FILE_TOOL,
@@ -173,6 +173,7 @@ export async function POST(req: NextRequest) {
       uiLanguage,
       sandboxAvailable: SANDBOX_ON,
       fileToolsAvailable: initialProjectFiles.length > 0,
+      sandboxMemoryMb: getSandboxMemoryMb(),
     }) +
     (personalization ? `\n\n${personalization}` : "") +
     (deepSearch.performed && deepSearch.contextBlock ? `\n\n${deepSearch.contextBlock}` : "");

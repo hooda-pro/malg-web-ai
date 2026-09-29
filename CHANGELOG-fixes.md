@@ -168,3 +168,19 @@ frame واحد)، بس حبيت أكون صريح معاك إني شفتها.
 - فحص TypeScript على الملفات المعدّلة (من غير node_modules، فالأخطاء الوحيدة كانت من غياب الحزم نفسها).
 - **مااتختبرش:** الـ sandbox الحقيقي (E2B) ونداء الموديل الحقيقي — محتاجين مفاتيحك. جرّب رسالة فيها zip
   وأمر بسيط الأول.
+
+---
+
+## v5 — فشل `npm install` بسبب الرام (exit 137 / 134)
+
+السبب: الـ sandbox الافتراضي في E2B = 2 vCPU و512 MiB رام (بحسب docs E2B)، والرام بتتحدد وقت بناء الـ
+template. `npm install` لمشروع Next 16 + React 19 + firebase بياخد أكتر من كده فالـ OOM killer بيقتله.
+ده مش عيب في الكود. اللي اتعمل:
+
+- **`lib/sandbox.ts`**: دعم `E2B_TEMPLATE` (اسم template أكبر) و`E2B_SANDBOX_MEMORY_MB`. كشف الـ OOM
+  (exit 137/134، "Killed"، "heap out of memory") وإرجاع `hint` للموديل فيه `free -m` وتعليمات: ما تعيدش نفس
+  الأمر، ما ترفعش `--max-old-space-size` فوق الرام، وقول الحقيقة للمستخدم.
+- **`lib/systemPrompt.ts`**: الموديل بيعرف رام الـ sandbox، وبيتقاله إن `--max-old-space-size` أكبر من الرام
+  بيخلّي الـ OOM killer يقتل العملية، وإن يتحقق بطرق أخف (tsc لملفات محددة، node --check) لو البناء الكامل مش هينفع.
+- **`e2b-template/`**: `e2b.Dockerfile` (base + pnpm) و`README.md` بخطوات بناء template بـ 4 cores و4GB رام.
+- ما اتجرّبش على E2B حقيقي (محتاج حسابك). جرّب بعد بناء الـ template: `npm install && npm run build` على المشروع ده.

@@ -45,6 +45,27 @@ const MAX_OUTPUT_CHARS = 6_000;
 // كان 2000 حرف وده كان بيقص أي heredoc (cat > file << EOF) في النص فيطلع
 // "here-document delimited by end-of-file". دلوقتي 20000.
 export const MAX_COMMAND_CHARS = 20_000;
+
+// الـ sandbox الافتراضي في E2B (template "base") = 2 vCPU و512 MiB رام، والرام بتتحدد وقت
+// بناء الـ template مش وقت التشغيل. مشروع زي Next + React + firebase بيتقتل في
+// `npm install` (exit 137 = OOM) على 512MB. الحل: نبني template أكبر (شوف
+// e2b-template/README.md) ونحط اسمه/الـ id في E2B_TEMPLATE، ونقول للتطبيق حجم رامه
+// الحقيقي في E2B_SANDBOX_MEMORY_MB عشان الموديل يعرف حدوده.
+export function getSandboxTemplate(): string | undefined {
+  const t = (process.env.E2B_TEMPLATE || "").trim();
+  return t || undefined;
+}
+
+export function getSandboxMemoryMb(): number {
+  const n = Number(process.env.E2B_SANDBOX_MEMORY_MB);
+  return Number.isFinite(n) && n >= 128 ? Math.floor(n) : 512;
+}
+
+/** exit 137 = SIGKILL (غالبًا OOM killer)، 134 = SIGABRT (Node بيعمل abort لما الـ heap يخلص). */
+export function looksLikeOutOfMemory(exitCode: number | null, stderr: string): boolean {
+  if (exitCode === 137 || exitCode === 134) return true;
+  return /\bKilled\b|JavaScript heap out of memory|FATAL ERROR: .*(heap|allocation)|Cannot allocate memory|ENOMEM/i.test(stderr);
+}
 export const PROJECT_DIR = "/home/user/project";
 
 export function isSandboxConfigured(): boolean {
@@ -88,10 +109,9 @@ export class SandboxSession {
 
   private async ensure(): Promise<Sandbox> {
     if (this.sbx) return this.sbx;
-    const sbx = await Sandbox.create({
-      apiKey: process.env.E2B_API_KEY,
-      timeoutMs: SANDBOX_LIFETIME_MS,
-    });
+    const template = getSandboxTemplate();
+    const createOpts = { apiKey: process.env.E2B_API_KEY, timeoutMs: SANDBOX_LIFETIME_MS };
+    const sbx = template ? await Sandbox.create(template, createOpts) : await Sandbox.create(createOpts);
     await sbx.commands.run(`mkdir -p ${PROJECT_DIR}`);
     this.sbx = sbx;
     return sbx;
@@ -162,13 +182,14 @@ export class SandboxSession {
       const timeoutMs = Math.min(COMMAND_TIMEOUT_MS, remaining);
       const result = await sbx.commands.run(cmd, { cwd: PROJECT_DIR, timeoutMs });
 
-      return {
+      const out: RunCommandResult = {
         ok: result.exitCode === 0,
         stdout: (result.stdout || "").slice(0, MAX_OUTPUT_CHARS),
         stderr: (result.stderr || "").slice(0, MAX_OUTPUT_CHARS),
         exitCode: typeof result.exitCode === "number" ? result.exitCode : null,
         timedOut: false,
       };
+      return out;
     } catch (e) {
       // E2B بيعمل throw لـ CommandExitError لما الأمر يخلص بـ exit code مش صفر —
       // ده فشل عادي للأمر (مش كراش)، والموديل محتاج الـ stderr الحقيقي.
@@ -181,7 +202,9 @@ export class SandboxSession {
           exitCode: typeof e.exitCode === "number" ? e.exitCode : null,
           timedOut: false,
         };
-        if (/No such file or directory|ENOENT|cannot find|not found/i.test(stderr)) {
+        if (looksLikeOutOfMemory(result.exitCode, stderr)) {
+          result.hint = await this.memoryHint(result.exitCode);
+        } else if (/No such file or directory|ENOENT|cannot find|not found/i.test(stderr)) {
           result.hint = await this.locationHint();
         }
         return result;
@@ -208,6 +231,30 @@ export class SandboxSession {
     } catch {
       return undefined;
     }
+  }
+
+  /**
+   * لما أمر يتقتل بسبب الرام: بنرجّع للموديل حجم الرام الحقيقي (free -m) وتعليمات واضحة،
+   * عشان ميكررش نفس الأمر ولا يرفع --max-old-space-size فوق الرام الفعلية (ده بيخلّي
+   * الـ OOM killer يقتل العملية بدل ما الـ GC يشتغل).
+   */
+  private async memoryHint(exitCode: number | null): Promise<string> {
+    let free = "";
+    if (this.sbx) {
+      try {
+        const r = await this.sbx.commands.run("free -m | head -3", { cwd: PROJECT_DIR, timeoutMs: 10_000 });
+        free = (r.stdout || "").trim();
+      } catch {
+        // تجاهل
+      }
+    }
+    return (
+      `الأمر اتقتل بسبب نفاد الرام (exit ${exitCode ?? "?"}). رام الـ sandbox حوالي ${getSandboxMemoryMb()}MB. ` +
+      `ما تعيدش نفس الأمر ولا ترفع --max-old-space-size فوق الرام الفعلية. ` +
+      `لو التثبيت/البناء الكامل مش هينفع على الرام دي، قول للمستخدم كده بصراحة (ومتقولش إن المشروع اشتغل) ` +
+      `وتحقق بطرق أخف: tsc على ملفات محددة بعد تثبيت typescript بس، أو node --check لملفات JS، أو اختبار دوال منفصلة.` +
+      (free ? `\n${free}` : "")
+    );
   }
 
   /** بيقفل الـ sandbox — آمن يتنادى أكتر من مرة. */
