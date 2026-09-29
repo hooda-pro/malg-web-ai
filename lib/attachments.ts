@@ -26,6 +26,8 @@ export interface PendingAttachment {
   loading: boolean;
   /** لو فشل الاستخراج (PDF معقد، ملف ثنائي غير مدعوم...) */
   error?: string;
+  /** ملاحظة معلوماتية (مش خطأ): مثلًا "اتقرا 98 ملف — اتخطّينا node_modules" */
+  note?: string;
 }
 
 const TEXT_EXTENSIONS = new Set([
@@ -33,11 +35,24 @@ const TEXT_EXTENSIONS = new Set([
   "js", "jsx", "ts", "tsx", "mjs", "cjs", "py", "rb", "php", "java", "kt",
   "c", "h", "cpp", "hpp", "cs", "go", "rs", "swift", "sql", "sh", "bash",
   "html", "htm", "css", "scss", "less", "vue", "svelte", "graphql", "toml",
-  "dockerfile", "gitignore", "conf", "properties",
+  "dockerfile", "gitignore", "conf", "properties", "svg", "mdx", "prisma", "gradle", "kts", "dart",
 ]);
 
-const MAX_TEXT_CHARS_PER_FILE = 20_000;
-const MAX_ZIP_ENTRIES_READ = 40;
+// حد التخزين لكل ملف (الملف بيتخزّن كامل عشان الـ sandbox يشتغل على نسخة سليمة).
+// ده مش الحد اللي بيتبعت للموديل — اللي بيتبعت للموديل قايمة أسماء + أداة read_file
+// (شوف toApiUserContent تحت)، فحجم الملفات هنا مبيتحوّلش لتوكنز تلقائيًا.
+const MAX_STORED_CHARS_PER_FILE = 300_000;
+const MAX_ZIP_ENTRIES_READ = 400;
+// سقف إجمالي محتوى الـ zip المتخزّن في الرسالة (حماية لحجم الطلب وقاعدة البيانات).
+const MAX_ZIP_TOTAL_CHARS = 1_500_000;
+// مجلدات/ملفات مش مفيدة للموديل ولا للـ sandbox وبتاكل الميزانية على الفاضي.
+const SKIP_PATH_RE = /(^|\/)(node_modules|\.git|\.next|\.turbo|\.vercel|dist|build|coverage|__pycache__|\.venv|venv)(\/|$)/;
+const SKIP_FILE_RE = /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb|\.DS_Store)$/;
+
+/** حدود ما يتبعت فعليًا للموديل (بالحروف) — شوف toApiUserContent. */
+export const API_INLINE_FILE_MAX_CHARS = 12_000;
+export const API_INLINE_TOTAL_MAX_CHARS = 24_000;
+export const API_MANIFEST_MAX_ENTRIES = 200;
 
 function extOf(name: string): string {
   const parts = name.toLowerCase().split(".");
@@ -140,33 +155,90 @@ function unescapePdfString(s: string): string {
     .replace(/\\\\/g, "\\");
 }
 
-async function extractZipContents(file: File): Promise<string> {
-  const JSZip = (await import("jszip")).default;
-  const zip = await JSZip.loadAsync(file);
-  const entries = Object.values(zip.files).filter((e) => !e.dir);
+export interface ZipEntryLike {
+  name: string;
+  read: () => Promise<string>;
+}
+
+export interface ZipTextResult {
+  text: string;
+  /** عدد الملفات النصية اللي اتقرت فعلًا */
+  readCount: number;
+  /** ملاحظة جاهزة للعرض للمستخدم لو اتخطينا حاجة (ملفات كتير/كبيرة/ثنائية...) */
+  notice: string | null;
+}
+
+/**
+ * بيبني نص الـ zip من قايمة entries (منفصلة عن JSZip عشان تتختبر لوحدها).
+ * الفورمات: كل ملف "\n=== FILE: المسار ===\nالمحتوى" (الفورمات القديم "--- المسار ---"
+ * لسه بيتقرا للرسايل المخزّنة قبل كده، بس اتغيّر لأن سطر زي "--- x ---" جوه ملف
+ * markdown كان بيتفسّر كبداية ملف جديد). المحتوى بيتخزّن كامل (لحد
+ * MAX_STORED_CHARS_PER_FILE) — مفيش اقتطاع بيتحط جوه المحتوى نفسه إلا لو الملف
+ * فعلًا أكبر من السقف، عشان الـ sandbox ميشتغلش على ملف مكسور.
+ */
+export async function buildZipText(entries: ZipEntryLike[]): Promise<ZipTextResult> {
   const parts: string[] = [];
   let read = 0;
+  let total = 0;
+  let skippedIgnored = 0;
+  let skippedBinary = 0;
+  let skippedBudget = 0;
+  let truncatedFiles = 0;
 
   for (const entry of entries) {
-    if (read >= MAX_ZIP_ENTRIES_READ) {
-      parts.push(`\n… (تم الاكتفاء بأول ${MAX_ZIP_ENTRIES_READ} ملف — الأرشيف فيه ملفات أكتر)`);
-      break;
+    if (SKIP_PATH_RE.test(entry.name) || SKIP_FILE_RE.test(entry.name)) {
+      skippedIgnored++;
+      continue;
     }
     const ext = extOf(entry.name);
-    if (TEXT_EXTENSIONS.has(ext) || ext === "") {
-      try {
-        const text = await entry.async("string");
-        parts.push(`\n--- ${entry.name} ---\n${truncateNote(text, MAX_TEXT_CHARS_PER_FILE)}`);
-        read++;
-      } catch {
-        parts.push(`\n--- ${entry.name} --- (تعذّرت قراءته كنص)`);
+    const isText = TEXT_EXTENSIONS.has(ext) || ext === "";
+    if (!isText) {
+      skippedBinary++;
+      parts.push(`\n=== FILE: ${entry.name} === (ملف ثنائي — مش هيتقرأ محتواه)`);
+      continue;
+    }
+    if (read >= MAX_ZIP_ENTRIES_READ || total >= MAX_ZIP_TOTAL_CHARS) {
+      skippedBudget++;
+      continue;
+    }
+    try {
+      let text = await entry.read();
+      if (text.length > MAX_STORED_CHARS_PER_FILE) {
+        text = truncateNote(text, MAX_STORED_CHARS_PER_FILE);
+        truncatedFiles++;
       }
-    } else {
-      parts.push(`\n--- ${entry.name} --- (ملف ثنائي — مش هيتقرأ محتواه)`);
+      if (total + text.length > MAX_ZIP_TOTAL_CHARS) {
+        skippedBudget++;
+        continue;
+      }
+      parts.push(`\n=== FILE: ${entry.name} ===\n${text}`);
+      total += text.length;
+      read++;
+    } catch {
+      parts.push(`\n=== FILE: ${entry.name} === (تعذّرت قراءته كنص)`);
     }
   }
 
-  return parts.join("\n");
+  const notes: string[] = [];
+  if (skippedIgnored > 0) notes.push(`اتخطّينا ${skippedIgnored} ملف/مجلد غير مفيد (node_modules / lock files / build...)`);
+  if (skippedBudget > 0) notes.push(`${skippedBudget} ملف نصي مااتقراش لأن الأرشيف أكبر من الحد المسموح`);
+  if (truncatedFiles > 0) notes.push(`${truncatedFiles} ملف اتقطع لأنه ضخم`);
+  if (skippedBinary > 0) notes.push(`${skippedBinary} ملف ثنائي اتسرد اسمه بس`);
+
+  return {
+    text: parts.join("\n"),
+    readCount: read,
+    notice: notes.length ? `اتقرا ${read} ملف — ${notes.join(" • ")}` : null,
+  };
+}
+
+async function extractZipContents(file: File): Promise<ZipTextResult> {
+  const JSZip = (await import("jszip")).default;
+  const zip = await JSZip.loadAsync(file);
+  const entries = Object.values(zip.files)
+    .filter((e) => !e.dir)
+    .map((e) => ({ name: e.name, read: () => e.async("string") }));
+  return buildZipText(entries);
 }
 
 export function formatBytes(n: number): string {
@@ -200,7 +272,9 @@ export async function processFile(file: File): Promise<PendingAttachment> {
   const att: PendingAttachment = { id, file, kind: "text", loading: true };
   try {
     if (isZipFile(file)) {
-      att.extractedText = await extractZipContents(file);
+      const zipResult = await extractZipContents(file);
+      att.extractedText = zipResult.text;
+      if (zipResult.notice) att.note = zipResult.notice;
     } else if (isPdfFile(file)) {
       const buf = await readAsArrayBuffer(file);
       const text = extractPdfTextBestEffort(buf);
@@ -208,11 +282,11 @@ export async function processFile(file: File): Promise<PendingAttachment> {
         att.error = "الملف PDF ده مش نص عادي (ممكن يكون صورة ممسوحة) — تم رفعه كمرفق بس من غير استخراج نص";
         att.extractedText = "";
       } else {
-        att.extractedText = truncateNote(text, MAX_TEXT_CHARS_PER_FILE);
+        att.extractedText = truncateNote(text, MAX_STORED_CHARS_PER_FILE);
       }
     } else if (isPlainTextFile(file)) {
       const text = await readAsText(file);
-      att.extractedText = truncateNote(text, MAX_TEXT_CHARS_PER_FILE);
+      att.extractedText = truncateNote(text, MAX_STORED_CHARS_PER_FILE);
     } else {
       att.error = "نوع ملف غير مدعوم للقراءة — تم رفعه كمرفق بس";
     }
@@ -229,13 +303,22 @@ export async function processFile(file: File): Promise<PendingAttachment> {
  * كصورة حقيقية منفصلة عبر buildApiMessageContent، مش كنص)، وبيتم تجاهل أي
  * ملف فشل استخراجه أو من غير محتوى.
  */
+/** بيختار سياج (fence) أطول من أي سلسلة backticks جوه المحتوى — عشان ملف فيه ``` (زي README) ميقفلش الكتلة بدري. */
+function fenceFor(content: string): string {
+  let longest = 0;
+  for (const m of content.matchAll(/`+/g)) longest = Math.max(longest, m[0].length);
+  return "`".repeat(Math.max(3, longest + 1));
+}
+
 export function buildAttachmentsPromptBlock(attachments: PendingAttachment[]): string {
   const withText = attachments.filter((a) => a.kind === "text" && a.extractedText && a.extractedText.trim());
   if (withText.length === 0) return "";
 
-  const parts = withText.map(
-    (a) => `### ملف مرفق: ${a.file.name}\n\`\`\`\n${a.extractedText}\n\`\`\``
-  );
+  const parts = withText.map((a) => {
+    const body = a.extractedText as string;
+    const fence = fenceFor(body);
+    return `### ملف مرفق: ${a.file.name}\n${fence}\n${body}\n${fence}`;
+  });
   return `\n\n---\nمرفقات المستخدم (محتوى الملفات اللي بعتها):\n${parts.join("\n\n")}`;
 }
 
@@ -321,64 +404,193 @@ export type ApiContentPart =
   | { type: "text"; text: string }
   | { type: "image_url"; image_url: { url: string } };
 
-/**
- * بيحوّل نص رسالة مستخدم مخزّنة (زي ما هي في الداتابيز، فيها كتلة meta
- * مخفية لو فيها مرفقات) لصيغة الـ content اللي بتتبعت فعليًا للموديل:
- * - مفيش صور مرفقة → نص عادي (string) زي ما كان الوضع قبل كده بالظبط.
- * - فيه صور مرفقة → مصفوفة أجزاء (OpenAI-compatible vision format): جزء
- *   نص واحد (النص المكتوب + محتوى أي ملفات نصية مرفقة) + جزء صورة لكل صورة
- *   (data URI Base64 زي ما هي) — عشان الموديل (لو بيدعم رؤية فعليًا زي
- *   DeepSeek V4.1 Flash عبر Token Harbor) يشوف الصورة فعليًا، مش بس اسمها.
- */
-export function buildApiMessageContent(content: string): string | ApiContentPart[] {
-  const { visibleText, attachments } = extractAttachmentsMeta(content);
-  const images = attachments.filter((a) => a.kind === "image" && a.previewUrl);
-  if (images.length === 0) return visibleText;
+// ---------------------------------------------------------------------------
+// قراءة الملفات المرفقة من النص المخزّن
+// ---------------------------------------------------------------------------
 
-  const parts: ApiContentPart[] = [{ type: "text", text: visibleText }];
+export interface AttachedFile extends ProjectFile {
+  /** true لو الملف اتقطع وقت الرفع لأنه أكبر من السقف */
+  truncated?: boolean;
+}
+
+// محتوى الملف بيتغلف بسياج backticks (3 أو أكتر). الإغلاق لازم يكون بنفس طول
+// السياج وبعده إمّا كتلة ملف تانية أو نهاية النص — ده اللي بيخلّي ملف جواه ```
+// (زي README.md) مايقطعش القراءة بدري زي ما كان بيحصل قبل كده.
+const ATTACHMENT_FILE_BLOCK_RE = /### ملف مرفق: (.+)\n(`{3,})\n([\s\S]*?)\n\2(?=\n\n### ملف مرفق: |\s*$)/g;
+// عنوان entry جوه zip: "\n--- path ---" متبوع بسطر جديد أو علامة "(ملف ثنائي".
+const ZIP_HEADER_RE = /\n=== FILE: ([^\n]+?) ===(?=\n| \()/g;
+// الفورمات القديم (رسايل اتخزنت قبل التعديل) — fallback بس.
+const ZIP_HEADER_RE_LEGACY = /\n--- ([^\n]+?) ---(?=\n| \()/g;
+const TRUNCATION_NOTE_RE = /\n… \(تم اقتطاع الباقي — الملف أطول من [\d,]+ حرف\)$/;
+
+function splitZipEntries(text: string): AttachedFile[] {
+  const headers: { path: string; start: number; end: number }[] = [];
+  const re = new RegExp(text.includes("\n=== FILE: ") ? ZIP_HEADER_RE : ZIP_HEADER_RE_LEGACY);
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    headers.push({ path: m[1].trim(), start: m.index, end: m.index + m[0].length });
+  }
+
+  const files: AttachedFile[] = [];
+  for (let i = 0; i < headers.length; i++) {
+    const h = headers[i];
+    const bodyStart = h.end;
+    const nextStart = i + 1 < headers.length ? headers[i + 1].start : text.length;
+    let body = text.slice(bodyStart, nextStart);
+    // الملفات الثنائية/اللي فشلت قراءتها مالهاش جسم (بعد العنوان مباشرة " (...)").
+    if (body.startsWith(" (")) continue;
+    if (body.startsWith("\n")) body = body.slice(1); // السطر الجديد اللي بعد العنوان
+    // "\n" الفاصل بين الـ entries — موجود بعد كل entry ما عدا الأخير.
+    if (i + 1 < headers.length) body = body.replace(/\n$/, "");
+    files.push(finalizeFile(h.path, body));
+  }
+  return files;
+}
+
+function finalizeFile(path: string, content: string): AttachedFile {
+  if (TRUNCATION_NOTE_RE.test(content)) {
+    return { path, content: content.replace(TRUNCATION_NOTE_RE, ""), truncated: true };
+  }
+  return { path, content };
+}
+
+/**
+ * بيستخرج ملفات المشروع الحقيقية اللي المستخدم رفعها كمرفقات (كود/نصوص/PDF
+ * مستخرج/محتوى zip اتفكّ) من نص رسالة مستخدم مخزّنة — عشان الـ sandbox
+ * (run_command) وأداتين read_file/list_files يقدروا يشتغلوا فعليًا على الملفات
+ * اللي المستخدم رفعها بنفسه. الصور مالهاش محتوى نصي فبتتجاهل هنا.
+ */
+export function extractUserAttachmentFiles(content: string): AttachedFile[] {
+  const { visibleText } = extractAttachmentsMeta(content);
+  const { filesSection } = extractAttachmentsPromptSection(visibleText);
+  if (!filesSection) return [];
+
+  const files: AttachedFile[] = [];
+  const blockRe = new RegExp(ATTACHMENT_FILE_BLOCK_RE);
+  let m: RegExpExecArray | null;
+  while ((m = blockRe.exec(filesSection)) !== null) {
+    const name = m[1].trim();
+    const text = m[3];
+
+    if (extOf(name) === "zip") {
+      const entries = splitZipEntries("\n" + text);
+      if (entries.length > 0) files.push(...entries);
+      else files.push(finalizeFile(name, text));
+    } else {
+      files.push(finalizeFile(name, text));
+    }
+  }
+  return files;
+}
+
+// ---------------------------------------------------------------------------
+// اللي بيتبعت للموديل فعليًا (بدل ما كل محتوى الملفات يتبعت في كل نداء)
+// ---------------------------------------------------------------------------
+
+export interface ApiContentOptions {
+  /** ميزانية الحروف اللي مسموح تتحط inline من الملفات الصغيرة في الرسالة دي (0 = قايمة أسماء بس). */
+  inlineBudgetChars?: number;
+  /** false → الصور مبتتبعتش (بتتحول لسطر نصي) — لرسايل قديمة عشان نوفر توكنز. */
+  includeImages?: boolean;
+}
+
+function countLines(text: string): number {
+  return text ? text.split("\n").length : 0;
+}
+
+/** قايمة الملفات اللي الموديل يقدر يقراها بـ read_file — مختصرة (اسم + عدد أسطر). */
+export function buildFilesManifest(files: AttachedFile[], inlinedPaths: Set<string> = new Set()): string {
+  if (files.length === 0) return "";
+  const shown = files.slice(0, API_MANIFEST_MAX_ENTRIES);
+  const lines = shown.map((f) => {
+    const flags = [
+      `${countLines(f.content)} سطر`,
+      f.truncated ? "مقصوص" : null,
+      inlinedPaths.has(f.path) ? "محتواه فوق" : null,
+    ].filter(Boolean);
+    return `- ${f.path} (${flags.join("، ")})`;
+  });
+  if (files.length > shown.length) lines.push(`- … و${files.length - shown.length} ملف تاني (استخدم list_files لعرضهم كلهم)`);
+  return lines.join("\n");
+}
+
+/**
+ * بيحوّل رسالة مستخدم مخزّنة لـ content بيتبعت للموديل:
+ * - النص المكتوب بيتبعت زي ما هو.
+ * - الملفات المرفقة: مش بتتبعت كلها. الملفات النصية الصغيرة (≤ 12k حرف) بتتحط
+ *   inline لحد ميزانية إجمالية، والباقي (وأي zip) بيتحوّل لقايمة أسماء والموديل
+ *   يقرا اللي محتاجه بأداة read_file. ده اللي بيمنع رسالة فيها zip من إنها تاكل
+ *   100 ألف توكن في كل نداء.
+ * - الصور: بتتبعت كصورة حقيقية بس لو includeImages (آخر رسالة فيها صور).
+ */
+export function toApiUserContent(content: string, opts: ApiContentOptions = {}): string | ApiContentPart[] {
+  const inlineBudget = opts.inlineBudgetChars ?? 0;
+  const includeImages = opts.includeImages ?? true;
+
+  const { visibleText, attachments } = extractAttachmentsMeta(content);
+  const { mainText, filesSection } = extractAttachmentsPromptSection(visibleText);
+
+  let text = mainText;
+  if (filesSection) {
+    const files = extractUserAttachmentFiles(content);
+
+    // مرشحين الـ inline: الملفات اللي اترفعت كملف مستقل (مش من جوه zip) وصغيرة.
+    const standaloneNames = new Set(attachments.filter((a) => a.kind === "text").map((a) => a.name));
+    let budget = inlineBudget;
+    const inlined = new Set<string>();
+    const inlineParts: string[] = [];
+    for (const f of files) {
+      if (!standaloneNames.has(f.path)) continue;
+      if (f.content.length > API_INLINE_FILE_MAX_CHARS || f.content.length > budget) continue;
+      budget -= f.content.length;
+      inlined.add(f.path);
+      const fence = fenceFor(f.content);
+      inlineParts.push(`### ${f.path}\n${fence}\n${f.content}\n${fence}`);
+    }
+
+    const manifest = buildFilesManifest(files, inlined);
+    const blocks: string[] = [];
+    if (inlineParts.length) blocks.push(inlineParts.join("\n\n"));
+    if (manifest) {
+      blocks.push(
+        `الملفات المرفقة (${files.length}) — قايمة بس عشان التوكنز. اقرا أي ملف تحتاجه بأداة read_file، واعرض القايمة بـ list_files:\n${manifest}`
+      );
+    }
+    if (blocks.length) text = `${mainText}\n\n---\nمرفقات المستخدم:\n${blocks.join("\n\n")}`.trim();
+  }
+
+  const images = attachments.filter((a) => a.kind === "image" && a.previewUrl);
+  if (images.length === 0) return text;
+
+  if (!includeImages) {
+    const names = images.map((a) => a.name).join("، ");
+    return `${text}\n\n[المستخدم كان بعت ${images.length} صورة (${names}) في رسالة قديمة — اتشالت من السياق لتوفير التوكنز]`.trim();
+  }
+
+  const parts: ApiContentPart[] = [{ type: "text", text }];
   for (const img of images) {
     parts.push({ type: "image_url", image_url: { url: img.previewUrl! } });
   }
   return parts;
 }
 
-const ATTACHMENT_FILE_BLOCK_RE = /### ملف مرفق: (.+)\n```\n([\s\S]*?)\n```/g;
-// كل entry جوه zip اتفكّ بيتسجل كـ "\n--- path ---\ncontent" (شوف extractZipContents فوق).
-const ZIP_ENTRY_RE = /\n--- (.+?) ---\n([\s\S]*?)(?=\n--- |$)/g;
+/** توافق مع الكود القديم: نفس السلوك القديم (نص + صور) لكن بقايمة أسماء بدل محتوى الملفات. */
+export function buildApiMessageContent(content: string): string | ApiContentPart[] {
+  return toApiUserContent(content, { inlineBudgetChars: API_INLINE_TOTAL_MAX_CHARS, includeImages: true });
+}
 
 /**
- * بيستخرج ملفات المشروع الحقيقية اللي المستخدم رفعها كمرفقات (كود/نصوص/PDF
- * مستخرج/محتوى zip اتفكّ) من نص رسالة مستخدم مخزّنة — عشان الـ sandbox
- * (run_command) يقدر يشتغل فعليًا على الملفات اللي المستخدم رفعها بنفسه،
- * مش بس اللي الموديل كتبها في ردوده. الصور مالهاش محتوى نصي فبتتجاهل هنا.
+ * عدد التوكنز (تقدير) اللي رسالة المستخدم بتكلّفه فعليًا لما تتبعت للموديل بعد
+ * التحويل — من غير بيانات الصور Base64 (كل صورة ≈ ثابت) ومن غير محتوى الملفات
+ * اللي مابتتبعتش.
  */
-export function extractUserAttachmentFiles(content: string): ProjectFile[] {
-  const { visibleText } = extractAttachmentsMeta(content);
-  const { filesSection } = extractAttachmentsPromptSection(visibleText);
-  if (!filesSection) return [];
-
-  const files: ProjectFile[] = [];
-  const blockRe = new RegExp(ATTACHMENT_FILE_BLOCK_RE);
-  let m: RegExpExecArray | null;
-  while ((m = blockRe.exec(filesSection)) !== null) {
-    const name = m[1].trim();
-    const text = m[2];
-
-    if (extOf(name) === "zip") {
-      // ملف zip: كل entry نصي جواه بيتحط كملف منفصل بمساره الأصلي جوه الأرشيف.
-      const zipRe = new RegExp(ZIP_ENTRY_RE);
-      let zm: RegExpExecArray | null;
-      let any = false;
-      while ((zm = zipRe.exec(text)) !== null) {
-        any = true;
-        const entryPath = zm[1].trim();
-        const entryContent = zm[2].replace(/\n$/, "");
-        files.push({ path: entryPath, content: entryContent });
-      }
-      if (!any) files.push({ path: name, content: text });
-    } else {
-      files.push({ path: name, content: text });
-    }
+export function apiUserContentLength(content: string | ApiContentPart[]): { chars: number; images: number } {
+  if (typeof content === "string") return { chars: content.length, images: 0 };
+  let chars = 0;
+  let images = 0;
+  for (const p of content) {
+    if (p.type === "text") chars += p.text.length;
+    else images += 1;
   }
-  return files;
+  return { chars, images };
 }

@@ -25,17 +25,27 @@ export interface RunCommandResult {
   timedOut: boolean;
   /** رسالة عربية جاهزة للعرض لو حصلت مشكلة قبل/أثناء التنفيذ (مش خطأ الأمر نفسه) */
   error?: string;
+  /** لو الأمر فشل بسبب ملف/مجلد مش موجود: المجلد الحالي ومحتواه، عشان الموديل يفهم مكانه بدل ما يخمّن. */
+  hint?: string;
 }
 
-// حد أقصى معقول لكل تنفيذ أمر واحد — كافي لـ npm install / build / test لمشروع
-// صغير-متوسط من غير ما يسيب طلب الشات معلّق لوقت طويل جداً.
-const COMMAND_TIMEOUT_MS = 90_000;
+// حد أقصى لكل أمر واحد. npm install لمشروع Next بياخد غالبًا أكتر من 90 ثانية،
+// فرفعناه (الـ route نفسه maxDuration = 300 ثانية).
+const COMMAND_TIMEOUT_MS = 150_000;
 // عمر الـ sandbox نفسه (بيتقفل تلقائيًا بعده لو نسينا نقفله يدويًا لأي سبب).
-const SANDBOX_LIFETIME_MS = 3 * 60_000;
+const SANDBOX_LIFETIME_MS = 6 * 60_000;
+// مهلة إجمالية لكل أوامر الرد الواحد — بعدها منبدأش أمر جديد عشان الرد نفسه (300 ثانية)
+// يلحق يخلص ويتحفظ بدل ما الـ route يتقطع في النص.
+const SESSION_BUDGET_MS = 240_000;
 // سقف حجم كل ملف بيتكتب في الـ sandbox — حماية من مشروع ضخم غير واقعي.
 const MAX_FILE_BYTES = 400_000;
-const MAX_FILES = 60;
+// كان 60 وده كان بيسيب ملفات ناقصة بصمت في أي مشروع أكبر من كده.
+const MAX_FILES = 500;
 const MAX_OUTPUT_CHARS = 6_000;
+// كان 2000 حرف وده كان بيقص أي heredoc (cat > file << EOF) في النص فيطلع
+// "here-document delimited by end-of-file". دلوقتي 20000.
+export const MAX_COMMAND_CHARS = 20_000;
+export const PROJECT_DIR = "/home/user/project";
 
 export function isSandboxConfigured(): boolean {
   return !!(process.env.E2B_API_KEY || "").trim();
@@ -49,107 +59,176 @@ function sanitizeRelativePath(path: string): string | null {
   return joined || null;
 }
 
+function isTimeoutMessage(message: string): boolean {
+  return /timeout|timed out/i.test(message);
+}
+
 /**
- * بيجهّز sandbox جديد، يكتب فيه ملفات المشروع الحقيقية اللي اتكتبت في نفس
- * المحادثة لحد دلوقتي، بعدين يشغّل الأمر المطلوب فعليًا جوه مجلد المشروع،
- * وبيقفل الـ sandbox في الآخر مهما كانت النتيجة (نجاح أو فشل أو exception).
+ * جلسة sandbox واحدة لكل رد: بتتفتح مرة (lazy — أول أمر بس)، وكل أوامر الرد
+ * بتشتغل جواها بالتتابع، وبتتقفل مرة واحدة في الآخر.
+ *
+ * ليه: قبل كده كل أمر كان بيفتح sandbox جديد ويكتب الملفات ويقتله. يعني
+ * `npm install` في أمر و`npm run build` في اللي بعده كان لازم يفشل (node_modules
+ * راحت)، وأي ملف الموديل يعدّله بالشل كان بيضيع، وكل أمر كان بيدفع تكلفة
+ * إنشاء sandbox + كتابة كل الملفات من الأول.
+ *
+ * الملفات: بنكتب بس الملفات الجديدة/اللي اتغيّر محتواها من آخر مرة (مقارنة
+ * بالنسخة اللي كتبناها إحنا)، فأي تعديل عمله الموديل بالشل على ملف ماتغيّرش
+ * من ناحيتنا مبيتمسحش.
  */
-export async function runInSandbox(
-  files: SandboxFile[],
-  command: string
-): Promise<RunCommandResult> {
-  if (!isSandboxConfigured()) {
-    return {
-      ok: false,
-      stdout: "",
-      stderr: "",
-      exitCode: null,
-      timedOut: false,
-      error: "مفيش sandbox متظبط على السيرفر دلوقتي، فالأمر ده مش هيتنفذ فعليًا.",
-    };
+export class SandboxSession {
+  private sbx: Sandbox | null = null;
+  private synced = new Map<string, string>();
+  private readonly startedAt = Date.now();
+  private skippedFiles = 0;
+
+  get skipped(): number {
+    return this.skippedFiles;
   }
 
-  const trimmedCommand = command.trim().slice(0, 2000);
-  if (!trimmedCommand) {
-    return {
-      ok: false,
-      stdout: "",
-      stderr: "",
-      exitCode: null,
-      timedOut: false,
-      error: "الأمر فاضي.",
-    };
-  }
-
-  let sbx: Sandbox | null = null;
-  try {
-    sbx = await Sandbox.create({
+  private async ensure(): Promise<Sandbox> {
+    if (this.sbx) return this.sbx;
+    const sbx = await Sandbox.create({
       apiKey: process.env.E2B_API_KEY,
       timeoutMs: SANDBOX_LIFETIME_MS,
     });
+    await sbx.commands.run(`mkdir -p ${PROJECT_DIR}`);
+    this.sbx = sbx;
+    return sbx;
+  }
 
-    const projectDir = "/home/user/project";
-    await sbx.commands.run(`mkdir -p ${projectDir}`);
+  private async sync(sbx: Sandbox, files: SandboxFile[]): Promise<void> {
+    const pending: { path: string; content: string }[] = [];
+    let counted = this.synced.size;
+    this.skippedFiles = 0;
 
-    let written = 0;
     for (const f of files) {
-      if (written >= MAX_FILES) break;
       const safePath = sanitizeRelativePath(f.path);
       if (!safePath) continue;
       const content = f.content.length > MAX_FILE_BYTES ? f.content.slice(0, MAX_FILE_BYTES) : f.content;
-      await sbx.files.write(`${projectDir}/${safePath}`, content);
-      written += 1;
+      if (this.synced.get(safePath) === content) continue;
+      if (!this.synced.has(safePath)) {
+        if (counted >= MAX_FILES) {
+          this.skippedFiles++;
+          continue;
+        }
+        counted++;
+      }
+      pending.push({ path: safePath, content });
     }
 
-    const result = await sbx.commands.run(trimmedCommand, {
-      cwd: projectDir,
-      timeoutMs: COMMAND_TIMEOUT_MS,
-    });
+    // كتابة على دفعات متوازية صغيرة (أسرع من واحد ورا واحد من غير ما نضغط الـ API).
+    const BATCH = 8;
+    for (let i = 0; i < pending.length; i += BATCH) {
+      const batch = pending.slice(i, i + BATCH);
+      await Promise.all(batch.map((f) => sbx.files.write(`${PROJECT_DIR}/${f.path}`, f.content)));
+      for (const f of batch) this.synced.set(f.path, f.content);
+    }
+  }
 
-    return {
-      ok: result.exitCode === 0,
-      stdout: (result.stdout || "").slice(0, MAX_OUTPUT_CHARS),
-      stderr: (result.stderr || "").slice(0, MAX_OUTPUT_CHARS),
-      exitCode: typeof result.exitCode === "number" ? result.exitCode : null,
-      timedOut: false,
-    };
-  } catch (e) {
-    // مهم جدًا: E2B بيعمل throw لـ CommandExitError (مش بيرجّع نتيجة عادية)
-    // لما الأمر يخلص بـ exit code مش صفر — وده أمر طبيعي وشائع جدًا (زي أمر
-    // بيدور على ملف مش موجود، أو أداة رجّعت "مفيش نتايج"). من غير المعالجة
-    // دي، كنا بنضيع stdout/stderr الحقيقيين ونرجّع رسالة عامة "الأمر مانفذش"
-    // كأنه كراش فعلي في الـ sandbox نفسه — بينما هو مجرد فشل عادي للأمر، والموديل
-    // محتاج يشوف الـ stderr الحقيقي عشان يفهم السبب ويصلّح تلقائيًا.
-    if (e instanceof CommandExitError) {
+  /** بينفذ أمر واحد جوه الجلسة (بيفتحها لو لسه). ما بيرميش exception أبدًا. */
+  async run(files: SandboxFile[], command: string): Promise<RunCommandResult> {
+    if (!isSandboxConfigured()) {
       return {
-        ok: false,
-        stdout: (e.stdout || "").slice(0, MAX_OUTPUT_CHARS),
-        stderr: (e.stderr || "").slice(0, MAX_OUTPUT_CHARS),
-        exitCode: typeof e.exitCode === "number" ? e.exitCode : null,
-        timedOut: false,
+        ok: false, stdout: "", stderr: "", exitCode: null, timedOut: false,
+        error: "مفيش sandbox متظبط على السيرفر دلوقتي، فالأمر ده مش هيتنفذ فعليًا.",
       };
     }
 
-    const message = e instanceof Error ? e.message : String(e);
-    const timedOut = /timeout/i.test(message);
-    console.error("[sandbox] run_command failed", message);
-    return {
-      ok: false,
-      stdout: "",
-      stderr: "",
-      exitCode: null,
-      timedOut,
-      error: timedOut
-        ? "الأمر خد وقت أطول من المسموح (90 ثانية) واتقطع."
-        : "حصلت مشكلة حقيقية في الاتصال بالـ sandbox نفسه (مش في الأمر) — الأمر مانفذش خالص.",
-    };
-  } finally {
-    if (sbx) {
-      try {
-        await sbx.kill();
-      } catch {
-        // تجاهل — الـ sandbox هيتقفل لوحده بعد timeoutMs على أي حال
-      }
+    const cmd = command.trim();
+    if (!cmd) {
+      return { ok: false, stdout: "", stderr: "", exitCode: null, timedOut: false, error: "الأمر فاضي." };
     }
+    if (cmd.length > MAX_COMMAND_CHARS) {
+      return {
+        ok: false, stdout: "", stderr: "", exitCode: null, timedOut: false,
+        error: `الأمر أطول من ${MAX_COMMAND_CHARS.toLocaleString("en-US")} حرف فمانفذش (عشان مايتقصش في النص). اكتب الملفات الكبيرة بكتلة ملف عادية (path="...") مش بـ heredoc، وقسّم الأمر.`,
+      };
+    }
+
+    const elapsed = Date.now() - this.startedAt;
+    if (elapsed > SESSION_BUDGET_MS) {
+      return {
+        ok: false, stdout: "", stderr: "", exitCode: null, timedOut: true,
+        error: "خلصت المهلة الإجمالية للأوامر في الرد ده (حوالي 4 دقايق) — الأمر مانفذش. لخّص للمستخدم اللي اتعمل واللي لسه ناقص.",
+      };
+    }
+
+    try {
+      const sbx = await this.ensure();
+      await this.sync(sbx, files);
+
+      const remaining = Math.max(SESSION_BUDGET_MS + 30_000 - elapsed, 20_000);
+      const timeoutMs = Math.min(COMMAND_TIMEOUT_MS, remaining);
+      const result = await sbx.commands.run(cmd, { cwd: PROJECT_DIR, timeoutMs });
+
+      return {
+        ok: result.exitCode === 0,
+        stdout: (result.stdout || "").slice(0, MAX_OUTPUT_CHARS),
+        stderr: (result.stderr || "").slice(0, MAX_OUTPUT_CHARS),
+        exitCode: typeof result.exitCode === "number" ? result.exitCode : null,
+        timedOut: false,
+      };
+    } catch (e) {
+      // E2B بيعمل throw لـ CommandExitError لما الأمر يخلص بـ exit code مش صفر —
+      // ده فشل عادي للأمر (مش كراش)، والموديل محتاج الـ stderr الحقيقي.
+      if (e instanceof CommandExitError) {
+        const stderr = (e.stderr || "").slice(0, MAX_OUTPUT_CHARS);
+        const result: RunCommandResult = {
+          ok: false,
+          stdout: (e.stdout || "").slice(0, MAX_OUTPUT_CHARS),
+          stderr,
+          exitCode: typeof e.exitCode === "number" ? e.exitCode : null,
+          timedOut: false,
+        };
+        if (/No such file or directory|ENOENT|cannot find|not found/i.test(stderr)) {
+          result.hint = await this.locationHint();
+        }
+        return result;
+      }
+
+      const message = e instanceof Error ? e.message : String(e);
+      const timedOut = isTimeoutMessage(message);
+      console.error("[sandbox] run_command failed", message);
+      return {
+        ok: false, stdout: "", stderr: "", exitCode: null, timedOut,
+        error: timedOut
+          ? "الأمر خد وقت أطول من المسموح واتقطع."
+          : "حصلت مشكلة حقيقية في الاتصال بالـ sandbox نفسه (مش في الأمر) — الأمر مانفذش خالص.",
+      };
+    }
+  }
+
+  /** المجلد الحالي + محتواه (أول مستوى) — بيتبعت للموديل لما أمر يفشل بـ "No such file". */
+  private async locationHint(): Promise<string | undefined> {
+    if (!this.sbx) return undefined;
+    try {
+      const r = await this.sbx.commands.run("pwd; ls -1A | head -40", { cwd: PROJECT_DIR, timeoutMs: 10_000 });
+      return `الأمر بيشتغل جوه مجلد المشروع مباشرة (ماتعملش cd project). المجلد الحالي والمحتوى:\n${(r.stdout || "").trim()}`;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** بيقفل الـ sandbox — آمن يتنادى أكتر من مرة. */
+  async close(): Promise<void> {
+    const sbx = this.sbx;
+    this.sbx = null;
+    if (!sbx) return;
+    try {
+      await sbx.kill();
+    } catch {
+      // تجاهل — الـ sandbox هيتقفل لوحده بعد timeoutMs على أي حال
+    }
+  }
+}
+
+/** توافق مع الكود القديم: أمر واحد في sandbox مؤقت (بيتقفل بعده). الحلقة الجديدة بتستخدم SandboxSession. */
+export async function runInSandbox(files: SandboxFile[], command: string): Promise<RunCommandResult> {
+  const session = new SandboxSession();
+  try {
+    return await session.run(files, command);
+  } finally {
+    await session.close();
   }
 }

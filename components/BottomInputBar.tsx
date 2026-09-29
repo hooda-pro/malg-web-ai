@@ -287,7 +287,7 @@ function AttachmentChip({
         "group relative flex items-center gap-2 overflow-hidden rounded-lg border border-hair bg-surface-2 py-1.5 pe-2 ps-1.5",
         attachment.error && "border-danger/40"
       )}
-      title={attachment.error || attachment.file.name}
+      title={attachment.error || attachment.note || attachment.file.name}
     >
       {attachment.kind === "image" && attachment.previewUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -311,7 +311,7 @@ function AttachmentChip({
             ? t("attachmentReading")
             : attachment.error
               ? t("attachmentIssue")
-              : formatBytes(attachment.file.size)}
+              : `${formatBytes(attachment.file.size)}${attachment.note ? " · ⓘ" : ""}`}
         </span>
       </span>
 

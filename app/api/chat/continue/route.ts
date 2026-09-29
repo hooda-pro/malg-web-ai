@@ -11,7 +11,7 @@ import {
   type ApiMessage,
 } from "@/lib/ai";
 import { buildPersonalizationBlock, buildSystemPrompt } from "@/lib/systemPrompt";
-import { buildApiMessageContent } from "@/lib/attachments";
+import { API_INLINE_TOTAL_MAX_CHARS, extractAttachmentsMeta, toApiUserContent } from "@/lib/attachments";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -80,10 +80,28 @@ export async function POST(req: NextRequest) {
         buildSystemPrompt({ userName: user.displayName, uiLanguage }) +
         (personalization ? `\n\n${personalization}` : ""),
     },
-    ...history.slice(-10).map((m) => ({
-      role: m.role,
-      content: m.role === "user" ? buildApiMessageContent(m.content) : m.content,
-    })),
+    // نفس تخفيف /api/chat: المرفقات قايمة أسماء (+ ملفات صغيرة inline في آخر رسالة)
+    // والصور بس في آخر رسالة فيها صور — بدل ما كل محتوى الـ zip يتبعت تاني.
+    ...(() => {
+      const win = history.slice(-10);
+      let lastUser = -1;
+      let lastImage = -1;
+      win.forEach((m, i) => {
+        if (m.role !== "user") return;
+        lastUser = i;
+        if (extractAttachmentsMeta(m.content).attachments.some((a) => a.kind === "image" && a.previewUrl)) lastImage = i;
+      });
+      return win.map((m, i) => ({
+        role: m.role,
+        content:
+          m.role === "user"
+            ? toApiUserContent(m.content, {
+                inlineBudgetChars: i === lastUser ? API_INLINE_TOTAL_MAX_CHARS : 8_000,
+                includeImages: i === lastImage,
+              })
+            : m.content,
+      }));
+    })(),
     { role: "user", content: CONTINUE_INSTRUCTION },
   ];
 

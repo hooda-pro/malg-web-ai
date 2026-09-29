@@ -27,16 +27,38 @@ import {
   type AgentStep,
   type AgentStepDetail,
 } from "@/lib/agentEvents";
-import { isSandboxConfigured, runInSandbox } from "@/lib/sandbox";
-import { RUN_COMMAND_TOOL, classifyCommandTool, collectSessionProjectFiles } from "@/lib/agentTools";
-import { buildApiMessageContent } from "@/lib/attachments";
+import { isSandboxConfigured, SandboxSession } from "@/lib/sandbox";
+import {
+  LIST_FILES_TOOL,
+  READ_FILE_TOOL,
+  RUN_COMMAND_TOOL,
+  classifyCommandTool,
+  collectSessionProjectFiles,
+  isProjectTool,
+  runProjectTool,
+} from "@/lib/agentTools";
+import {
+  API_INLINE_TOTAL_MAX_CHARS,
+  apiUserContentLength,
+  extractAttachmentsMeta,
+  extractAttachmentsPromptSection,
+  toApiUserContent,
+} from "@/lib/attachments";
 
 // لو E2B_API_KEY متظبط، بنبعت أداة run_command الحقيقية للموديل في كل نداء —
 // لو مش متظبط، الموديل عمره ما يشوف الأداة دي أصلاً (مفيش استدعاء وهمي ممكن يحصل).
 const SANDBOX_ON = isSandboxConfigured();
 // أقصى عدد "جولات" استدعاء أدوات جوه رد واحد — حماية من حلقة لا نهائية لو
-// الموديل فضل يطلب تنفيذ أوامر من غير ما يوصل لإجابة نهائية.
-const MAX_TOOL_ROUNDS = 3;
+// الموديل فضل يطلب أدوات من غير ما يوصل لإجابة نهائية. كان 3 وده كان بيخلّي
+// الرد يفصل في النص (قراءة ملفين + أمر = خلصت الجولات). لو الجولات خلصت،
+// بنعمل نداء أخير من غير أدوات عشان الموديل يكتب خلاصة (شوف تحت).
+const MAX_TOOL_ROUNDS = 8;
+// أقصى عدد استدعاءات أدوات في الجولة الواحدة.
+const MAX_CALLS_PER_ROUND = 6;
+// تقدير ثابت لتكلفة الصورة الواحدة في الحسبة (بدل ما نعد بايتات Base64).
+const IMAGE_TOKEN_ESTIMATE = 800;
+// ميزانية الملفات الصغيرة اللي بتتحط inline في الرسايل الأقدم (الأحدث بياخد الميزانية الكاملة).
+const OLDER_INLINE_BUDGET_CHARS = 8_000;
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -111,8 +133,12 @@ export async function POST(req: NextRequest) {
     SELECT role, content FROM chat_messages WHERE session_id = ${sessionId} ORDER BY created_at ASC
   `) as { role: string; content: string }[];
 
+  // النص اللي كتبه المستخدم فعلًا (من غير بيانات الصور Base64 ولا محتوى الملفات المرفقة)
+  const typedPrompt = extractAttachmentsPromptSection(extractAttachmentsMeta(userPrompt).visibleText).mainText;
+
   if (existing.length <= 1) {
-    const preview = userPrompt.length > 30 ? userPrompt.slice(0, 30) + "..." : userPrompt;
+    const titleSource = typedPrompt || extractAttachmentsMeta(userPrompt).attachments[0]?.name || "محادثة جديدة";
+    const preview = titleSource.length > 30 ? titleSource.slice(0, 30) + "..." : titleSource;
     await sql`UPDATE chat_sessions SET title = ${preview}, updated_at = now() WHERE id = ${sessionId}`;
   } else {
     await sql`UPDATE chat_sessions SET updated_at = now() WHERE id = ${sessionId}`;
@@ -131,7 +157,13 @@ export async function POST(req: NextRequest) {
   // قدرة بحث لموديل malg-2.2 اللي مالوش أي أداة بحث من عنده أصلًا، وبيعمق
   // البحث لباقي الموديلات بدل ما نسيب القرار كله لأداة البحث المدمجة عندهم
   // (صندوق أسود مش متحكمين فيه).
-  const deepSearch = await runDeepSearch(userPrompt);
+  // بنبعت للبحث نص المستخدم بس — قبل كده كان بيتبعت كل محتوى الملفات المرفقة،
+  // فأي كلمة زي "latest" أو "price" جوه ملف كود كانت بتشغّل بحث وهمي.
+  const deepSearch = await runDeepSearch(typedPrompt);
+
+  // ملفات المشروع الموجودة في المحادثة (مرفوعة أو كتبها الموديل قبل كده) — بتحدد
+  // هل نديه أدوات list_files/read_file ونقوله عنها في الـ system prompt.
+  const initialProjectFiles = collectSessionProjectFiles(existing, "");
 
   const systemPromptContent =
     buildSystemPrompt({
@@ -140,32 +172,58 @@ export async function POST(req: NextRequest) {
       remainingTokens: Math.max(totalAllocated - usedTokensCount, 0),
       uiLanguage,
       sandboxAvailable: SANDBOX_ON,
+      fileToolsAvailable: initialProjectFiles.length > 0,
     }) +
     (personalization ? `\n\n${personalization}` : "") +
     (deepSearch.performed && deepSearch.contextBlock ? `\n\n${deepSearch.contextBlock}` : "");
 
+  // آخر 10 رسائل. المرفقات مبتتبعتش كاملة: الملفات الصغيرة inline (ميزانية محدودة)
+  // والباقي (وأي zip) قايمة أسماء والموديل يقرا اللي يحتاجه بـ read_file. الصور
+  // بتتبعت بس في آخر رسالة فيها صور. ده اللي كان بيخلّي رفع zip يسحب ~100 ألف توكن
+  // في كل نداء (وفي كل جولة أدوات، وفي كل رسالة بعدها).
+  const windowMsgs = existing.slice(-10);
+  let lastUserIdx = -1;
+  let lastImageIdx = -1;
+  windowMsgs.forEach((m, i) => {
+    if (m.role !== "user") return;
+    lastUserIdx = i;
+    if (extractAttachmentsMeta(m.content).attachments.some((a) => a.kind === "image" && a.previewUrl)) lastImageIdx = i;
+  });
+
   const apiMessages: ApiMessage[] = [
     { role: "system", content: systemPromptContent },
-    // بنحوّل رسايل المستخدم (فيها احتمال مرفقات صور/ملفات في كتلة meta مخفية)
-    // لصيغة الـ content الصح — نص عادي لو مفيش صور، أو مصفوفة (نص + صور
-    // حقيقية) لو المستخدم رفع صورة، عشان الموديل يشوفها فعليًا (vision).
-    ...existing.slice(-10).map((m) => ({
+    ...windowMsgs.map((m, i) => ({
       role: m.role,
-      // رسايل المساعد المخزّنة فيها كتلة بيانات خطوات الـAgent (مخرجات أوامر...) —
+      // رسايل المساعد المخزّنة فيها كتلة بيانات خطوات الـ Agent (مخرجات أوامر...) —
       // دي للواجهة بس، مش لازم تتبعت للموديل كنص وتاكل توكنز.
-      content: m.role === "user" ? buildApiMessageContent(m.content) : extractAgentStepsMeta(m.content).visibleText,
+      content:
+        m.role === "user"
+          ? toApiUserContent(m.content, {
+              inlineBudgetChars: i === lastUserIdx ? API_INLINE_TOTAL_MAX_CHARS : OLDER_INLINE_BUDGET_CHARS,
+              includeImages: i === lastImageIdx,
+            })
+          : extractAgentStepsMeta(m.content).visibleText,
     })),
   ];
+
+  // تكلفة رسالة المستخدم الحالية بعد التحويل (اللي بيتبعت للموديل فعلًا) — دي أساس الحسبة.
+  const sentUser = apiUserContentLength(apiMessages[apiMessages.length - 1]?.content ?? "");
+  const promptTokens = Math.floor(sentUser.chars / 3) + 10 + sentUser.images * IMAGE_TOKEN_ESTIMATE;
 
   // 3) اتصل بالموديل (مع منطق إعادة المحاولة/التراجع) قبل ما نبدأ نبعت أي حاجة للعميل
   const controller = new AbortController();
   req.signal.addEventListener("abort", () => controller.abort());
 
-  // لو الـ sandbox متظبط، بنبعت أداة run_command الحقيقية من أول نداء — ده
-  // بيحل محل أداة البحث المدمجة بتاعت GLM/OpenRouter نفسها (مش بيلغي بحثنا
-  // الحقيقي اللي عملناه فوق بالفعل في runDeepSearch وحطيناه في الـ system
-  // prompt) — تنازل بسيط ومقصود مقابل قدرة تنفيذ حقيقية.
-  const toolOptions = SANDBOX_ON ? { tools: [RUN_COMMAND_TOOL] } : {};
+  // الأدوات المتاحة للموديل في الرد ده:
+  // - list_files/read_file: لو فيه ملفات مشروع في المحادثة (مرفوعة أو كتبها الموديل) — من غير sandbox.
+  // - run_command: لو E2B_API_KEY متظبط.
+  // لو مفيش ولا واحدة، مبنبعتش tools خالص.
+  const availableTools: unknown[] = [
+    ...(initialProjectFiles.length > 0 ? [LIST_FILES_TOOL, READ_FILE_TOOL] : []),
+    ...(SANDBOX_ON ? [RUN_COMMAND_TOOL] : []),
+  ];
+  const HAS_TOOLS = availableTools.length > 0;
+  const toolOptions = HAS_TOOLS ? { tools: availableTools } : {};
 
   let negotiated;
   try {
@@ -254,108 +312,176 @@ export async function POST(req: NextRequest) {
       }
 
       // ---------------------------------------------------------------
-      // حلقة استدعاء الأدوات الحقيقية (run_command): لو الموديل طلب تنفيذ
-      // أمر، بننفذه فعليًا في sandbox حقيقي (lib/sandbox.ts)، نبعت للعميل
-      // agent_event لحظي (tool_start ثم tool_result/tool_error)، ونرجّع
-      // النتيجة الحقيقية للموديل عشان يكمل ردّه بناءً عليها فعليًا — لحد
-      // MAX_TOOL_ROUNDS جولة كحد أقصى، وكل ده بيحصل قبل ما نعتبر الرد خلص.
+      // حلقة استدعاء الأدوات الحقيقية (list_files / read_file / run_command):
+      // لو الموديل طلب أداة، بننفذها فعليًا، نبعت للعميل agent_event لحظي
+      // (tool_start ثم tool_result/tool_error)، ونرجّع النتيجة الحقيقية للموديل
+      // عشان يكمل ردّه — لحد MAX_TOOL_ROUNDS جولة. أوامر الشل كلها بتشتغل في
+      // sandbox واحد بيعيش طول الرد (SandboxSession) بدل sandbox جديد لكل أمر.
       // ---------------------------------------------------------------
       const loopMessages: ApiMessage[] = [...apiMessages];
       const contentParts: string[] = [result.content];
       const reasoningParts: string[] = result.reasoning ? [result.reasoning] : [];
       const sandboxSteps: AgentStep[] = [];
-      let extraTokens = 0;
+      let extraTokens = 0; // توكنز ناتجة من جولات الأدوات (رد الموديل + مخرجات الأدوات)
       let round = 0;
+      const session = SANDBOX_ON ? new SandboxSession() : null;
 
-      while (
-        SANDBOX_ON &&
-        !result.stoppedByUser &&
-        result.toolCalls &&
-        result.toolCalls.length > 0 &&
-        round < MAX_TOOL_ROUNDS
-      ) {
-        round += 1;
-        const toolCalls: UpstreamToolCall[] = result.toolCalls.slice(0, 3); // أقصى 3 استدعاءات متوازية في نفس الجولة
+      const sendAgentEvent = (payload: Record<string, unknown>) => {
+        try {
+          streamController.enqueue(encoder.encode(`data: ${JSON.stringify({ agent_event: payload })}\n\n`));
+        } catch {
+          // تجاهل
+        }
+      };
 
-        loopMessages.push({ role: "assistant", content: result.content || "", tool_calls: toolCalls });
+      // نداء الموديل بعد نتايج الأدوات. لو فشل (سياق كبير، rate limit، مزوّد بيرفض
+      // حقل reasoning_content...) بنجرب مرة تانية من غير reasoning_content قبل ما
+      // نستسلم — وفي كل الأحوال مبنسكتش بصمت (شوف الرسالة تحت).
+      const callUpstreamAfterTools = async (msgs: ApiMessage[], withTools: boolean) => {
+        const opts = withTools ? toolOptions : {};
+        let n = await negotiateUpstream(msgs, controller.signal, model, opts).catch(() => null);
+        if (n?.ok || req.signal.aborted) return n;
+        if (msgs.some((m) => m.reasoning_content)) {
+          const cleaned = msgs.map(({ reasoning_content: _r, ...rest }) => rest as ApiMessage);
+          n = await negotiateUpstream(cleaned, controller.signal, model, opts).catch(() => null);
+        }
+        return n;
+      };
 
-        const draftContent = contentParts.join("\n\n");
-        const projectFiles = collectSessionProjectFiles(existing, draftContent);
-
-        for (const call of toolCalls) {
-          let command = "";
-          try {
-            command = String(JSON.parse(call.function.arguments || "{}")?.command || "").trim();
-          } catch {
-            command = "";
-          }
-          const toolName = classifyCommandTool(command);
-
-          const sendAgentEvent = (payload: Record<string, unknown>) => {
-            try {
-              streamController.enqueue(
-                encoder.encode(`data: ${JSON.stringify({ agent_event: payload })}\n\n`)
-              );
-            } catch {
-              // تجاهل
-            }
-          };
-
-          if (!command) {
-            const msg = "الموديل بعت أمر فاضي — اتجاهل.";
-            sendAgentEvent({ type: "tool_error", tool: toolName, id: call.id, message: msg });
-            sandboxSteps.push({ id: call.id, tool: toolName, status: "error", message: msg });
-            loopMessages.push({
-              role: "tool",
-              tool_call_id: call.id,
-              name: "run_command",
-              content: JSON.stringify({ ok: false, error: msg }),
-            });
-            continue;
-          }
-
-          // الأمر نفسه بيظهر للمستخدم فورًا (قبل ما يخلص) عشان يشوف إيه اللي بيتشغّل.
-          sendAgentEvent({
-            type: "tool_start",
-            tool: toolName,
-            id: call.id,
-            message: command,
-            detail: { command },
-          });
-
-          const startedAt = Date.now();
-          const run = await runInSandbox(projectFiles, command);
-          const detail: AgentStepDetail = {
-            command,
-            stdout: clipOutput(run.stdout, 4000),
-            stderr: clipOutput(run.stderr, 4000),
-            exitCode: run.exitCode,
-            durationMs: Date.now() - startedAt,
-          };
-          // نسخة أصغر للتخزين الدائم في الداتابيز (المخرجات الكاملة بتتبعت لايف بس)
-          const storedDetail: AgentStepDetail = {
-            ...detail,
-            stdout: clipOutput(run.stdout, 1500),
-            stderr: clipOutput(run.stderr, 1500),
-          };
-
-          if (run.error) {
-            sendAgentEvent({ type: "tool_error", tool: toolName, id: call.id, message: run.error, detail });
-            sandboxSteps.push({ id: call.id, tool: toolName, path: command, status: "error", message: run.error, detail: storedDetail });
-          } else if (run.ok) {
-            sendAgentEvent({ type: "tool_result", tool: toolName, id: call.id, message: command, detail });
-            sandboxSteps.push({ id: call.id, tool: toolName, path: command, status: "done", detail: storedDetail });
-          } else {
-            const msg = `فشل (exit code ${run.exitCode ?? "?"})`;
-            sendAgentEvent({ type: "tool_error", tool: toolName, id: call.id, message: msg, detail });
-            sandboxSteps.push({ id: call.id, tool: toolName, path: command, status: "error", message: msg, detail: storedDetail });
-          }
+      try {
+        while (
+          HAS_TOOLS &&
+          !result.stoppedByUser &&
+          result.toolCalls &&
+          result.toolCalls.length > 0 &&
+          round < MAX_TOOL_ROUNDS
+        ) {
+          round += 1;
+          const toolCalls: UpstreamToolCall[] = result.toolCalls.slice(0, MAX_CALLS_PER_ROUND);
 
           loopMessages.push({
-            role: "tool",
-            tool_call_id: call.id,
-            name: "run_command",
-            content: JSON.stringify(
+            role: "assistant",
+            content: result.content || "",
+            tool_calls: toolCalls,
+            // بعض الموديلات (DeepSeek في وضع التفكير) بترفض الجولة اللي بعد أداة لو
+            // مرجّعناش تفكيرها معاها — فبنبعته لو موجود (والنداء بيتعاد من غيره لو اترفض).
+            ...(result.reasoning ? { reasoning_content: result.reasoning } : {}),
+          });
+
+          const draftContent = contentParts.join("\n\n");
+          const projectFiles = collectSessionProjectFiles(existing, draftContent);
+
+          for (const call of toolCalls) {
+            const callName = call.function.name;
+            let args: Record<string, unknown> = {};
+            let argsValid = true;
+            try {
+              const parsed = JSON.parse(call.function.arguments || "{}");
+              args = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+            } catch {
+              argsValid = false;
+            }
+
+            const pushToolMessage = (payload: Record<string, unknown>) => {
+              const content = JSON.stringify(payload);
+              extraTokens += Math.floor(content.length / 3);
+              loopMessages.push({ role: "tool", tool_call_id: call.id, name: callName, content });
+            };
+
+            // --- list_files / read_file (محلي، من غير sandbox) ---
+            if (isProjectTool(callName)) {
+              if (!argsValid) {
+                const msg = "معاملات الأداة مش JSON صالح.";
+                sendAgentEvent({ type: "tool_error", tool: callName, id: call.id, message: msg });
+                sandboxSteps.push({ id: call.id, tool: callName, status: "error", message: msg });
+                pushToolMessage({ ok: false, error: msg });
+                continue;
+              }
+              const startPath = typeof args.path === "string" ? args.path : undefined;
+              sendAgentEvent({ type: "tool_start", tool: callName, id: call.id, path: startPath });
+              const r = runProjectTool(callName, args, projectFiles);
+              sendAgentEvent({
+                type: r.ok ? "tool_result" : "tool_error",
+                tool: callName,
+                id: call.id,
+                path: r.path ?? startPath,
+                message: r.message,
+                detail: r.detail,
+              });
+              sandboxSteps.push({
+                id: call.id,
+                tool: callName,
+                path: r.path ?? startPath,
+                status: r.ok ? "done" : "error",
+                message: r.message,
+                detail: r.detail,
+              });
+              pushToolMessage(r.payload);
+              continue;
+            }
+
+            // --- run_command ---
+            if (callName !== "run_command") {
+              const msg = `أداة غير معروفة: ${callName}`;
+              sendAgentEvent({ type: "tool_error", tool: "run_command", id: call.id, message: msg });
+              sandboxSteps.push({ id: call.id, tool: "run_command", status: "error", message: msg });
+              pushToolMessage({ ok: false, error: msg });
+              continue;
+            }
+
+            const command = argsValid ? String(args.command || "").trim() : "";
+            const toolName = classifyCommandTool(command);
+
+            if (!command) {
+              const msg = argsValid
+                ? "الموديل بعت أمر فاضي — اتجاهل."
+                : "معاملات الأداة مش JSON صالح (غالبًا الأمر طويل جدًا واتقطع) — قسّم الأمر لأجزاء أصغر.";
+              sendAgentEvent({ type: "tool_error", tool: toolName, id: call.id, message: msg });
+              sandboxSteps.push({ id: call.id, tool: toolName, status: "error", message: msg });
+              pushToolMessage({ ok: false, error: msg });
+              continue;
+            }
+
+            if (!session) {
+              const msg = "أداة run_command مش متاحة على السيرفر ده — استخدم list_files/read_file بس.";
+              sendAgentEvent({ type: "tool_error", tool: toolName, id: call.id, message: msg });
+              sandboxSteps.push({ id: call.id, tool: toolName, status: "error", message: msg });
+              pushToolMessage({ ok: false, error: msg });
+              continue;
+            }
+
+            // الأمر نفسه بيظهر للمستخدم فورًا (قبل ما يخلص) عشان يشوف إيه اللي بيتشغّل.
+            sendAgentEvent({ type: "tool_start", tool: toolName, id: call.id, message: command, detail: { command } });
+
+            const startedAt = Date.now();
+            const run = await session.run(projectFiles, command);
+            const detail: AgentStepDetail = {
+              command,
+              stdout: clipOutput(run.stdout, 4000),
+              stderr: clipOutput(run.stderr, 4000),
+              exitCode: run.exitCode,
+              durationMs: Date.now() - startedAt,
+            };
+            // نسخة أصغر للتخزين الدائم في الداتابيز (المخرجات الكاملة بتتبعت لايف بس)
+            const storedDetail: AgentStepDetail = {
+              ...detail,
+              stdout: clipOutput(run.stdout, 1500),
+              stderr: clipOutput(run.stderr, 1500),
+            };
+
+            if (run.error) {
+              sendAgentEvent({ type: "tool_error", tool: toolName, id: call.id, message: run.error, detail });
+              sandboxSteps.push({ id: call.id, tool: toolName, path: command, status: "error", message: run.error, detail: storedDetail });
+            } else if (run.ok) {
+              sendAgentEvent({ type: "tool_result", tool: toolName, id: call.id, message: command, detail });
+              sandboxSteps.push({ id: call.id, tool: toolName, path: command, status: "done", detail: storedDetail });
+            } else {
+              const msg = `فشل (exit code ${run.exitCode ?? "?"})`;
+              sendAgentEvent({ type: "tool_error", tool: toolName, id: call.id, message: msg, detail });
+              sandboxSteps.push({ id: call.id, tool: toolName, path: command, status: "error", message: msg, detail: storedDetail });
+            }
+
+            pushToolMessage(
               run.error
                 ? { ok: false, error: run.error }
                 : {
@@ -363,24 +489,65 @@ export async function POST(req: NextRequest) {
                     exitCode: run.exitCode,
                     stdout: run.stdout,
                     stderr: run.stderr,
+                    ...(run.hint ? { hint: run.hint } : {}),
+                    ...(session && session.skipped > 0
+                      ? { note: `${session.skipped} ملف ماتكتبش في الـ sandbox (تعدّى الحد).` }
+                      : {}),
                   }
-            ),
-          });
+            );
+          }
+
+          const nextNegotiated = await callUpstreamAfterTools(loopMessages, true);
+
+          if (!nextNegotiated || !nextNegotiated.ok) {
+            // قبل كده كان هنا break صامت والرد بيفصل من غير أي تفسير.
+            if (!req.signal.aborted) {
+              const note =
+                "\n\n⚠️ الاتصال بالموديل فشل بعد ما نفّذت الأدوات، فمقدرتش أكمل الرد. اللي اتنفذ ظاهر في خطوات النشاط فوق — ابعت \"كمّل\" وهكمل من عندها.";
+              emit("content", note);
+              contentParts.push(note);
+            }
+            result = { ...result, toolCalls: [] };
+            break;
+          }
+
+          result = await readUpstreamStream(nextNegotiated.response, req.signal, emit);
+          contentParts.push(result.content);
+          if (result.reasoning) reasoningParts.push(result.reasoning);
+          extraTokens += estimateTokens(result.content, result.reasoning);
         }
 
-        const nextNegotiated = await negotiateUpstream(
-          loopMessages,
-          controller.signal,
-          model,
-          toolOptions
-        ).catch(() => null);
-
-        if (!nextNegotiated || !nextNegotiated.ok) break;
-
-        result = await readUpstreamStream(nextNegotiated.response, req.signal, emit);
-        contentParts.push(result.content);
-        if (result.reasoning) reasoningParts.push(result.reasoning);
-        extraTokens += estimateTokens(result.content, result.reasoning);
+        // الجولات خلصت والموديل لسه عايز يستدعي أدوات → نعمل نداء أخير من غير أدوات
+        // عشان يكتب خلاصة للمستخدم بدل ما الرد يقف في النص من غير كلمة.
+        if (
+          HAS_TOOLS &&
+          !result.stoppedByUser &&
+          result.toolCalls &&
+          result.toolCalls.length > 0 &&
+          round >= MAX_TOOL_ROUNDS
+        ) {
+          loopMessages.push({ role: "assistant", content: result.content || "" });
+          loopMessages.push({
+            role: "user",
+            content:
+              "وصلت للحد الأقصى من استدعاءات الأدوات في الرد ده. اكتب دلوقتي خلاصة نهائية للمستخدم بدون استدعاء أدوات: " +
+              "إيه اللي اتعمل فعلًا، إيه اللي فشل أو لسه ناقص، والخطوة الجاية المقترحة.",
+          });
+          const finalNegotiated = await callUpstreamAfterTools(loopMessages, false);
+          if (finalNegotiated?.ok) {
+            result = await readUpstreamStream(finalNegotiated.response, req.signal, emit);
+            contentParts.push(result.content);
+            if (result.reasoning) reasoningParts.push(result.reasoning);
+            extraTokens += estimateTokens(result.content, result.reasoning);
+          } else if (!req.signal.aborted) {
+            const note = "\n\n⚠️ وصلت للحد الأقصى من الأدوات ومقدرتش أكتب الخلاصة (مشكلة اتصال) — ابعت \"كمّل\".";
+            emit("content", note);
+            contentParts.push(note);
+          }
+        }
+      } finally {
+        // الـ sandbox بيتقفل مهما حصل (نجاح/فشل/إيقاف من المستخدم/exception).
+        await session?.close();
       }
 
       let finalContent = contentParts.join("\n\n").trim();
@@ -405,9 +572,12 @@ export async function POST(req: NextRequest) {
       const placeholderIfEmpty = result.stoppedByUser ? "تم إيقاف الرد بواسطتك." : "";
 
       if (finalContent || finalReasoning || result.stoppedByUser) {
+        // الحسبة: اللي اتبعت للموديل فعلًا من رسالة المستخدم (نص + قايمة/ملفات صغيرة، والصورة
+        // بتقدير ثابت — مش Base64) + الرد + التفكير + جولات الأدوات. محتوى zip الكامل
+        // مبيتحسبش لأنه مبيتبعتش.
         const totalTokens = usedFallback
           ? 0
-          : estimateTokens(userPrompt, finalContent, finalReasoning ?? "") + extraTokens;
+          : promptTokens + estimateTokens(finalContent, finalReasoning ?? "") + extraTokens;
         const assistantId = randomUUID();
 
         // بناء خطوات الـAgent الحقيقية اللي حصلت في الرد ده (بحث فعلي تم +
