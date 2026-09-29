@@ -142,6 +142,9 @@ function buildQueries(userMessage: string): string[] {
 export interface DeepSearchOutcome {
   performed: boolean;
   contextBlock: string | null;
+  /** الاستعلامات اللي اتبعتت فعلاً + المصادر اللي رجعت — بتظهر في تفاصيل خطوة البحث */
+  queries?: string[];
+  sources?: { title: string; url: string }[];
 }
 
 /**
@@ -186,7 +189,12 @@ export async function runDeepSearch(userMessage: string): Promise<DeepSearchOutc
       `(متعملش قسم "مصادر" منفصل). لو النتايج مش متعلقة فعليًا بالسؤال، تجاهلها ورد من معرفتك العادية:\n\n` +
       lines.join("\n\n");
 
-    return { performed: true, contextBlock };
+    return {
+      performed: true,
+      contextBlock,
+      queries,
+      sources: merged.slice(0, 8).map((r) => ({ title: r.title, url: r.url })),
+    };
   } catch {
     return { performed: false, contextBlock: null };
   }

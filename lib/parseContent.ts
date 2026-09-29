@@ -92,7 +92,7 @@ export function parseMessageContent(content: string): ContentSegment[] {
 
 export type StreamingSegment =
   | { type: "prose"; text: string }
-  | { type: "fileblock"; language: string; path: string; isComplete: boolean };
+  | { type: "fileblock"; language: string; path: string; isComplete: boolean; body: string };
 
 /** أثناء البث الحي: أي كتلة كود (بـ path أو من غيره) بتظهر كـ "جاري بناء ملف" في الخلفية
  * بدل نص خام — الكود عمره ما يترسم في الشات، بالظبط زي Claude وهو بيتبني في بيئته. */
@@ -115,6 +115,7 @@ export function parseStreamingContent(content: string): StreamingSegment[] {
       language: lang || "text",
       path,
       isComplete: closer === "```" && body.trim().length > 0,
+      body,
     });
     lastIndex = match.index + full.length;
   }

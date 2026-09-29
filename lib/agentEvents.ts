@@ -37,6 +37,27 @@ export type AgentEventType =
   | "tool_error"
   | "task_complete";
 
+/**
+ * تفاصيل حقيقية لخطوة واحدة — بتظهر لما المستخدم يضغط على الخطوة جوه الـ
+ * Activity Block. كل حقل اختياري وبيتملي بس لو فعلاً حصل (مفيش مخرجات وهمية).
+ */
+export interface AgentStepDetail {
+  /** الأمر الفعلي اللي اتنفذ (run_command / run_tests) */
+  command?: string;
+  /** مخرجات الأمر الحقيقية (آخر جزء منها لو طويلة) */
+  stdout?: string;
+  stderr?: string;
+  exitCode?: number | null;
+  /** المدة الفعلية للتنفيذ بالمللي ثانية */
+  durationMs?: number;
+  /** لأدوات الملفات: عدد الأسطر + أول أسطر كمعاينة */
+  lines?: number;
+  preview?: string;
+  /** للبحث: الاستعلامات اللي اتبعتت فعلاً + المصادر اللي رجعت */
+  queries?: string[];
+  sources?: { title: string; url: string }[];
+}
+
 export interface AgentEvent {
   type: AgentEventType;
   tool: AgentToolName;
@@ -45,6 +66,7 @@ export interface AgentEvent {
   /** مسار الملف (لأدوات الملفات) أو استعلام البحث (لـ web_search) */
   path?: string;
   message?: string;
+  detail?: AgentStepDetail;
 }
 
 /** حالة خطوة واحدة في الـ Activity Block بعد تجميع الأحداث */
@@ -56,6 +78,47 @@ export interface AgentStep {
   path?: string;
   message?: string;
   status: AgentStepStatus;
+  detail?: AgentStepDetail;
+}
+
+/** هل الخطوة فيها حاجة تتعرض لما تتفتح؟ (لو لأ، الصف بيفضل سطر عادي مش قابل للضغط) */
+export function stepHasDetail(step: AgentStep): boolean {
+  const d = step.detail;
+  if (step.status === "error" && (step.message || d)) return true;
+  if (!d) return false;
+  return !!(
+    d.command ||
+    d.stdout ||
+    d.stderr ||
+    d.preview ||
+    d.queries?.length ||
+    d.sources?.length ||
+    typeof d.lines === "number" ||
+    typeof d.exitCode === "number"
+  );
+}
+
+const ANSI_REGEX = /\u001b\[[0-9;?]*[A-Za-z]/g;
+
+/**
+ * بينضّف ويقصّ مخرجات أمر عشان تتخزن/تتبعت: بيشيل ألوان الترمنال (ANSI)
+ * وأي حرف من حروف الفاصل الداخلي بتاع كتلة البيانات، وبيحتفظ بـ *آخر* جزء
+ * (لأن الخطأ الحقيقي في الـ build/test غالبًا في آخر المخرجات).
+ */
+export function clipOutput(text: string | undefined, max: number): string | undefined {
+  if (!text) return undefined;
+  const clean = text.replace(ANSI_REGEX, "").replace(/\uE000/g, "").replace(/\r\n?/g, "\n").trimEnd();
+  if (!clean) return undefined;
+  return clean.length > max ? "…\n" + clean.slice(clean.length - max) : clean;
+}
+
+/** أول أسطر من محتوى ملف كمعاينة صغيرة (بدون ما نخزن الملف كله مرتين). */
+export function filePreview(content: string, maxLines = 10, maxChars = 700): { lines: number; preview: string } {
+  const all = content.replace(/\r\n?/g, "\n").replace(/\n+$/, "").split("\n");
+  let preview = all.slice(0, maxLines).join("\n");
+  if (preview.length > maxChars) preview = preview.slice(0, maxChars);
+  if (all.length > maxLines || preview.length < content.length) preview += "\n…";
+  return { lines: all.length, preview };
 }
 
 const TOOL_LABELS: Record<AgentToolName, { verbDoing: string; verbDone: string }> = {
@@ -92,6 +155,7 @@ export function reduceAgentEvents(events: AgentEvent[]): AgentStep[] {
     }
     const step = steps.get(ev.id)!;
     if (ev.path) step.path = ev.path;
+    if (ev.detail) step.detail = { ...step.detail, ...ev.detail };
     if (ev.type === "tool_result") {
       step.status = "done";
       if (ev.message) step.message = ev.message;
@@ -108,6 +172,8 @@ interface StreamingFileBlockLike {
   type: "prose" | "fileblock";
   path?: string;
   isComplete?: boolean;
+  /** محتوى الكتلة لحد اللحظة دي (بيتعبّى أثناء البث) */
+  body?: string;
 }
 
 /**
@@ -127,6 +193,7 @@ export function fileStepsFromStreamingSegments(segments: StreamingFileBlockLike[
       tool: "write_file",
       path: seg.path,
       status: seg.isComplete ? "done" : "running",
+      detail: seg.body ? filePreview(seg.body) : undefined,
     });
   }
   return steps;

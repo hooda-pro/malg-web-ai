@@ -19,7 +19,14 @@ import {
 } from "@/lib/systemPrompt";
 import { runDeepSearch } from "@/lib/webSearch";
 import { extractProjectFiles } from "@/lib/parseContent";
-import { buildAgentStepsMetaBlock, type AgentStep } from "@/lib/agentEvents";
+import {
+  buildAgentStepsMetaBlock,
+  clipOutput,
+  extractAgentStepsMeta,
+  filePreview,
+  type AgentStep,
+  type AgentStepDetail,
+} from "@/lib/agentEvents";
 import { isSandboxConfigured, runInSandbox } from "@/lib/sandbox";
 import { RUN_COMMAND_TOOL, classifyCommandTool, collectSessionProjectFiles } from "@/lib/agentTools";
 import { buildApiMessageContent } from "@/lib/attachments";
@@ -144,7 +151,9 @@ export async function POST(req: NextRequest) {
     // حقيقية) لو المستخدم رفع صورة، عشان الموديل يشوفها فعليًا (vision).
     ...existing.slice(-10).map((m) => ({
       role: m.role,
-      content: m.role === "user" ? buildApiMessageContent(m.content) : m.content,
+      // رسايل المساعد المخزّنة فيها كتلة بيانات خطوات الـAgent (مخرجات أوامر...) —
+      // دي للواجهة بس، مش لازم تتبعت للموديل كنص وتاكل توكنز.
+      content: m.role === "user" ? buildApiMessageContent(m.content) : extractAgentStepsMeta(m.content).visibleText,
     })),
   ];
 
@@ -201,7 +210,12 @@ export async function POST(req: NextRequest) {
       // عشان نتجنب تكرار نفس منطق تحليل الكتل جوه السيرفر والعميل مع بعض.
       if (deepSearch.performed) {
         const agentPayload = {
-          agent_event: { type: "tool_result", tool: "web_search", id: "search-1" },
+          agent_event: {
+            type: "tool_result",
+            tool: "web_search",
+            id: "search-1",
+            detail: { queries: deepSearch.queries, sources: deepSearch.sources },
+          },
         };
         try {
           streamController.enqueue(encoder.encode(`data: ${JSON.stringify(agentPayload)}\n\n`));
@@ -300,20 +314,41 @@ export async function POST(req: NextRequest) {
             continue;
           }
 
-          sendAgentEvent({ type: "tool_start", tool: toolName, id: call.id, message: command });
+          // الأمر نفسه بيظهر للمستخدم فورًا (قبل ما يخلص) عشان يشوف إيه اللي بيتشغّل.
+          sendAgentEvent({
+            type: "tool_start",
+            tool: toolName,
+            id: call.id,
+            message: command,
+            detail: { command },
+          });
 
+          const startedAt = Date.now();
           const run = await runInSandbox(projectFiles, command);
+          const detail: AgentStepDetail = {
+            command,
+            stdout: clipOutput(run.stdout, 4000),
+            stderr: clipOutput(run.stderr, 4000),
+            exitCode: run.exitCode,
+            durationMs: Date.now() - startedAt,
+          };
+          // نسخة أصغر للتخزين الدائم في الداتابيز (المخرجات الكاملة بتتبعت لايف بس)
+          const storedDetail: AgentStepDetail = {
+            ...detail,
+            stdout: clipOutput(run.stdout, 1500),
+            stderr: clipOutput(run.stderr, 1500),
+          };
 
           if (run.error) {
-            sendAgentEvent({ type: "tool_error", tool: toolName, id: call.id, message: run.error });
-            sandboxSteps.push({ id: call.id, tool: toolName, path: command, status: "error", message: run.error });
+            sendAgentEvent({ type: "tool_error", tool: toolName, id: call.id, message: run.error, detail });
+            sandboxSteps.push({ id: call.id, tool: toolName, path: command, status: "error", message: run.error, detail: storedDetail });
           } else if (run.ok) {
-            sendAgentEvent({ type: "tool_result", tool: toolName, id: call.id, message: command });
-            sandboxSteps.push({ id: call.id, tool: toolName, path: command, status: "done" });
+            sendAgentEvent({ type: "tool_result", tool: toolName, id: call.id, message: command, detail });
+            sandboxSteps.push({ id: call.id, tool: toolName, path: command, status: "done", detail: storedDetail });
           } else {
             const msg = `فشل (exit code ${run.exitCode ?? "?"})`;
-            sendAgentEvent({ type: "tool_error", tool: toolName, id: call.id, message: msg });
-            sandboxSteps.push({ id: call.id, tool: toolName, path: command, status: "error", message: msg });
+            sendAgentEvent({ type: "tool_error", tool: toolName, id: call.id, message: msg, detail });
+            sandboxSteps.push({ id: call.id, tool: toolName, path: command, status: "error", message: msg, detail: storedDetail });
           }
 
           loopMessages.push({
@@ -381,11 +416,22 @@ export async function POST(req: NextRequest) {
         // حالته النهائية لما المحادثة تتفتح تاني — بدون أي خطوة وهمية.
         const agentSteps: AgentStep[] = [];
         if (deepSearch.performed) {
-          agentSteps.push({ id: "search-1", tool: "web_search", status: "done" });
+          agentSteps.push({
+            id: "search-1",
+            tool: "web_search",
+            status: "done",
+            detail: { queries: deepSearch.queries, sources: deepSearch.sources },
+          });
         }
         const writtenFiles = finalContent ? extractProjectFiles(finalContent) : [];
         writtenFiles.forEach((f, i) => {
-          agentSteps.push({ id: `file-${i + 1}-${f.path}`, tool: "write_file", path: f.path, status: "done" });
+          agentSteps.push({
+            id: `file-${i + 1}-${f.path}`,
+            tool: "write_file",
+            path: f.path,
+            status: "done",
+            detail: filePreview(f.content),
+          });
         });
         agentSteps.push(...sandboxSteps);
         const storedAssistantContent =
