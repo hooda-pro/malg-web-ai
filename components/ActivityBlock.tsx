@@ -166,7 +166,7 @@ function StepRow({ step, open, onToggle }: { step: AgentStep; open: boolean; onT
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 px-3.5 py-1 text-[12.5px] leading-6 transition-colors duration-1 hover:bg-surface-3"
+        className="flex w-full items-center gap-2 rounded-md px-3.5 py-1 text-[12.5px] leading-6 transition-colors duration-1 hover:bg-surface-3"
       >
         {label}
         <ChevronRight
@@ -235,7 +235,10 @@ export default function ActivityBlock({
           setOpen((o) => !o);
         }}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 px-3.5 py-2.5 text-start transition-colors duration-1 hover:bg-surface-3"
+        className={cn(
+          "flex w-full items-center gap-2 px-3.5 py-2.5 text-start transition-colors duration-1 hover:bg-surface-3",
+          open ? "rounded-t-[17px]" : "rounded-[17px]"
+        )}
       >
         {isActive ? (
           <Cog size={14} className="shrink-0 animate-spin-slow text-accent" />
