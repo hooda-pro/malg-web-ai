@@ -13,6 +13,9 @@ export interface ChatSession {
   title: string;
   createdAt: string;
   updatedAt: string;
+  /** لو الموديل قفل المحادثة (بعد تحذير واستمرار السلوك) — الشات بيبقى للقراءة بس ومفيش خانة كتابة */
+  endedAt?: string | null;
+  endedReason?: string | null;
 }
 
 export interface ChatMessage {

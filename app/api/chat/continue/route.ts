@@ -48,11 +48,17 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const sessionRows = await sql`
-    SELECT id FROM chat_sessions WHERE id = ${sessionId} AND user_id = ${user.id}
-  `;
+  const sessionRows = (await sql`
+    SELECT id, ended_at FROM chat_sessions WHERE id = ${sessionId} AND user_id = ${user.id}
+  `) as { id: string; ended_at: string | null }[];
   if (sessionRows.length === 0) {
     return NextResponse.json({ error: "المحادثة غير موجودة" }, { status: 404 });
+  }
+  if (sessionRows[0].ended_at) {
+    return NextResponse.json(
+      { error: "المحادثة دي اتقفلت — ابدأ محادثة جديدة.", sessionEnded: true },
+      { status: 409 }
+    );
   }
 
   const quotaCheck = await checkAndMaybeRenewQuota(user.id, user.isAdmin);

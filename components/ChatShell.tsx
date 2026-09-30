@@ -10,6 +10,7 @@ import TopBar from "./TopBar";
 import ChatDrawer from "./ChatDrawer";
 import MessageList, { type LiveReplyState } from "./MessageList";
 import BottomInputBar, { type ComposerAttachment } from "./BottomInputBar";
+import ChatEndedNotice from "./ChatEndedNotice";
 import AuthModal from "./AuthModal";
 import RechargeModal from "./RechargeModal";
 import ArtifactPanel from "./ArtifactPanel";
@@ -295,6 +296,15 @@ export default function ChatShell() {
     } catch {
       return [];
     }
+  }, []);
+
+  /** الشات اتقفل (من رد الموديل أو من رفض السيرفر) — نعلّمه فورًا من غير ما نستنى refresh. */
+  const markSessionEnded = useCallback((sessionId: string, reason?: string | null) => {
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === sessionId ? { ...s, endedAt: s.endedAt ?? new Date().toISOString(), endedReason: reason ?? s.endedReason ?? null } : s
+      )
+    );
   }, []);
 
   useEffect(() => {
@@ -602,7 +612,12 @@ export default function ChatShell() {
           rejected = true;
           const data = await res.json().catch(() => ({}));
           setMessages((prev) => prev.filter((m) => m.id !== optimisticUser.id));
-          showToast(data.error || t("toastSendFail"));
+          if (data.sessionEnded) {
+            markSessionEnded(sessionId);
+            showToast(t("toastChatEnded"));
+          } else {
+            showToast(data.error || t("toastSendFail"));
+          }
         } else {
           accepted = true;
           const reader = res.body!.getReader();
@@ -619,6 +634,7 @@ export default function ChatShell() {
               accAgentEvents = [...accAgentEvents, event];
               setStreamingAgentEvents(accAgentEvents);
             },
+            onSessionEnded: (info) => markSessionEnded(sessionId, info.reason),
           });
         }
       } catch (e: any) {
@@ -704,6 +720,7 @@ export default function ChatShell() {
       panelOpen,
       openPanelWithFiles,
       showToast,
+      markSessionEnded,
     ]
   );
 
@@ -736,6 +753,7 @@ export default function ChatShell() {
 
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
+          if (data.sessionEnded) markSessionEnded(sessionId);
           showToast(data.error || t("toastContinueFail"));
         } else {
           const reader = res.body!.getReader();
@@ -853,6 +871,9 @@ export default function ChatShell() {
         : null,
     [isGenerating, streamSessionId, currentSessionId, liveKey, streamingContent, streamingReasoning, streamingAgentEvents]
   );
+  // الشات الحالي اتقفل؟ (الموديل أنهاه بعد تحذير) → خانة الكتابة بتختفي
+  const currentSessionEnded = !!sessions.find((s) => s.id === currentSessionId)?.endedAt;
+
   // لحد ما نعرف الحساب والشات والرسايل: هيكل تحميل بدل شاشة الترحيب أو رسايل شات قديم
   const messagesLoading =
     !authChecked || (!!user && (!sessionsLoaded || (currentSessionId !== null && loadedFor !== currentSessionId)));
@@ -910,12 +931,16 @@ export default function ChatShell() {
           onPreviewFiles={openPanelWithFiles}
         />
 
-        <BottomInputBar
-          isGenerating={isGenerating}
-          onSend={sendMessage}
-          onStop={stopGeneration}
-          disabled={!authChecked}
-        />
+        {currentSessionEnded && !isGenerating ? (
+          <ChatEndedNotice onNewChat={handleNewChat} />
+        ) : (
+          <BottomInputBar
+            isGenerating={isGenerating}
+            onSend={sendMessage}
+            onStop={stopGeneration}
+            disabled={!authChecked}
+          />
+        )}
       </main>
 
       {panelOpen && panelFiles.length > 0 && (

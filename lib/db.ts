@@ -112,6 +112,11 @@ export function ensureSchema(): Promise<void> {
       `;
       await sql`CREATE INDEX IF NOT EXISTS idx_sessions_user ON chat_sessions(user_id)`;
 
+      // ——— إنهاء المحادثة (زي Claude): تحذيرات محترمة الأول، وبعدين قفل نهائي للشات ———
+      await sql`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS abuse_warnings INTEGER NOT NULL DEFAULT 0`;
+      await sql`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ`;
+      await sql`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS ended_reason TEXT`;
+
       await sql`
         CREATE TABLE IF NOT EXISTS chat_messages (
           id TEXT PRIMARY KEY,

@@ -6,6 +6,8 @@ export async function consumeSSEStream(
     onContent?: (text: string) => void;
     onReasoning?: (text: string) => void;
     onAgentEvent?: (event: AgentEvent) => void;
+    /** السيرفر قفل المحادثة (الموديل أنهاها بعد تحذير) */
+    onSessionEnded?: (info: { reason?: string }) => void;
   }
 ) {
   const decoder = new TextDecoder();
@@ -25,6 +27,10 @@ export async function consumeSSEStream(
         const json = JSON.parse(data);
         if (json?.agent_event) {
           handlers.onAgentEvent?.(json.agent_event as AgentEvent);
+          continue;
+        }
+        if (json?.session_ended) {
+          handlers.onSessionEnded?.(json.session_ended as { reason?: string });
           continue;
         }
         const delta = json?.choices?.[0]?.delta;
