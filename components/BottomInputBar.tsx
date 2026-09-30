@@ -231,10 +231,9 @@ export default function BottomInputBar({
             <Paperclip size={16} />
           </button>
 
-          <p className="hidden min-w-0 flex-1 truncate px-1.5 text-[11.5px] text-ink-3 sm:block">
+          <p className="min-w-0 flex-1 truncate px-1.5 text-[11.5px] text-ink-3">
             {enterToSend ? t("composerHint") : t("enterToSendHint")}
           </p>
-          <span className="flex-1 sm:hidden" aria-hidden="true" />
 
           {isGenerating ? (
             <button
@@ -322,7 +321,7 @@ function AttachmentChip({
         <button
           onClick={onRemove}
           aria-label={t("removeAttachment")}
-          className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-ink-3 opacity-0 transition-opacity duration-1 hover:bg-surface-3 hover:text-ink group-hover:opacity-100"
+          className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-ink-3 opacity-0 transition-opacity duration-1 hover:bg-surface-3 hover:text-ink group-hover:opacity-100 [@media(hover:none)]:opacity-100"
         >
           <X size={12} />
         </button>

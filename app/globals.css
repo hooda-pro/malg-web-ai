@@ -150,37 +150,59 @@
     color: var(--ink);
   }
 
-  /* مهم: ما بنغيّرش border-radius هنا — كان بيحوّل أي عنصر مدوّر لمربع تقريبًا أول ما ياخد فوكس */
+  /* حلقة الفوكس: بتتبع شكل العنصر نفسه (من غير ما نغيّر الـ border-radius بتاعه —
+     الكود القديم كان بيفرض 8px على أي عنصر ياخد فوكس فالأزرار الدايرية تتحول لمربع). */
+  :focus {
+    outline: none;
+  }
   :focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--accent-line);
     outline-offset: 2px;
   }
-
-  /* خانات الكتابة: من غير إطار الفوكس الافتراضي (الإطار الأبيض/الأزرق السميك).
-     التمييز بيتعمل بـ border + ظل ناعم على الخانة نفسها أو على الحاوية بتاعتها. */
+  /* الحقول ليها حدّ/توهّج خاص بيها عند الفوكس، فمفيش حلقة إضافية ولا إطار أبيض */
   input:focus-visible,
   textarea:focus-visible,
   select:focus-visible {
     outline: none;
   }
+  /* العناصر اللي جوه حاويات overflow-hidden: الحلقة جوّه مش برّه عشان ما تتقصّش */
+  [role="dialog"] button:focus-visible,
+  [role="dialog"] a:focus-visible,
+  .overflow-hidden > button:focus-visible,
+  .overflow-hidden a:focus-visible {
+    outline-offset: -2px;
+  }
 
-  /* الملء التلقائي في كروم/سفاري كان بيرسم خلفية بيضا/زرقا حوالين الخانة */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* حقول الإدخال: شكل موحّد على كل الأجهزة (iOS/Android بيضيفوا ظل وحواف مربعة) */
+  input,
+  textarea,
+  select {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  input[type="search"]::-webkit-search-cancel-button,
+  input[type="search"]::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  input[type="radio"],
+  input[type="checkbox"] {
+    -webkit-appearance: auto;
+    appearance: auto;
+  }
+  /* الإكمال التلقائي في كروم كان بيرسم خلفية بيضا/زرقا جوه الحقل */
   input:-webkit-autofill,
   input:-webkit-autofill:hover,
   input:-webkit-autofill:focus,
   textarea:-webkit-autofill {
     -webkit-text-fill-color: var(--ink);
     caret-color: var(--ink);
-    -webkit-box-shadow: 0 0 0 1000px var(--surface-2) inset;
     box-shadow: 0 0 0 1000px var(--surface-2) inset;
     transition: background-color 9999s ease-out 0s;
-  }
-
-  /* حقل البحث: بدون زر X الافتراضي بتاع المتصفح */
-  input[type="search"]::-webkit-search-cancel-button,
-  input[type="search"]::-webkit-search-decoration {
-    -webkit-appearance: none;
-    appearance: none;
   }
 
   button,

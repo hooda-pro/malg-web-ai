@@ -31,6 +31,27 @@ function getFirebaseApp() {
  * الـ Token ده اللي بنبعته للسيرفر عشان يتأكد من هويتك (lib/firebaseAdmin.ts)
  * وينشئ/يجيب حسابك من قاعدة البيانات.
  */
+/**
+ * متصفحات التطبيقات (واتساب/انستجرام/فيسبوك/تيك توك/سناب/لينكدإن/تيليجرام...) بتفتح
+ * الروابط في WebView، وجوجل بترفض OAuth جواها (خطأ disallowed_useragent). ده أكتر سبب
+ * لفشل الدخول على الآيفون لما الصاحب يفتح اللينك من رسالة.
+ */
+export function isInAppBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  if (/FBAN|FBAV|FB_IAB|Instagram|Line\/|Snapchat|TikTok|BytedanceWebview|musical_ly|LinkedInApp|Twitter|MicroMessenger|Telegram|GSA\//i.test(ua)) return true;
+  // WebView عام على iOS: بيكون فيه AppleWebKit بدون كلمة Safari
+  const isIOS = /iPhone|iPad|iPod/i.test(ua);
+  if (isIOS && /AppleWebKit/i.test(ua) && !/Safari|CriOS|FxiOS|EdgiOS/i.test(ua)) return true;
+  return false;
+}
+
+/** كود خطأ فايربيس (auth/...) لو موجود */
+export function authErrorCode(e: unknown): string {
+  const code = (e as { code?: unknown } | null)?.code;
+  return typeof code === "string" ? code : "";
+}
+
 export async function signInWithGoogle(): Promise<string> {
   const auth = getAuth(getFirebaseApp());
   const provider = new GoogleAuthProvider();

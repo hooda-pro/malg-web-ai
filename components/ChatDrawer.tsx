@@ -188,7 +188,7 @@ export default function ChatDrawer({
                           className={cn(
                             "absolute end-1 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full text-ink-3",
                             "opacity-0 transition-opacity duration-1 hover:bg-danger-soft hover:text-danger",
-                            "focus-visible:opacity-100 group-hover:opacity-100",
+                            "focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100",
                             active && "opacity-100"
                           )}
                         >

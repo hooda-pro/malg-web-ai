@@ -211,7 +211,7 @@ function MessageItem({
           </div>
         )}
 
-        <div className="mt-1 flex items-center gap-1 opacity-0 transition-opacity duration-1 focus-within:opacity-100 group-hover:opacity-100">
+        <div className="mt-1 flex items-center gap-1 opacity-0 transition-opacity duration-1 focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
           {showTime && (
             <span className="tnum px-1 text-[11px] text-ink-3">{formatTime(message.createdAt)}</span>
           )}
@@ -242,12 +242,16 @@ function MessageItem({
       aria-live={isLive ? "polite" : undefined}
     >
       <div className="flex gap-3">
-        <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-[9px] bg-accent-soft text-accent">
+        {/* على الموبايل الأفاتار بيدخل جوه سطر الاسم عشان النص ياخد العرض كله */}
+        <span className="mt-0.5 hidden h-7 w-7 shrink-0 place-items-center rounded-[9px] bg-accent-soft text-accent sm:grid">
           <Sparkles size={14} className={isLive ? "pulse-dot" : undefined} />
         </span>
 
         <div className="min-w-0 flex-1">
           <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent sm:hidden">
+              <Sparkles size={13} className={isLive ? "pulse-dot" : undefined} />
+            </span>
             <span className="text-[13.5px] font-semibold tracking-label text-ink">mlag</span>
             {!isLive && message.tokensUsed > 0 && (
               <span className="tnum inline-flex items-center gap-1 text-[11.5px] text-ink-3">

@@ -30,7 +30,7 @@ export default function TopBar({
   const { t } = useSettings();
 
   return (
-    <header className="glass sticky top-0 z-nav flex h-14 shrink-0 items-center gap-1.5 border-b border-hair px-2.5 sm:px-4">
+    <header className="glass sticky top-0 z-nav flex h-[calc(3.5rem+env(safe-area-inset-top))] shrink-0 items-center gap-1.5 border-b border-hair ps-[max(0.625rem,env(safe-area-inset-left))] pe-[max(0.625rem,env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] sm:px-4">
       <IconButton
         label={t("toggleSidebar")}
         onClick={onToggleDrawer}
@@ -124,7 +124,7 @@ function TokensBadge({
 
   return (
     <div
-      className="sm:relative ms-0.5"
+      className="relative ms-0.5"
       ref={ref}
       onMouseEnter={() => {
         cancelClose();
@@ -137,7 +137,7 @@ function TokensBadge({
         aria-haspopup="dialog"
         aria-expanded={open}
         title={t("topbarTokensHint")}
-        className="grid h-7 w-7 shrink-0 place-items-center rounded-full transition-opacity duration-1 hover:opacity-80"
+        className="relative grid h-5 w-5 shrink-0 place-items-center rounded-full transition-opacity duration-1 before:absolute before:-inset-2 before:content-[''] hover:opacity-80"
       >
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
           <circle
@@ -167,7 +167,7 @@ function TokensBadge({
         <div
           role="dialog"
           aria-label={t("usageTitle")}
-          className="animate-materialize glass absolute top-[calc(100%+8px)] z-modal overflow-hidden rounded-lg border border-hair p-3.5 shadow-3 max-sm:inset-x-3 sm:start-0 sm:w-[240px]"
+          className="animate-materialize glass absolute start-0 top-[calc(100%+8px)] z-modal w-[240px] overflow-hidden rounded-lg border border-hair p-3.5 shadow-3"
         >
           <div className="flex items-center justify-between gap-2">
             <span className="text-[12px] font-medium text-ink-2">{t("usageTitle")}</span>
@@ -243,7 +243,7 @@ function ModelPicker({
   const current = AVAILABLE_MODELS.find((m) => m.id === displayId) ?? AVAILABLE_MODELS[0];
 
   return (
-    <div className="sm:relative" ref={ref}>
+    <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
@@ -265,7 +265,7 @@ function ModelPicker({
         <div
           role="listbox"
           aria-label={t("modelSwitcherTitle")}
-          className="animate-materialize glass absolute top-[calc(100%+6px)] z-modal overflow-hidden rounded-lg border border-hair p-1.5 shadow-3 max-sm:inset-x-3 sm:start-0 sm:w-[300px]"
+          className="animate-materialize glass absolute start-0 top-[calc(100%+6px)] z-modal w-[300px] overflow-hidden rounded-lg border border-hair p-1.5 shadow-3"
         >
           <p className="px-2.5 pb-1.5 pt-1 text-[11.5px] font-medium text-ink-3">
             {t("modelSwitcherTitle")}

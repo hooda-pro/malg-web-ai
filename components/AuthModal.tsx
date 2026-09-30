@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Sparkles, User } from "lucide-react";
 import type { SessionUser } from "@/lib/types";
-import { signInWithGoogle } from "@/lib/firebaseClient";
+import { authErrorCode, isInAppBrowser, signInWithGoogle } from "@/lib/firebaseClient";
 import { Button, Dialog, Field } from "./ui/Controls";
 import { useSettings } from "./SettingsContext";
 
@@ -47,6 +47,11 @@ export default function AuthModal({
   const [age, setAge] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // بنقرأ الـuserAgent بعد الـmount عشان ما يحصلش hydration mismatch
+  const [inApp, setInApp] = useState(false);
+  useEffect(() => {
+    setInApp(isInAppBrowser());
+  }, []);
 
   const handleGoogle = async () => {
     setError(null);
@@ -69,8 +74,18 @@ export default function AuthModal({
       } else {
         onAuthenticated(data.user);
       }
-    } catch {
-      setError(t("errGoogle"));
+    } catch (e) {
+      const code = authErrorCode(e);
+      // المستخدم قفل النافذة بنفسه أو ضغط مرتين: مش خطأ نعرضه
+      if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
+        return;
+      }
+      console.error("google sign-in failed", code || e);
+      if (code === "auth/popup-blocked") setError(t("errGooglePopup"));
+      else if (code === "auth/unauthorized-domain") setError(t("errGoogleDomain"));
+      else if (code === "auth/network-request-failed") setError(t("errGoogleNetwork"));
+      else if (isInAppBrowser()) setError(t("errGoogleInApp"));
+      else setError(code ? `${t("errGoogle")} (${t("errGoogleCode")}: ${code})` : t("errGoogle"));
     } finally {
       setLoading(false);
     }
@@ -148,7 +163,17 @@ export default function AuthModal({
     >
       <div className="space-y-4 pb-2">
         {step === "google" ? (
-          <p className="text-pretty text-[12.5px] leading-6 text-ink-3">{t("authGoogleHint")}</p>
+          <>
+            <p className="text-pretty text-[12.5px] leading-6 text-ink-3">{t("authGoogleHint")}</p>
+            {inApp && (
+              <p
+                role="note"
+                className="rounded-md border border-hair bg-warn-soft px-3 py-2 text-[12.5px] leading-5 text-warn"
+              >
+                {t("errGoogleInApp")}
+              </p>
+            )}
+          </>
         ) : (
           <>
             <Field

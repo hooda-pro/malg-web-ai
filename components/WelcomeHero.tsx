@@ -19,7 +19,7 @@ export default function WelcomeHero({
   const name = (nickname || userName || "").trim().split(/\s+/)[0];
 
   return (
-    <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-4 pb-6 pt-8 sm:px-5 sm:pt-10">
+    <div className="flex min-h-0 flex-1 items-center justify-center px-5 pb-6 pt-10">
       <div className="stagger flex w-full max-w-[680px] flex-col items-center text-center">
         <span className="grid h-12 w-12 place-items-center rounded-xl bg-accent text-accent-ink shadow-accent">
           <Sparkles size={22} />
@@ -40,13 +40,20 @@ export default function WelcomeHero({
         </div>
 
         {/* ONE panel + hairline dividers instead of four floating cards */}
-        <div className="mt-8 w-full text-start sm:mt-10">
-          <ul className="grid gap-2.5 sm:grid-cols-2">
-            {QUICK_PROMPT_KEYS.map((key) => (
-              <li key={key}>
+        <div className="mt-10 w-full overflow-hidden rounded-lg border border-hair bg-surface text-start shadow-1">
+          <ul className="grid sm:grid-cols-2">
+            {QUICK_PROMPT_KEYS.map((key, i) => (
+              <li
+                key={key}
+                className={
+                  "border-b border-hair last:border-b-0 " +
+                  (i % 2 === 0 ? "sm:border-e sm:border-b-0" : "") +
+                  (i >= 2 ? "sm:border-b-0" : "")
+                }
+              >
                 <button
                   onClick={() => onPromptSelected(t(key))}
-                  className="group flex h-full w-full items-center gap-3 rounded-lg border border-hair bg-surface px-4 py-3.5 text-start shadow-1 transition-[background-color,border-color] duration-1 hover:border-hair-2 hover:bg-surface-3"
+                  className="group flex w-full items-center gap-3 px-4 py-3.5 text-start transition-colors duration-1 hover:bg-surface-3"
                 >
                   <span className="min-w-0 flex-1 text-pretty text-[13.5px] leading-6 text-ink-2 transition-colors duration-1 group-hover:text-ink">
                     {t(key)}

@@ -83,16 +83,16 @@ export default function ProjectFilesCard({
         )}
       </div>
 
-      <ul className="space-y-0.5 p-1.5">
+      <ul>
         {files.map((f) => (
           <li
             key={f.path}
-            className="group flex items-center rounded-md transition-colors duration-1 hover:bg-surface-3"
+            className="group flex items-center border-b border-hair last:border-b-0"
           >
             <button
               onClick={() => onOpen(files, f.path)}
               dir="ltr"
-              className="flex min-w-0 flex-1 items-center gap-3 rounded-md px-2.5 py-2.5 text-start"
+              className="flex min-w-0 flex-1 items-center gap-3 px-3.5 py-2.5 text-start transition-colors duration-1 hover:bg-surface-3"
             >
               <span className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-ink-2 group-hover:text-ink">
                 {f.path}
@@ -111,7 +111,7 @@ export default function ProjectFilesCard({
               }
               title={t("downloadFile")}
               aria-label={`${t("downloadFile")}: ${f.path}`}
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-md text-ink-3 transition-colors duration-1 hover:text-accent"
+              className="grid h-10 w-10 shrink-0 place-items-center border-s border-hair text-ink-3 transition-colors duration-1 hover:bg-surface-3 hover:text-accent"
             >
               <Download size={13} />
             </button>
