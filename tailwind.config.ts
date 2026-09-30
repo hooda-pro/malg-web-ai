@@ -6,6 +6,8 @@ import type { Config } from "tailwindcss";
  * and dark share one single source of truth (no `dark:` variant soup).
  */
 const config: Config = {
+  // الـ hover بيشتغل بس على الأجهزة اللي فيها ماوس — على التلفون كان بيفضل "لازق" بعد اللمس
+  future: { hoverOnlyWhenSupported: true },
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
   theme: {
     extend: {
