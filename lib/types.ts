@@ -16,6 +16,8 @@ export interface ChatSession {
   /** لو الموديل قفل المحادثة (بعد تحذير واستمرار السلوك) — الشات بيبقى للقراءة بس ومفيش خانة كتابة */
   endedAt?: string | null;
   endedReason?: string | null;
+  /** 'abuse' = الموديل قفلها بعد تحذير، 'user' = المستخدم طلب القفل وأكّد */
+  endedBy?: "abuse" | "user" | null;
 }
 
 export interface ChatMessage {

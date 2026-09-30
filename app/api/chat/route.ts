@@ -38,7 +38,9 @@ import {
   runProjectTool,
 } from "@/lib/agentTools";
 import {
+  ASK_CLOSE_CONFIRMATION_TOOL,
   DEFAULT_END_MESSAGE,
+  DEFAULT_END_MESSAGE_USER,
   END_CONVERSATION_TOOL,
   MIN_WARNINGS_BEFORE_END,
   WARN_USER_TOOL,
@@ -104,8 +106,8 @@ export async function POST(req: NextRequest) {
   }
 
   const sessionRows = (await sql`
-    SELECT id, ended_at, abuse_warnings FROM chat_sessions WHERE id = ${sessionId} AND user_id = ${user.id}
-  `) as { id: string; ended_at: string | null; abuse_warnings: number | null }[];
+    SELECT id, ended_at, abuse_warnings, close_pending FROM chat_sessions WHERE id = ${sessionId} AND user_id = ${user.id}
+  `) as { id: string; ended_at: string | null; abuse_warnings: number | null; close_pending: boolean | null }[];
   if (sessionRows.length === 0) {
     return NextResponse.json({ error: "المحادثة غير موجودة" }, { status: 404 });
   }
@@ -119,6 +121,8 @@ export async function POST(req: NextRequest) {
   }
   // عدد التحذيرات اللي اتسجّلت في ردود سابقة (مش الرد الحالي) — ده اللي بيحدد هل القفل مسموح.
   const warningsAtStart = Number(sessionRows[0].abuse_warnings ?? 0);
+  // الموديل سأل المستخدم في ردّه السابق عن تأكيد قفل الشات؟ (صالح للرسالة دي بس — بنصفّره بعد ما الاتصال بالموديل ينجح)
+  const closePendingAtStart = !!sessionRows[0].close_pending;
 
   const quotaCheck = await checkAndMaybeRenewQuota(user.id, user.isAdmin);
   if (quotaCheck.blocked) {
@@ -194,6 +198,7 @@ export async function POST(req: NextRequest) {
       sandboxMemoryMb: getSandboxMemoryMb(),
       conversationEndAvailable: true,
       warningsIssued: warningsAtStart,
+      closeConfirmationPending: closePendingAtStart,
     }) +
     (personalization ? `\n\n${personalization}` : "") +
     (deepSearch.performed && deepSearch.contextBlock ? `\n\n${deepSearch.contextBlock}` : "");
@@ -243,6 +248,7 @@ export async function POST(req: NextRequest) {
     ...(initialProjectFiles.length > 0 ? [LIST_FILES_TOOL, READ_FILE_TOOL] : []),
     ...(SANDBOX_ON ? [RUN_COMMAND_TOOL] : []),
     // أدوات الإشراف: تحذير محترم أولًا، وبعدين إنهاء المحادثة لو السلوك استمر
+    ASK_CLOSE_CONFIRMATION_TOOL,
     WARN_USER_TOOL,
     END_CONVERSATION_TOOL,
   ];
@@ -258,6 +264,15 @@ export async function POST(req: NextRequest) {
 
   if (!negotiated.ok) {
     return NextResponse.json({ error: negotiated.errorMessage }, { status: 502 });
+  }
+
+  // التأكيد المعلّق (لو كان موجود) اتستهلك برسالة المستخدم دي — بنصفّره هنا، ولو الموديل سأل تاني في الرد ده هيتسجّل من جديد في الآخر.
+  if (closePendingAtStart) {
+    try {
+      await sql`UPDATE chat_sessions SET close_pending = FALSE WHERE id = ${sessionId} AND user_id = ${user.id}`;
+    } catch (e) {
+      console.error("failed to clear close_pending", e);
+    }
   }
 
   const upstreamResponse = negotiated.response;
@@ -350,6 +365,8 @@ export async function POST(req: NextRequest) {
       let warnedThisTurn = false;
       let endRequested = false;
       let endReason = "";
+      let endInitiator: "abuse" | "user_request" = "abuse";
+      let askedCloseThisTurn = false; // الموديل طلب من المستخدم تأكيد القفل في الرد ده
       let extraTokens = 0; // توكنز ناتجة من جولات الأدوات (رد الموديل + مخرجات الأدوات)
       let round = 0;
       const session = SANDBOX_ON ? new SandboxSession() : null;
@@ -416,10 +433,31 @@ export async function POST(req: NextRequest) {
               loopMessages.push({ role: "tool", tool_call_id: call.id, name: callName, content });
             };
 
-            // --- warn_user / end_conversation (إشراف على السلوك) ---
+            // --- ask_close_confirmation / warn_user / end_conversation (إنهاء المحادثة) ---
             if (isModerationTool(callName)) {
               const reason = cleanReason(args.reason);
-              if (callName === "warn_user") {
+              const askConfirmation = (error?: string) => {
+                askedCloseThisTurn = true;
+                pushToolMessage(
+                  error
+                    ? { ok: false, error }
+                    : {
+                        ok: true,
+                        note:
+                          "اتسجّل إنك بتطلب تأكيد. اكتب دلوقتي رسالة التأكيد: لو قفلت المحادثة مش هنقدر نتكلم هنا تاني، " +
+                          "الخانة هتختفي، ولازم يعمل محادثة جديدة (الرسايل القديمة هتفضل مقروءة). واسأله بوضوح إذا كان متأكد، واستنى ردّه. " +
+                          "ما تقفلش دلوقتي.",
+                      }
+                );
+              };
+
+              if (callName === "ask_close_confirmation") {
+                if (endRequested) {
+                  pushToolMessage({ ok: true, note: "المحادثة هتتقفل بالفعل — اكتب رسالة الوداع القصيرة بس." });
+                } else {
+                  askConfirmation();
+                }
+              } else if (callName === "warn_user") {
                 warnedThisTurn = true;
                 pushToolMessage({
                   ok: true,
@@ -429,8 +467,25 @@ export async function POST(req: NextRequest) {
                 });
               } else if (endRequested) {
                 pushToolMessage({ ok: true, note: "المحادثة هتتقفل بالفعل — اكتب رسالة الوداع القصيرة بس." });
+              } else if (args.initiator === "user_request") {
+                if (closePendingAtStart) {
+                  endRequested = true;
+                  endInitiator = "user_request";
+                  endReason = reason || "المستخدم طلب إنهاء المحادثة وأكّد";
+                  pushToolMessage({
+                    ok: true,
+                    note:
+                      "المحادثة هتتقفل بعد ردك ده. اكتب وداع قصير ودافي (سطر أو سطرين) من غير ما تفتح موضوع جديد ولا تستدعي أدوات تانية.",
+                  });
+                } else {
+                  // مفيش طلب تأكيد سابق: القفل مرفوض، ونسجّل طلب التأكيد دلوقتي.
+                  askConfirmation(
+                    "مرفوض: لازم تاخد تأكيد صريح من المستخدم الأول في رد سابق. اكتب دلوقتي رسالة التأكيد (القفل نهائي ومش هيقدر يكتب هنا تاني " +
+                      "ولازم يعمل محادثة جديدة) واسأله إذا كان متأكد، واستنى ردّه."
+                  );
+                }
               } else if (warningsAtStart < MIN_WARNINGS_BEFORE_END) {
-                // مفيش تحذير سابق: القفل مرفوض، والتحذير بيتسجّل دلوقتي عشان المرة الجاية تبقى مسموحة.
+                // (initiator=abuse) مفيش تحذير سابق: القفل مرفوض، والتحذير بيتسجّل دلوقتي عشان المرة الجاية تبقى مسموحة.
                 warnedThisTurn = true;
                 pushToolMessage({
                   ok: false,
@@ -440,6 +495,7 @@ export async function POST(req: NextRequest) {
                 });
               } else {
                 endRequested = true;
+                endInitiator = "abuse";
                 endReason = reason || "استمرار سلوك مسيء بعد التحذير";
                 pushToolMessage({
                   ok: true,
@@ -621,8 +677,9 @@ export async function POST(req: NextRequest) {
       // رسالة كذب زي "تمت المعالجة بنجاح"، نبعت للمستخدم رسالة صادقة توضح إن
       // في مشكلة مؤقتة في المزوّد، ومنخصمش عليه توكنز على رد ماتكتبش أصلاً.
       if (endRequested && !finalContent) {
-        emit("content", DEFAULT_END_MESSAGE);
-        finalContent = DEFAULT_END_MESSAGE;
+        const msg = endInitiator === "user_request" ? DEFAULT_END_MESSAGE_USER : DEFAULT_END_MESSAGE;
+        emit("content", msg);
+        finalContent = msg;
       }
 
       if (!finalContent && !result.stoppedByUser) {
@@ -693,33 +750,36 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // حالة الإشراف: عداد التحذيرات، وقفل المحادثة لو الموديل أنهاها (والسيرفر وافق).
+      // حالة الإنهاء: عداد التحذيرات، وطلب التأكيد المعلّق، وقفل المحادثة لو الموديل أنهاها (والسيرفر وافق).
       // بنحفظها بعد رسالة المساعد وقبل ما نبلّغ العميل، عشان أي إعادة تحميل تلاقي الحالة جاهزة.
       let sessionEnded = false;
-      if (warnedThisTurn || endRequested) {
+      const endedBy = endInitiator === "user_request" ? "user" : "abuse";
+      if (warnedThisTurn || endRequested || askedCloseThisTurn) {
         try {
           if (endRequested) {
             await sql`
               UPDATE chat_sessions
-              SET ended_at = now(), ended_reason = ${endReason},
+              SET ended_at = now(), ended_reason = ${endReason}, ended_by = ${endedBy}, close_pending = FALSE,
                   abuse_warnings = abuse_warnings + ${warnedThisTurn ? 1 : 0}, updated_at = now()
               WHERE id = ${sessionId} AND user_id = ${user.id}
             `;
             sessionEnded = true;
           } else {
             await sql`
-              UPDATE chat_sessions SET abuse_warnings = abuse_warnings + 1, updated_at = now()
+              UPDATE chat_sessions
+              SET abuse_warnings = abuse_warnings + ${warnedThisTurn ? 1 : 0},
+                  close_pending = ${askedCloseThisTurn}, updated_at = now()
               WHERE id = ${sessionId} AND user_id = ${user.id}
             `;
           }
         } catch (e) {
-          console.error("failed to persist moderation state", e);
+          console.error("failed to persist end-conversation state", e);
         }
       }
       if (sessionEnded) {
         try {
           streamController.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ session_ended: { reason: endReason } })}\n\n`)
+            encoder.encode(`data: ${JSON.stringify({ session_ended: { reason: endReason, by: endedBy } })}\n\n`)
           );
         } catch {
           // العميل قطع الاتصال — هيلاقي الحالة من قايمة الجلسات

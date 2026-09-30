@@ -7,7 +7,13 @@ import { useSettings } from "./SettingsContext";
  * بديل خانة الكتابة لما الموديل يقفل المحادثة (زي Claude): الخانة بتختفي خالص
  * وبيظهر إشعار هادي + زرار يبدأ محادثة جديدة. الرسايل القديمة تفضل مقروءة.
  */
-export default function ChatEndedNotice({ onNewChat }: { onNewChat: () => void }) {
+export default function ChatEndedNotice({
+  endedBy,
+  onNewChat,
+}: {
+  endedBy?: "abuse" | "user" | null;
+  onNewChat: () => void;
+}) {
   const { t } = useSettings();
   return (
     <div className="relative shrink-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-6">
@@ -17,7 +23,7 @@ export default function ChatEndedNotice({ onNewChat }: { onNewChat: () => void }
       >
         <div className="min-w-0 flex-1">
           <p className="text-[14px] font-semibold text-ink">{t("chatEndedTitle")}</p>
-          <p className="mt-1 text-[12.5px] leading-6 text-ink-3">{t("chatEndedBody")}</p>
+          <p className="mt-1 text-[12.5px] leading-6 text-ink-3">{t(endedBy === "user" ? "chatEndedBodyUser" : "chatEndedBody")}</p>
         </div>
         <button
           onClick={onNewChat}

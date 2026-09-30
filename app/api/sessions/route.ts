@@ -12,6 +12,7 @@ function mapSession(row: any): ChatSession {
     updatedAt: row.updated_at,
     endedAt: row.ended_at ?? null,
     endedReason: row.ended_reason ?? null,
+    endedBy: row.ended_by ?? null,
   };
 }
 
@@ -21,7 +22,7 @@ export async function GET() {
 
   await ensureSchema();
   const rows = await sql`
-    SELECT id, title, created_at, updated_at, ended_at, ended_reason FROM chat_sessions
+    SELECT id, title, created_at, updated_at, ended_at, ended_reason, ended_by FROM chat_sessions
     WHERE user_id = ${user.id} ORDER BY updated_at DESC
   `;
   return NextResponse.json({ sessions: rows.map(mapSession) });
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
   const rows = await sql`
     INSERT INTO chat_sessions (id, user_id, title)
     VALUES (${id}, ${user.id}, ${title})
-    RETURNING id, title, created_at, updated_at, ended_at, ended_reason
+    RETURNING id, title, created_at, updated_at, ended_at, ended_reason, ended_by
   `;
   return NextResponse.json({ session: mapSession(rows[0]) });
 }

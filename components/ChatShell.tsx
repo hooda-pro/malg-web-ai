@@ -299,10 +299,17 @@ export default function ChatShell() {
   }, []);
 
   /** الشات اتقفل (من رد الموديل أو من رفض السيرفر) — نعلّمه فورًا من غير ما نستنى refresh. */
-  const markSessionEnded = useCallback((sessionId: string, reason?: string | null) => {
+  const markSessionEnded = useCallback((sessionId: string, reason?: string | null, by?: "abuse" | "user" | null) => {
     setSessions((prev) =>
       prev.map((s) =>
-        s.id === sessionId ? { ...s, endedAt: s.endedAt ?? new Date().toISOString(), endedReason: reason ?? s.endedReason ?? null } : s
+        s.id === sessionId
+          ? {
+              ...s,
+              endedAt: s.endedAt ?? new Date().toISOString(),
+              endedReason: reason ?? s.endedReason ?? null,
+              endedBy: by ?? s.endedBy ?? null,
+            }
+          : s
       )
     );
   }, []);
@@ -634,7 +641,7 @@ export default function ChatShell() {
               accAgentEvents = [...accAgentEvents, event];
               setStreamingAgentEvents(accAgentEvents);
             },
-            onSessionEnded: (info) => markSessionEnded(sessionId, info.reason),
+            onSessionEnded: (info) => markSessionEnded(sessionId, info.reason, info.by),
           });
         }
       } catch (e: any) {
@@ -872,7 +879,8 @@ export default function ChatShell() {
     [isGenerating, streamSessionId, currentSessionId, liveKey, streamingContent, streamingReasoning, streamingAgentEvents]
   );
   // الشات الحالي اتقفل؟ (الموديل أنهاه بعد تحذير) → خانة الكتابة بتختفي
-  const currentSessionEnded = !!sessions.find((s) => s.id === currentSessionId)?.endedAt;
+  const currentSession = sessions.find((s) => s.id === currentSessionId);
+  const currentSessionEnded = !!currentSession?.endedAt;
 
   // لحد ما نعرف الحساب والشات والرسايل: هيكل تحميل بدل شاشة الترحيب أو رسايل شات قديم
   const messagesLoading =
@@ -932,7 +940,7 @@ export default function ChatShell() {
         />
 
         {currentSessionEnded && !isGenerating ? (
-          <ChatEndedNotice onNewChat={handleNewChat} />
+          <ChatEndedNotice endedBy={currentSession?.endedBy ?? null} onNewChat={handleNewChat} />
         ) : (
           <BottomInputBar
             isGenerating={isGenerating}

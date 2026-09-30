@@ -7,7 +7,7 @@ export async function consumeSSEStream(
     onReasoning?: (text: string) => void;
     onAgentEvent?: (event: AgentEvent) => void;
     /** السيرفر قفل المحادثة (الموديل أنهاها بعد تحذير) */
-    onSessionEnded?: (info: { reason?: string }) => void;
+    onSessionEnded?: (info: { reason?: string; by?: "abuse" | "user" }) => void;
   }
 ) {
   const decoder = new TextDecoder();
@@ -30,7 +30,7 @@ export async function consumeSSEStream(
           continue;
         }
         if (json?.session_ended) {
-          handlers.onSessionEnded?.(json.session_ended as { reason?: string });
+          handlers.onSessionEnded?.(json.session_ended as { reason?: string; by?: "abuse" | "user" });
           continue;
         }
         const delta = json?.choices?.[0]?.delta;

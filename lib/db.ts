@@ -116,6 +116,10 @@ export function ensureSchema(): Promise<void> {
       await sql`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS abuse_warnings INTEGER NOT NULL DEFAULT 0`;
       await sql`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ`;
       await sql`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS ended_reason TEXT`;
+      // مين قفل: 'abuse' (سلوك مسيء بعد تحذير) أو 'user' (المستخدم طلب وأكّد)
+      await sql`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS ended_by TEXT`;
+      // الموديل سأل المستخدم عن تأكيد قفل الشات في رده الأخير وبيستنى الإجابة (صالح لرسالة واحدة)
+      await sql`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS close_pending BOOLEAN NOT NULL DEFAULT FALSE`;
 
       await sql`
         CREATE TABLE IF NOT EXISTS chat_messages (
