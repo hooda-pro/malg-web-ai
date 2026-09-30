@@ -231,9 +231,10 @@ export default function BottomInputBar({
             <Paperclip size={16} />
           </button>
 
-          <p className="min-w-0 flex-1 truncate px-1.5 text-[11.5px] text-ink-3">
+          <p className="hidden min-w-0 flex-1 truncate px-1.5 text-[11.5px] text-ink-3 sm:block">
             {enterToSend ? t("composerHint") : t("enterToSendHint")}
           </p>
+          <span className="flex-1 sm:hidden" aria-hidden="true" />
 
           {isGenerating ? (
             <button

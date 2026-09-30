@@ -150,10 +150,37 @@
     color: var(--ink);
   }
 
+  /* مهم: ما بنغيّرش border-radius هنا — كان بيحوّل أي عنصر مدوّر لمربع تقريبًا أول ما ياخد فوكس */
   :focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
-    border-radius: 8px;
+  }
+
+  /* خانات الكتابة: من غير إطار الفوكس الافتراضي (الإطار الأبيض/الأزرق السميك).
+     التمييز بيتعمل بـ border + ظل ناعم على الخانة نفسها أو على الحاوية بتاعتها. */
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: none;
+  }
+
+  /* الملء التلقائي في كروم/سفاري كان بيرسم خلفية بيضا/زرقا حوالين الخانة */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill {
+    -webkit-text-fill-color: var(--ink);
+    caret-color: var(--ink);
+    -webkit-box-shadow: 0 0 0 1000px var(--surface-2) inset;
+    box-shadow: 0 0 0 1000px var(--surface-2) inset;
+    transition: background-color 9999s ease-out 0s;
+  }
+
+  /* حقل البحث: بدون زر X الافتراضي بتاع المتصفح */
+  input[type="search"]::-webkit-search-cancel-button,
+  input[type="search"]::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
   }
 
   button,
