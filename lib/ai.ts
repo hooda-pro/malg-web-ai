@@ -69,6 +69,8 @@ export interface UpstreamStreamResult {
   reasoning: string;
   finishReason: string | null;
   stoppedByUser: boolean;
+  /** السيرفر وقف القراءة لأن رصيد المستخدم خلص في نص الرد (shouldStop رجّعت true) */
+  stoppedByLimit?: boolean;
   /** موجودة بس لو الموديل طلب استدعاء أداة (function calling) — اختيارية عشان
    * الاستدعاءات القديمة (retry-merge جوه /api/chat و /api/chat/continue) تفضل
    * صحيحة من غير ما تحتاج تتعدل، لأنها أصلاً مش بتستخدم الحقل ده. */
@@ -92,7 +94,9 @@ export interface UpstreamStreamResult {
 export async function readUpstreamStream(
   response: Response,
   signal: AbortSignal,
-  onDelta: (kind: "content" | "reasoning", text: string) => void
+  onDelta: (kind: "content" | "reasoning", text: string) => void,
+  /** بتتنادى بعد كل جزء: لو رجّعت true بنقفل الاتصال بالموديل فورًا (نفاد رصيد المستخدم في نص الرد). */
+  shouldStop?: () => boolean
 ): Promise<UpstreamStreamResult> {
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
@@ -102,6 +106,7 @@ export async function readUpstreamStream(
   let reasoning = "";
   let finishReason: string | null = null;
   let stoppedByUser = false;
+  let stoppedByLimit = false;
   const toolCallsAcc: { id: string; name: string; arguments: string }[] = [];
 
   const onAbort = () => {
@@ -115,6 +120,7 @@ export async function readUpstreamStream(
   signal.addEventListener("abort", onAbort);
 
   const processLine = (rawLine: string) => {
+    if (stoppedByLimit) return;
     const line = rawLine.trim();
     if (!line || line.startsWith(":") || !line.startsWith("data:")) return;
     const data = line.slice(5).trim();
@@ -131,6 +137,15 @@ export async function readUpstreamStream(
       if (delta?.content) {
         content += delta.content;
         onDelta("content", delta.content);
+      }
+      if (shouldStop && shouldStop()) {
+        stoppedByLimit = true;
+        try {
+          reader.cancel();
+        } catch {
+          // تجاهل
+        }
+        return;
       }
       if (Array.isArray(delta?.tool_calls)) {
         for (const tc of delta.tool_calls) {
@@ -154,6 +169,7 @@ export async function readUpstreamStream(
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
       for (const line of lines) processLine(line);
+      if (stoppedByLimit) break;
     }
   } catch {
     // انقطاع أثناء القراءة (إيقاف المستخدم أو خطأ اتصال مؤقت)
@@ -169,7 +185,15 @@ export async function readUpstreamStream(
     )
     .filter((tc): tc is UpstreamToolCall => tc !== null);
 
-  return { content, reasoning, finishReason, stoppedByUser, toolCalls };
+  // لو اتقطع بسبب الرصيد، أي استدعاء أداة ناقص نتجاهله (مش هننفذه)
+  return {
+    content,
+    reasoning,
+    finishReason,
+    stoppedByUser,
+    stoppedByLimit,
+    toolCalls: stoppedByLimit ? [] : toolCalls,
+  };
 }
 
 /** رسالة صادقة تتكتب للمستخدم لو الموديل رجّع استجابة فاضية بعد كل المحاولات

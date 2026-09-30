@@ -63,6 +63,10 @@ const SANDBOX_ON = isSandboxConfigured();
 // الرد يفصل في النص (قراءة ملفين + أمر = خلصت الجولات). لو الجولات خلصت،
 // بنعمل نداء أخير من غير أدوات عشان الموديل يكتب خلاصة (شوف تحت).
 const MAX_TOOL_ROUNDS = 8;
+
+/** بتتضاف لآخر الرد لو رصيد التوكنز خلص وانت لسه بتكتب. */
+const QUOTA_CUTOFF_NOTE =
+  "\n\n⚠️ رصيد التوكنز بتاعك خلص فوقفت الرد هنا. اشحن رصيدك أو استنى التجديد التلقائي، وبعدها ابعت «كمّل» وأكمل من نفس النقطة.";
 // أقصى عدد استدعاءات أدوات في الجولة الواحدة.
 const MAX_CALLS_PER_ROUND = 6;
 // تقدير ثابت لتكلفة الصورة الواحدة في الحسبة (بدل ما نعد بايتات Base64).
@@ -126,8 +130,10 @@ export async function POST(req: NextRequest) {
 
   const quotaCheck = await checkAndMaybeRenewQuota(user.id, user.isAdmin);
   if (quotaCheck.blocked) {
-    return NextResponse.json({ error: quotaCheck.message }, { status: 403 });
+    return NextResponse.json({ error: quotaCheck.message, quotaExhausted: true }, { status: 403 });
   }
+  // التوكنز المتبقية للمستخدم قبل الرد ده (null = أدمن، مفيش حد) — بنقطع الرد في نصه لو خلصت.
+  const quotaRemaining = quotaCheck.remaining;
 
   // 1) احفظ رسالة المستخدم
   // ملحوظة: Postgres بيرفض تخزين أي نص فيه بايت NUL (\u0000) في عمود text —
@@ -283,11 +289,21 @@ export async function POST(req: NextRequest) {
       const encoder = new TextEncoder();
       let contentStartTime: number | null = null;
 
+      // عدّاد لحظي لاستهلاك الرد ده: لو الرصيد خلص وانت لسه بتكتب، بنوقف الموديل فورًا.
+      // (نفس تقدير estimateTokens: حرف/3، + برومبت المستخدم + مخرجات الأدوات)
+      let emittedChars = 0;
+      let toolTokens = 0;
+      let quotaCutOff = false;
+      const overBudget = () =>
+        quotaRemaining !== null &&
+        promptTokens + Math.floor(emittedChars / 3) + toolTokens >= quotaRemaining;
+
       // بنبعت للعميل نسخة موحّدة من الـ delta (بدل الـ passthrough الخام)
       // عشان نقدر نتحكم في التوقيت ونعمل إعادة محاولة شفافة لو الاستجابة رجعت فاضية،
       // من غير ما نغيّر أي حاجة في شكل البيانات اللي lib/streamClient.ts بيستهلكها.
       const emit = (kind: "content" | "reasoning", text: string) => {
         if (kind === "content" && contentStartTime === null) contentStartTime = Date.now();
+        emittedChars += text.length;
         const payload =
           kind === "content"
             ? { choices: [{ delta: { content: text } }] }
@@ -321,7 +337,8 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      let result = await readUpstreamStream(upstreamResponse, req.signal, emit);
+      let result = await readUpstreamStream(upstreamResponse, req.signal, emit, overBudget);
+      if (result.stoppedByLimit) quotaCutOff = true;
 
       // *** الإصلاح الأساسي ***
       // لو الاستجابة رجعت فاضية تمامًا (من غير محتوى ولا طلب أداة) ومكانش
@@ -397,10 +414,17 @@ export async function POST(req: NextRequest) {
         while (
           HAS_TOOLS &&
           !result.stoppedByUser &&
+          !quotaCutOff &&
           result.toolCalls &&
           result.toolCalls.length > 0 &&
           round < MAX_TOOL_ROUNDS
         ) {
+          // الرصيد خلص (بسبب مخرجات الأدوات مثلًا) → مفيش جولة جديدة
+          if (overBudget()) {
+            quotaCutOff = true;
+            result = { ...result, toolCalls: [] };
+            break;
+          }
           round += 1;
           const toolCalls: UpstreamToolCall[] = result.toolCalls.slice(0, MAX_CALLS_PER_ROUND);
 
@@ -430,6 +454,7 @@ export async function POST(req: NextRequest) {
             const pushToolMessage = (payload: Record<string, unknown>) => {
               const content = JSON.stringify(payload);
               extraTokens += Math.floor(content.length / 3);
+              toolTokens += Math.floor(content.length / 3);
               loopMessages.push({ role: "tool", tool_call_id: call.id, name: callName, content });
             };
 
@@ -630,7 +655,8 @@ export async function POST(req: NextRequest) {
             break;
           }
 
-          result = await readUpstreamStream(nextNegotiated.response, req.signal, emit);
+          result = await readUpstreamStream(nextNegotiated.response, req.signal, emit, overBudget);
+          if (result.stoppedByLimit) quotaCutOff = true;
           contentParts.push(result.content);
           if (result.reasoning) reasoningParts.push(result.reasoning);
           extraTokens += estimateTokens(result.content, result.reasoning);
@@ -641,6 +667,7 @@ export async function POST(req: NextRequest) {
         if (
           HAS_TOOLS &&
           !result.stoppedByUser &&
+          !quotaCutOff &&
           result.toolCalls &&
           result.toolCalls.length > 0 &&
           round >= MAX_TOOL_ROUNDS
@@ -654,7 +681,8 @@ export async function POST(req: NextRequest) {
           });
           const finalNegotiated = await callUpstreamAfterTools(loopMessages, false);
           if (finalNegotiated?.ok) {
-            result = await readUpstreamStream(finalNegotiated.response, req.signal, emit);
+            result = await readUpstreamStream(finalNegotiated.response, req.signal, emit, overBudget);
+            if (result.stoppedByLimit) quotaCutOff = true;
             contentParts.push(result.content);
             if (result.reasoning) reasoningParts.push(result.reasoning);
             extraTokens += estimateTokens(result.content, result.reasoning);
@@ -667,6 +695,12 @@ export async function POST(req: NextRequest) {
       } finally {
         // الـ sandbox بيتقفل مهما حصل (نجاح/فشل/إيقاف من المستخدم/exception).
         await session?.close();
+      }
+
+      if (quotaCutOff) {
+        const note = QUOTA_CUTOFF_NOTE;
+        emit("content", note);
+        contentParts.push(note);
       }
 
       let finalContent = contentParts.join("\n\n").trim();
@@ -740,11 +774,11 @@ export async function POST(req: NextRequest) {
               ${assistantId}, ${sessionId}, 'assistant',
               ${sanitizeForDb(storedAssistantContent)},
               ${finalReasoning}, ${thinkingDurationMs},
-              ${!usedFallback && !result.stoppedByUser && result.finishReason === "length"},
+              ${!usedFallback && !result.stoppedByUser && (result.finishReason === "length" || quotaCutOff)},
               ${totalTokens}
             )
           `;
-          if (totalTokens > 0) await deductTokens(user.id, totalTokens);
+          if (totalTokens > 0) await deductTokens(user.id, totalTokens, user.isAdmin);
         } catch (e) {
           console.error("failed to persist assistant message", e);
         }
@@ -774,6 +808,13 @@ export async function POST(req: NextRequest) {
           }
         } catch (e) {
           console.error("failed to persist end-conversation state", e);
+        }
+      }
+      if (quotaCutOff) {
+        try {
+          streamController.enqueue(encoder.encode(`data: ${JSON.stringify({ quota_exhausted: true })}\n\n`));
+        } catch {
+          // العميل قطع الاتصال — هيلاقي الحالة من /api/quota
         }
       }
       if (sessionEnded) {

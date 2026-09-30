@@ -11,6 +11,7 @@ import ChatDrawer from "./ChatDrawer";
 import MessageList, { type LiveReplyState } from "./MessageList";
 import BottomInputBar, { type ComposerAttachment } from "./BottomInputBar";
 import ChatEndedNotice from "./ChatEndedNotice";
+import QuotaExhaustedNotice from "./QuotaExhaustedNotice";
 import AuthModal from "./AuthModal";
 import RechargeModal from "./RechargeModal";
 import ArtifactPanel from "./ArtifactPanel";
@@ -104,6 +105,8 @@ export default function ChatShell() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [quota, setQuota] = useState<{ total: number; used: number } | null>(null);
+  /** إمتى الرصيد هيتجدد تلقائيًا (لو خلص) — جاي من /api/quota */
+  const [quotaRenewsAt, setQuotaRenewsAt] = useState<string | null>(null);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -241,13 +244,31 @@ export default function ChatShell() {
       const data = await res.json();
       if (data.quota) {
         setQuota({ total: data.quota.totalAllocatedTokens, used: data.quota.usedTokens });
+        setQuotaRenewsAt(data.quota.renewsAt ?? null);
       } else {
         setQuota(null);
+        setQuotaRenewsAt(null);
       }
     } catch {
       // تجاهل
     }
   }, []);
+
+  // الرصيد خلص؟ (الأدمن مالوش حد) → خانة الكتابة بتختفي ويظهر إشعار الشحن، والشات بيتفتح لما يبقى فيه توكنز.
+  const quotaExhausted = !user?.isAdmin && !!quota && quota.total - quota.used <= 0;
+
+  // وهو مقفول: بنسأل السيرفر كل شوية (بيجدد تلقائيًا بعد شهر، والدعم ممكن يشحن) وأول ما نرجع للتاب
+  // — فالخانة ترجع لوحدها من غير ريفريش.
+  useEffect(() => {
+    if (!quotaExhausted) return;
+    const id = setInterval(() => void refreshQuota(), 30_000);
+    const onFocus = () => void refreshQuota();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [quotaExhausted, refreshQuota]);
 
   const markLoaded = useCallback((id: string | null) => {
     loadedForRef.current = id;
@@ -624,6 +645,7 @@ export default function ChatShell() {
             showToast(t("toastChatEnded"));
           } else {
             showToast(data.error || t("toastSendFail"));
+            if (data.quotaExhausted) void refreshQuota();
           }
         } else {
           accepted = true;
@@ -641,6 +663,7 @@ export default function ChatShell() {
               accAgentEvents = [...accAgentEvents, event];
               setStreamingAgentEvents(accAgentEvents);
             },
+            onQuotaExhausted: () => void refreshQuota(),
             onSessionEnded: (info) => markSessionEnded(sessionId, info.reason, info.by),
           });
         }
@@ -761,6 +784,7 @@ export default function ChatShell() {
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
           if (data.sessionEnded) markSessionEnded(sessionId);
+          if (data.quotaExhausted) void refreshQuota();
           showToast(data.error || t("toastContinueFail"));
         } else {
           const reader = res.body!.getReader();
@@ -769,6 +793,7 @@ export default function ChatShell() {
               accContent += chunk;
               batch.push(chunk);
             },
+            onQuotaExhausted: () => void refreshQuota(),
           });
         }
       } catch (e: any) {
@@ -941,6 +966,8 @@ export default function ChatShell() {
 
         {currentSessionEnded && !isGenerating ? (
           <ChatEndedNotice endedBy={currentSession?.endedBy ?? null} onNewChat={handleNewChat} />
+        ) : quotaExhausted && !isGenerating ? (
+          <QuotaExhaustedNotice renewsAt={quotaRenewsAt} onRecharge={openRecharge} />
         ) : (
           <BottomInputBar
             isGenerating={isGenerating}

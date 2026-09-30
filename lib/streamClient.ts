@@ -7,6 +7,8 @@ export async function consumeSSEStream(
     onReasoning?: (text: string) => void;
     onAgentEvent?: (event: AgentEvent) => void;
     /** السيرفر قفل المحادثة (الموديل أنهاها بعد تحذير) */
+    /** رصيد التوكنز خلص في نص الرد والسيرفر وقفه */
+    onQuotaExhausted?: () => void;
     onSessionEnded?: (info: { reason?: string; by?: "abuse" | "user" }) => void;
   }
 ) {
@@ -27,6 +29,10 @@ export async function consumeSSEStream(
         const json = JSON.parse(data);
         if (json?.agent_event) {
           handlers.onAgentEvent?.(json.agent_event as AgentEvent);
+          continue;
+        }
+        if (json?.quota_exhausted) {
+          handlers.onQuotaExhausted?.();
           continue;
         }
         if (json?.session_ended) {

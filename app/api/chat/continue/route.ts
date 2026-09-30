@@ -63,8 +63,9 @@ export async function POST(req: NextRequest) {
 
   const quotaCheck = await checkAndMaybeRenewQuota(user.id, user.isAdmin);
   if (quotaCheck.blocked) {
-    return NextResponse.json({ error: quotaCheck.message }, { status: 403 });
+    return NextResponse.json({ error: quotaCheck.message, quotaExhausted: true }, { status: 403 });
   }
+  const quotaRemaining = quotaCheck.remaining;
 
   const existingRows = (await sql`
     SELECT id, content, reasoning, tokens_used FROM chat_messages
@@ -143,7 +144,19 @@ export async function POST(req: NextRequest) {
         }
       };
 
-      let result = await readUpstreamStream(upstreamResponse, req.signal, emit);
+      // قطع الرد في نصه لو رصيد المستخدم خلص (نفس منطق /api/chat)
+      let emittedChars = 0;
+      const emitCounted: typeof emit = (kind, text) => {
+        emittedChars += text.length;
+        emit(kind, text);
+      };
+      const overBudget = () => quotaRemaining !== null && Math.floor(emittedChars / 3) + 10 >= quotaRemaining;
+
+      let result = await readUpstreamStream(upstreamResponse, req.signal, emitCounted, overBudget);
+      const quotaCutOff = !!result.stoppedByLimit;
+      if (quotaCutOff) {
+        emit("content", "\n\n⚠️ رصيد التوكنز بتاعك خلص فوقفت الرد هنا. اشحن رصيدك أو استنى التجديد التلقائي، وبعدها ابعت «كمّل» تاني.");
+      }
 
       // نفس إصلاح /api/chat: لو الموديل رجّع استجابة فاضية (مشكلة معروفة في
       // الموديلات المجانية زي malg-2.1)، نجرب مرة تانية تلقائيًا قبل ما نسيب
@@ -174,7 +187,10 @@ export async function POST(req: NextRequest) {
       }
 
       if (result.content.trim() || result.reasoning.trim() || usedFallback) {
-        const addedContent = usedFallback ? EMPTY_RESPONSE_FALLBACK_MESSAGE : result.content;
+        const cutNote = quotaCutOff
+          ? "\n\n⚠️ رصيد التوكنز بتاعك خلص فوقفت الرد هنا. اشحن رصيدك أو استنى التجديد التلقائي، وبعدها ابعت «كمّل» تاني."
+          : "";
+        const addedContent = (usedFallback ? EMPTY_RESPONSE_FALLBACK_MESSAGE : result.content) + cutNote;
         const mergedContent = existing.content + addedContent;
         const mergedReasoning = existing.reasoning
           ? result.reasoning
@@ -183,7 +199,7 @@ export async function POST(req: NextRequest) {
           : result.reasoning || null;
         const addedTokens = usedFallback ? 0 : estimateTokens(result.content, result.reasoning);
         const newTokensUsed = existing.tokens_used + addedTokens;
-        const isTruncated = !usedFallback && !result.stoppedByUser && result.finishReason === "length";
+        const isTruncated = !usedFallback && !result.stoppedByUser && (result.finishReason === "length" || quotaCutOff);
 
         try {
           await sql`
@@ -192,9 +208,17 @@ export async function POST(req: NextRequest) {
                 tokens_used = ${newTokensUsed}, is_truncated = ${isTruncated}
             WHERE id = ${messageId}
           `;
-          if (addedTokens > 0) await deductTokens(user.id, addedTokens);
+          if (addedTokens > 0) await deductTokens(user.id, addedTokens, user.isAdmin);
         } catch (e) {
           console.error("failed to persist continued message", e);
+        }
+      }
+
+      if (quotaCutOff) {
+        try {
+          streamController.enqueue(encoder.encode(`data: ${JSON.stringify({ quota_exhausted: true })}\n\n`));
+        } catch {
+          // تجاهل
         }
       }
 
