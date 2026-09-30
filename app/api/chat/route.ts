@@ -27,7 +27,8 @@ import {
   type AgentStep,
   type AgentStepDetail,
 } from "@/lib/agentEvents";
-import { getSandboxMemoryMb, isSandboxConfigured, SandboxSession } from "@/lib/sandbox";
+import { createHash } from "crypto";
+import { getSandboxMemoryMb, isSandboxConfigured, SESSION_BUDGET_MS, SandboxSession } from "@/lib/sandbox";
 import {
   LIST_FILES_TOOL,
   READ_FILE_TOOL,
@@ -74,10 +75,28 @@ const IMAGE_TOKEN_ESTIMATE = 800;
 // ميزانية الملفات الصغيرة اللي بتتحط inline في الرسايل الأقدم (الأحدث بياخد الميزانية الكاملة).
 const OLDER_INLINE_BUDGET_CHARS = 8_000;
 
+// --- الميزانية الزمنية للرد الواحد (maxDuration = 300 ثانية، والعدّ من لحظة وصول الطلب) ---
+// قبل كده مفيش أي حد زمني على مستوى الطلب كله: كل نداء موديل + كل أمر كانوا بيتجمعوا لحد ما المنصة
+// تقتل الدالة عند 300 ثانية، وبما إن الرد بيتحفظ في الآخر خالص، النتيجة كانت: الرد يقطع ومفيش
+// حاجة تتحفظ. دلوقتي:
+//  - بعد NO_NEW_ROUND_AFTER_MS منبدأش جولة أدوات جديدة، ونروح على نداء الخلاصة النهائي.
+//  - بعد HARD_STOP_MS بنقفل قراءة الموديل ونحفظ اللي وصل (ومعاه زرار «كمّل»).
+const NO_NEW_ROUND_AFTER_MS = SESSION_BUDGET_MS + 5_000;
+const HARD_STOP_MS = 275_000;
+// لو الأوامر فشلت كده ورا بعض، بنسحب أداة run_command ونطلب من الموديل يكتب الملفات ويلخّص بصراحة.
+const MAX_CONSECUTIVE_COMMAND_FAILURES = 3;
+// نبض كل 10 ثواني عشان أي بروكسي/شبكة موبايل ماتقفلش الاتصال أثناء أمر طويل (npm install...).
+const KEEPALIVE_INTERVAL_MS = 10_000;
+
+/** بتتضاف لآخر الرد لو وصلنا للحد الزمني وانت لسه بتكتب. */
+const TIME_CUTOFF_NOTE =
+  "\n\n⏱️ وصلت للحد الزمني للرد الواحد فوقفت هنا وحفظت اللي اتعمل. ابعت «كمّل» وأكمل من نفس النقطة.";
+
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
+  const requestStart = Date.now();
   const user = await getSessionUser();
   if (!user) {
     return NextResponse.json(
@@ -294,9 +313,18 @@ export async function POST(req: NextRequest) {
       let emittedChars = 0;
       let toolTokens = 0;
       let quotaCutOff = false;
+      let timeCutOff = false;
       const overBudget = () =>
         quotaRemaining !== null &&
         promptTokens + Math.floor(emittedChars / 3) + toolTokens >= quotaRemaining;
+      const overTime = () => Date.now() - requestStart > HARD_STOP_MS;
+      const pastRoundDeadline = () => Date.now() - requestStart > NO_NEW_ROUND_AFTER_MS;
+      // بنوقف قراءة الموديل لو الرصيد خلص أو الوقت خلص، وبنفرّق بينهم عشان الرسالة الصح تظهر.
+      const shouldStopNow = () => overBudget() || overTime();
+      const markLimitStop = () => {
+        if (overBudget()) quotaCutOff = true;
+        else timeCutOff = true;
+      };
 
       // بنبعت للعميل نسخة موحّدة من الـ delta (بدل الـ passthrough الخام)
       // عشان نقدر نتحكم في التوقيت ونعمل إعادة محاولة شفافة لو الاستجابة رجعت فاضية،
@@ -314,6 +342,14 @@ export async function POST(req: NextRequest) {
           // القناة مقفولة بالفعل — تجاهل
         }
       };
+
+      const keepAlive = setInterval(() => {
+        try {
+          streamController.enqueue(encoder.encode(": ping\n\n"));
+        } catch {
+          // القناة مقفولة — تجاهل
+        }
+      }, KEEPALIVE_INTERVAL_MS);
 
       // حدث Agent حقيقي واحد بس ممكن يتحدد فعليًا قبل ما نبدأ نبعت أي محتوى:
       // البحث العميق (لو حصل فعلاً) خلص شغله بالكامل قبل هذه اللحظة — فبنبعته
@@ -337,8 +373,8 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      let result = await readUpstreamStream(upstreamResponse, req.signal, emit, overBudget);
-      if (result.stoppedByLimit) quotaCutOff = true;
+      let result = await readUpstreamStream(upstreamResponse, req.signal, emit, shouldStopNow);
+      if (result.stoppedByLimit) markLimitStop();
 
       // *** الإصلاح الأساسي ***
       // لو الاستجابة رجعت فاضية تمامًا (من غير محتوى ولا طلب أداة) ومكانش
@@ -386,7 +422,23 @@ export async function POST(req: NextRequest) {
       let askedCloseThisTurn = false; // الموديل طلب من المستخدم تأكيد القفل في الرد ده
       let extraTokens = 0; // توكنز ناتجة من جولات الأدوات (رد الموديل + مخرجات الأدوات)
       let round = 0;
-      const session = SANDBOX_ON ? new SandboxSession() : null;
+      const session = SANDBOX_ON ? new SandboxSession(requestStart) : null;
+      // حماية من حلقة الأوامر الفاشلة: الموديل كان بيكرر نفس الأمر المكسور (أو أوامر مكسورة ورا بعض)
+      // لحد ما الجولات تخلص من غير ما يكتب ولا ملف. هنا بنمنع تكرار أمر فشل على نفس الملفات،
+      // وبنسحب الأدوات بعد كام فشل ورا بعض.
+      const failedCommands = new Set<string>();
+      let consecutiveCommandFailures = 0;
+      let toolsDisabled = false;
+      const filesSignature = (files: { path: string; content: string }[]) => {
+        const h = createHash("sha1");
+        for (const f of files) {
+          h.update(f.path);
+          h.update("\u0000");
+          h.update(f.content);
+          h.update("\u0000");
+        }
+        return h.digest("hex");
+      };
 
       const sendAgentEvent = (payload: Record<string, unknown>) => {
         try {
@@ -413,11 +465,14 @@ export async function POST(req: NextRequest) {
       try {
         while (
           HAS_TOOLS &&
+          !toolsDisabled &&
           !result.stoppedByUser &&
           !quotaCutOff &&
+          !timeCutOff &&
           result.toolCalls &&
           result.toolCalls.length > 0 &&
-          round < MAX_TOOL_ROUNDS
+          round < MAX_TOOL_ROUNDS &&
+          !pastRoundDeadline()
         ) {
           // الرصيد خلص (بسبب مخرجات الأدوات مثلًا) → مفيش جولة جديدة
           if (overBudget()) {
@@ -439,6 +494,7 @@ export async function POST(req: NextRequest) {
 
           const draftContent = contentParts.join("\n\n");
           const projectFiles = collectSessionProjectFiles(existing, draftContent);
+          let roundFilesSig: string | null = null; // بيتحسب لو احتجناه بس
 
           for (const call of toolCalls) {
             const callName = call.function.name;
@@ -594,6 +650,24 @@ export async function POST(req: NextRequest) {
               continue;
             }
 
+            // نفس الأمر بالظبط فشل قبل كده في الرد ده وملفات المشروع ماتغيّرتش → مفيش فايدة من إعادته.
+            roundFilesSig = roundFilesSig ?? filesSignature(projectFiles);
+            const cmdKey = `${command.replace(/\s+/g, " ")}\u0001${roundFilesSig}`;
+            if (failedCommands.has(cmdKey)) {
+              const msg = "نفس الأمر ده فشل قبل كده على نفس الملفات — ماتنفذش تاني.";
+              sendAgentEvent({ type: "tool_error", tool: toolName, id: call.id, message: msg, detail: { command } });
+              sandboxSteps.push({ id: call.id, tool: toolName, path: command, status: "error", message: msg, detail: { command } });
+              pushToolMessage({
+                ok: false,
+                error:
+                  "مرفوض: نفس الأمر ده اتنفذ قبل كده في الرد ده وفشل، وملفات المشروع ماتغيّرتش من ساعتها. " +
+                  "غيّر الأمر فعليًا (صلّح الـ quoting أو قسّمه) أو صلّح الملفات الأول، أو اكتب السكربت كملف (path=\"...\") وشغّله. " +
+                  "ولو هدفك تبني للمستخدم موقع/مشروع: اكتب الملفات كاملة بكتل path=\"...\" من غير ما تستنى نتيجة أمر.",
+              });
+              consecutiveCommandFailures += 1;
+              continue;
+            }
+
             // الأمر نفسه بيظهر للمستخدم فورًا (قبل ما يخلص) عشان يشوف إيه اللي بيتشغّل.
             sendAgentEvent({ type: "tool_start", tool: toolName, id: call.id, message: command, detail: { command } });
 
@@ -612,6 +686,13 @@ export async function POST(req: NextRequest) {
               stdout: clipOutput(run.stdout, 1500),
               stderr: clipOutput(run.stderr, 1500),
             };
+
+            if (run.ok && !run.error) {
+              consecutiveCommandFailures = 0;
+            } else {
+              consecutiveCommandFailures += 1;
+              failedCommands.add(cmdKey);
+            }
 
             if (run.error) {
               sendAgentEvent({ type: "tool_error", tool: toolName, id: call.id, message: run.error, detail });
@@ -641,7 +722,19 @@ export async function POST(req: NextRequest) {
             );
           }
 
-          const nextNegotiated = await callUpstreamAfterTools(loopMessages, true);
+          if (consecutiveCommandFailures >= MAX_CONSECUTIVE_COMMAND_FAILURES) {
+            toolsDisabled = true;
+            loopMessages.push({
+              role: "user",
+              content:
+                `الأوامر فشلت ${consecutiveCommandFailures} مرات ورا بعض في الرد ده، فالأدوات اتسحبت منك دلوقتي — ماتحاولش تصلّح بالشل تاني. ` +
+                "اعمل الآتي في ردك ده: (1) لو المستخدم طلب موقع/مشروع/كود، اكتب الملفات كاملة دلوقتي بكتل ```lang path=\"...\" " +
+                "من غير ما تعتمد على نتيجة أي أمر. (2) قول للمستخدم بصراحة إيه اللي فشل (من غير ما تدّعي إن حاجة اشتغلت) وإيه اللي يقدر يجرّبه. " +
+                "ماتكتبش أي استدعاء أداة.",
+            });
+          }
+
+          const nextNegotiated = await callUpstreamAfterTools(loopMessages, !toolsDisabled);
 
           if (!nextNegotiated || !nextNegotiated.ok) {
             // قبل كده كان هنا break صامت والرد بيفصل من غير أي تفسير.
@@ -655,8 +748,8 @@ export async function POST(req: NextRequest) {
             break;
           }
 
-          result = await readUpstreamStream(nextNegotiated.response, req.signal, emit, overBudget);
-          if (result.stoppedByLimit) quotaCutOff = true;
+          result = await readUpstreamStream(nextNegotiated.response, req.signal, emit, shouldStopNow);
+          if (result.stoppedByLimit) markLimitStop();
           contentParts.push(result.content);
           if (result.reasoning) reasoningParts.push(result.reasoning);
           extraTokens += estimateTokens(result.content, result.reasoning);
@@ -666,23 +759,26 @@ export async function POST(req: NextRequest) {
         // عشان يكتب خلاصة للمستخدم بدل ما الرد يقف في النص من غير كلمة.
         if (
           HAS_TOOLS &&
+          !toolsDisabled &&
           !result.stoppedByUser &&
           !quotaCutOff &&
+          !timeCutOff &&
           result.toolCalls &&
           result.toolCalls.length > 0 &&
-          round >= MAX_TOOL_ROUNDS
+          (round >= MAX_TOOL_ROUNDS || pastRoundDeadline())
         ) {
           loopMessages.push({ role: "assistant", content: result.content || "" });
           loopMessages.push({
             role: "user",
             content:
-              "وصلت للحد الأقصى من استدعاءات الأدوات في الرد ده. اكتب دلوقتي خلاصة نهائية للمستخدم بدون استدعاء أدوات: " +
-              "إيه اللي اتعمل فعلًا، إيه اللي فشل أو لسه ناقص، والخطوة الجاية المقترحة.",
+              "وصلت للحد الأقصى من الأدوات أو الوقت في الرد ده. اكتب دلوقتي بدون استدعاء أدوات: " +
+              "لو المستخدم طلب موقع/مشروع/كود ولسه ماكتبتش الملفات، اكتبها كاملة بكتل path=\"...\"، " +
+              "وبعدها خلاصة قصيرة: إيه اللي اتعمل فعلًا، إيه اللي فشل أو لسه ناقص، والخطوة الجاية المقترحة.",
           });
           const finalNegotiated = await callUpstreamAfterTools(loopMessages, false);
           if (finalNegotiated?.ok) {
-            result = await readUpstreamStream(finalNegotiated.response, req.signal, emit, overBudget);
-            if (result.stoppedByLimit) quotaCutOff = true;
+            result = await readUpstreamStream(finalNegotiated.response, req.signal, emit, shouldStopNow);
+            if (result.stoppedByLimit) markLimitStop();
             contentParts.push(result.content);
             if (result.reasoning) reasoningParts.push(result.reasoning);
             extraTokens += estimateTokens(result.content, result.reasoning);
@@ -692,7 +788,18 @@ export async function POST(req: NextRequest) {
             contentParts.push(note);
           }
         }
+      } catch (e) {
+        // أي exception غير متوقع جوه الحلقة كان بيفلت لحد start() فالستريم يتقفل بخطأ والرد مايتحفظش خالص.
+        // دلوقتي بنسجّله، ونكمل للحفظ باللي اتكتب لحد هنا.
+        console.error("[agent loop] unexpected error", e);
+        if (!req.signal.aborted) {
+          const note =
+            "\n\n⚠️ حصل خطأ غير متوقع في السيرفر أثناء تنفيذ الأدوات فوقفت هنا. اللي اتنفذ ظاهر في خطوات النشاط — ابعت «كمّل» وأكمل من عندها.";
+          emit("content", note);
+          contentParts.push(note);
+        }
       } finally {
+        clearInterval(keepAlive);
         // الـ sandbox بيتقفل مهما حصل (نجاح/فشل/إيقاف من المستخدم/exception).
         await session?.close();
       }
@@ -701,6 +808,9 @@ export async function POST(req: NextRequest) {
         const note = QUOTA_CUTOFF_NOTE;
         emit("content", note);
         contentParts.push(note);
+      } else if (timeCutOff) {
+        emit("content", TIME_CUTOFF_NOTE);
+        contentParts.push(TIME_CUTOFF_NOTE);
       }
 
       let finalContent = contentParts.join("\n\n").trim();
@@ -774,7 +884,7 @@ export async function POST(req: NextRequest) {
               ${assistantId}, ${sessionId}, 'assistant',
               ${sanitizeForDb(storedAssistantContent)},
               ${finalReasoning}, ${thinkingDurationMs},
-              ${!usedFallback && !result.stoppedByUser && (result.finishReason === "length" || quotaCutOff)},
+              ${!usedFallback && !result.stoppedByUser && (result.finishReason === "length" || quotaCutOff || timeCutOff)},
               ${totalTokens}
             )
           `;

@@ -91,6 +91,12 @@ export interface UpstreamStreamResult {
  * الدالة دي بترجع stoppedByUser بشكل منفصل عشان نفرّق بين إيقاف المستخدم
  * المتعمد وبين استجابة فاضية فعلاً محتاجة إعادة محاولة.
  */
+// لو المزوّد فتح الاتصال وبعدين سكت تمامًا (مفيش ولا بايت، حتى تعليقات keep-alive) المدة دي،
+// بنقفل القراءة ونكمّل باللي وصل — بدل ما الطلب يتعلّق لحد ما المنصة تقتل الدالة (300 ثانية)
+// قبل ما الرد يتحفظ، والمستخدم يشوف الرد واقف وبعدين يختفي. الـ reasoning بيوصل كـ chunks
+// باستمرار، فمهلة طويلة زي دي مابتقطعش موديل بيفكر فعلًا.
+export const UPSTREAM_IDLE_TIMEOUT_MS = Number(process.env.UPSTREAM_IDLE_TIMEOUT_MS) > 0 ? Number(process.env.UPSTREAM_IDLE_TIMEOUT_MS) : 90_000;
+
 export async function readUpstreamStream(
   response: Response,
   signal: AbortSignal,
@@ -161,9 +167,24 @@ export async function readUpstreamStream(
     }
   };
 
+  const readWithIdleTimeout = () =>
+    new Promise<ReadableStreamReadResult<Uint8Array>>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("upstream idle timeout")), UPSTREAM_IDLE_TIMEOUT_MS);
+      reader.read().then(
+        (r) => {
+          clearTimeout(timer);
+          resolve(r);
+        },
+        (e) => {
+          clearTimeout(timer);
+          reject(e);
+        }
+      );
+    });
+
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      const { done, value } = await readWithIdleTimeout();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split("\n");
@@ -172,7 +193,12 @@ export async function readUpstreamStream(
       if (stoppedByLimit) break;
     }
   } catch {
-    // انقطاع أثناء القراءة (إيقاف المستخدم أو خطأ اتصال مؤقت)
+    // انقطاع أثناء القراءة (إيقاف المستخدم أو خطأ اتصال مؤقت أو مهلة خمول) — نقفل الاتصال ونكمّل باللي وصل
+    try {
+      reader.cancel();
+    } catch {
+      // تجاهل
+    }
   } finally {
     signal.removeEventListener("abort", onAbort);
   }

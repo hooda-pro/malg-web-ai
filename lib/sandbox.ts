@@ -36,7 +36,11 @@ const COMMAND_TIMEOUT_MS = 150_000;
 const SANDBOX_LIFETIME_MS = 6 * 60_000;
 // مهلة إجمالية لكل أوامر الرد الواحد — بعدها منبدأش أمر جديد عشان الرد نفسه (300 ثانية)
 // يلحق يخلص ويتحفظ بدل ما الـ route يتقطع في النص.
-const SESSION_BUDGET_MS = 240_000;
+// مهم: العدّ بيبدأ من لحظة وصول الطلب (مش من لحظة فتح الـ sandbox) — قبل كده كان بيبدأ بعد أول
+// نداء للموديل (ممكن ياخد دقيقة+)، فمجموع الوقت كان بيعدّي 300 ثانية والـ route بيتقتل
+// من المنصة قبل ما يحفظ الرد، فالمستخدم يشوف الرد بيقطع ومفيش حاجة بتتحفظ.
+// 200 ثانية بتسيب حوالي 100 ثانية لنداء الموديل الأخير (الخلاصة) والحفظ.
+export const SESSION_BUDGET_MS = 200_000;
 // سقف حجم كل ملف بيتكتب في الـ sandbox — حماية من مشروع ضخم غير واقعي.
 const MAX_FILE_BYTES = 400_000;
 // كان 60 وده كان بيسيب ملفات ناقصة بصمت في أي مشروع أكبر من كده.
@@ -67,6 +71,18 @@ export function looksLikeOutOfMemory(exitCode: number | null, stderr: string): b
   return /\bKilled\b|JavaScript heap out of memory|FATAL ERROR: .*(heap|allocation)|Cannot allocate memory|ENOMEM/i.test(stderr);
 }
 export const PROJECT_DIR = "/home/user/project";
+
+/** الشل نفسه رفض الأمر (قبل ما ينفذ أي حاجة) — زي `syntax error near unexpected token '('`. */
+export function looksLikeShellSyntaxError(stderr: string): boolean {
+  return /syntax error|unexpected token|unexpected EOF|unterminated|here-document delimited by end-of-file|unmatched/i.test(stderr);
+}
+
+export const SHELL_SYNTAX_HINT =
+  "الشل رفض الأمر نفسه قبل ما ينفذ أي حاجة (خطأ syntax في كتابة الأمر، مش في المشروع). " +
+  "السبب الأشهر: اسم أو مسار فيه أقواس أو مسافات أو رموز خاصة من غير تنصيص، زي Nothing_Phone_(3) — " +
+  "لازم يتحط بين ' ' ('Nothing_Phone_(3)'). ما تعيدش نفس الأمر. " +
+  "لو الأمر فيه حلقة for أو أكتر من سطرين، اكتبه كملف سكربت (بكتلة path=\"script.sh\" أو script.py) وشغّله بـ bash script.sh، " +
+  "وما تستخدمش الـ shell أصلًا لجلب بيانات من الإنترنت لمجرد إنك تبني موقع — اكتب الملفات مباشرة.";
 
 export function isSandboxConfigured(): boolean {
   return !!(process.env.E2B_API_KEY || "").trim();
@@ -100,8 +116,13 @@ function isTimeoutMessage(message: string): boolean {
 export class SandboxSession {
   private sbx: Sandbox | null = null;
   private synced = new Map<string, string>();
-  private readonly startedAt = Date.now();
+  private readonly startedAt: number;
   private skippedFiles = 0;
+
+  /** @param requestStartedAt وقت وصول الطلب (Date.now()) — الميزانية الزمنية بتتحسب منه. */
+  constructor(requestStartedAt: number = Date.now()) {
+    this.startedAt = requestStartedAt;
+  }
 
   get skipped(): number {
     return this.skippedFiles;
@@ -170,7 +191,7 @@ export class SandboxSession {
     if (elapsed > SESSION_BUDGET_MS) {
       return {
         ok: false, stdout: "", stderr: "", exitCode: null, timedOut: true,
-        error: "خلصت المهلة الإجمالية للأوامر في الرد ده (حوالي 4 دقايق) — الأمر مانفذش. لخّص للمستخدم اللي اتعمل واللي لسه ناقص.",
+        error: "خلصت المهلة الإجمالية للأوامر في الرد ده (حوالي 3 دقايق) — الأمر مانفذش. لخّص للمستخدم اللي اتعمل واللي لسه ناقص.",
       };
     }
 
@@ -204,6 +225,8 @@ export class SandboxSession {
         };
         if (looksLikeOutOfMemory(result.exitCode, stderr)) {
           result.hint = await this.memoryHint(result.exitCode);
+        } else if (looksLikeShellSyntaxError(stderr)) {
+          result.hint = SHELL_SYNTAX_HINT;
         } else if (/No such file or directory|ENOENT|cannot find|not found/i.test(stderr)) {
           result.hint = await this.locationHint();
         }
