@@ -1,7 +1,7 @@
 import type { Config } from "tailwindcss";
 
 /**
- * mlag AI design tokens.
+ * MALG AI design tokens.
  * Every colour resolves to a CSS variable declared in app/globals.css so light
  * and dark share one single source of truth (no `dark:` variant soup).
  */
