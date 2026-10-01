@@ -15,18 +15,41 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://malg.ai";
+const SITE_TITLE = "MALG AI — مساعدك الذكي للبرمجة والبناء";
+const SITE_DESC =
+  "MALG AI — مساعد ذكي يكتب ويبني ويشغّل الكود جنبك: شات فوري، معاينة حيّة للمشاريع، بيئة تشغيل كود، بحث حقيقي على الإنترنت، ومحادثات محفوظة — و API كامل للاستخدام الاحترافي في Cline و OpenCode وغيرهم.";
+
 export const metadata: Metadata = {
-  title: "mlag AI",
-  description:
-    "mlag AI — مساعد ذكي يكتب ويبني ويشغّل الكود جنبك: شات فوري، معاينة حيّة للمشاريع، بيئة تشغيل كود، ومحادثات محفوظة.",
-  applicationName: "mlag AI",
-  keywords: ["mlag", "AI", "chat", "coding assistant", "artifacts"],
+  metadataBase: new URL(SITE_URL),
+  title: { default: SITE_TITLE, template: "%s | MALG AI" },
+  description: SITE_DESC,
+  applicationName: "MALG AI",
+  keywords: ["MALG", "MALG AI", "Malg-A3", "AI chat", "coding assistant", "artifacts", "E2B", "Cline", "ذكاء اصطناعي", "مساعد برمجة"],
+  authors: [{ name: "MALG Team" }],
+  creator: "MALG",
+  publisher: "MALG",
+  formatDetection: { email: false, address: false, telephone: false },
+  alternates: { canonical: "/" },
   openGraph: {
-    title: "mlag AI",
-    description: "مساعد ذكي للمبرمجين: شات فوري، معاينة حيّة للمشاريع، وبيئة تشغيل كود.",
+    title: SITE_TITLE,
+    description: "شات فوري + معاينة حيّة + تشغيل كود + بحث حقيقي. و API كامل للاستخدام الاحترافي.",
+    url: SITE_URL,
+    siteName: "MALG AI",
     type: "website",
-    siteName: "mlag AI",
+    locale: "ar_EG",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "MALG AI - مساعدك الذكي للبرمجة" }],
   },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: "مساعد ذكي يبني مواقع وتطبيقات جنبك — معاينة حيّة وتشغيل كود حقيقي.",
+    images: ["/og-image.png"],
+  },
+  icons: { icon: "/favicon.ico", apple: "/apple-touch-icon.png" },
+  manifest: "/manifest.webmanifest",
+  robots: { index: true, follow: true, googleBot: { index: true, follow: true, "max-image-preview": "large" } },
+  category: "technology",
 };
 
 export const viewport: Viewport = {
@@ -40,25 +63,16 @@ export const viewport: Viewport = {
   ],
 };
 
-/** Applies the stored theme before first paint so there is never a flash. */
 const THEME_BOOTSTRAP = `(function(){try{var r=localStorage.getItem("mlag-settings");var t=r?JSON.parse(r).theme:null;if(t!=="light"&&t!=="dark"){t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}document.documentElement.setAttribute("data-theme",t);}catch(e){document.documentElement.setAttribute("data-theme","light");}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="ar"
-      dir="rtl"
-      data-theme="light"
-      className={`${plexArabic.variable} ${jetbrainsMono.variable}`}
-      suppressHydrationWarning
-    >
+    <html lang="ar" dir="rtl" data-theme="light" className={`${plexArabic.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
       </head>
       <body className="h-full min-h-[100dvh] antialiased">
-        <a href="#mlag-main" className="skip-link">
-          تخطَّ إلى المحتوى
-        </a>
+        <a href="#mlag-main" className="skip-link">تخطَّ إلى المحتوى</a>
         <div className="grain" aria-hidden="true" />
         {children}
       </body>

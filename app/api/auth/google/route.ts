@@ -108,6 +108,9 @@ export async function POST(req: NextRequest) {
     });
     return res;
   } catch (e) {
+    if (e instanceof Error && e.name === "GoogleIdentityError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
     console.error("google auth error", e);
     return NextResponse.json(
       { error: "تعذر تسجيل الدخول بجوجل، حاول تاني" },

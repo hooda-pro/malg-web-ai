@@ -56,7 +56,19 @@ export const SESSION_COOKIE_MAX_AGE = MAX_AGE_SECONDS;
 /** بيرجع اليوزر لو أدمن، وإلا null — الحارس بتاع مسارات لوحة الأدمن. */
 export async function getAdminUser(): Promise<SessionUser | null> {
   const user = await getSessionUser();
-  return user && user.isAdmin ? user : null;
+  if (!user || !user.isAdmin) return null;
+  // التوكن (JWT) صالح 30 يوم وفيه علامة الأدمن وقت إصداره، فلو الصلاحية اتشالت أو الحساب اتحظر
+  // كان لسه شغال أدمن. دلوقتي بنأكد من الداتابيز في كل طلب أدمن، ولو الفحص فشل نرفض (fail closed).
+  try {
+    const rows = (await sql`SELECT is_admin, is_banned FROM users WHERE id = ${user.id}`) as {
+      is_admin: boolean;
+      is_banned: boolean;
+    }[];
+    if (!rows[0]?.is_admin || rows[0]?.is_banned) return null;
+  } catch {
+    return null;
+  }
+  return user;
 }
 
 /**

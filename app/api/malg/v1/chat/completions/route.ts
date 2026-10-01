@@ -188,7 +188,7 @@ export async function POST(req: NextRequest) {
   const rawTools = Array.isArray(body?.tools) && body.tools.length > 0 ? body.tools : undefined;
   const rawToolChoice = body?.tool_choice;
 
-  // بنحقن رسالة هوية "mlag" بعد آخر رسالة system موجودة أصلاً من المستدعي
+  // بنحقن رسالة هوية "MALG" بعد آخر رسالة system موجودة أصلاً من المستدعي
   // (زي system prompt بتاع Cline/OpenCode نفسه)، عشان تبقى أقرب حاجة لبداية
   // الرد الفعلي وتقدر تتغلب في حالة تعارض هوية — من غير ما تلمس أو تكرر أي
   // حاجة من تعليمات الأداة المستدعية نفسها.

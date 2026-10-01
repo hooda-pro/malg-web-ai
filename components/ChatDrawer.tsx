@@ -99,11 +99,11 @@ export default function ChatDrawer({
         )}
       >
         <div className="flex h-14 shrink-0 items-center justify-between gap-2 px-3">
-          <a href="/#" className="flex min-w-0 items-center gap-2.5 rounded-md px-1.5 py-1" aria-label="mlag AI">
+          <a href="/#" className="flex min-w-0 items-center gap-2.5 rounded-md px-1.5 py-1" aria-label="MALG AI">
             <span className="relative grid h-7 w-7 shrink-0 place-items-center rounded-[9px] bg-accent text-accent-ink shadow-accent">
               <Sparkles size={14} />
             </span>
-            <span className="truncate text-[15px] font-semibold tracking-title text-ink">mlag AI</span>
+            <span className="truncate text-[15px] font-semibold tracking-title text-ink">MALG AI</span>
           </a>
           <div className="flex items-center">
             <IconButton label={t("toggleSidebar")} onClick={onCollapse} size="sm" className="hidden lg:inline-flex">

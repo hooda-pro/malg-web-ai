@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureSchema } from "@/lib/db";
-import { getSessionUser, isUserBanned } from "@/lib/auth";
+import { getSessionUser } from "@/lib/auth";
+import {
+  acquireGenerationLease,
+  GENERATION_BUSY_MESSAGE,
+  getUserFlags,
+  type GenerationLease,
+} from "@/lib/usageGuard";
 import { checkAndMaybeRenewQuota, deductTokens } from "@/lib/quota";
 import {
   negotiateUpstream,
@@ -21,6 +27,20 @@ const CONTINUE_INSTRUCTION =
   "سبق كتابته، وبدون أي مقدمة أو تعليق إضافي — فقط استكمل النص/الكود من آخر نقطة وصلت لها.";
 
 export async function POST(req: NextRequest) {
+  const guard: { lease: GenerationLease | null } = { lease: null };
+  try {
+    const res = await handleContinue(req, guard);
+    // أي رد مش stream (رفض/خطأ) معناه إن مفيش رد هيشتغل، فنفك الحجز فورًا.
+    // لو stream، الحجز بيتفك جوه الـstream نفسه (قبل إشارة الحفظ مباشرة).
+    if (!res.headers.get("Content-Type")?.startsWith("text/event-stream")) await guard.lease?.release();
+    return res;
+  } catch (e) {
+    await guard.lease?.release();
+    throw e;
+  }
+}
+
+async function handleContinue(req: NextRequest, guard: { lease: GenerationLease | null }) {
   const user = await getSessionUser();
   if (!user) {
     return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
@@ -41,7 +61,9 @@ export async function POST(req: NextRequest) {
 
   await ensureSchema();
 
-  if (await isUserBanned(user.id)) {
+  const flags = await getUserFlags(user.id);
+  const isAdmin = flags.isAdmin;
+  if (flags.isBanned) {
     return NextResponse.json(
       { error: "تم حظر حسابك من إدارة المنصة — مش قادر تبعث رسايل حاليًا." },
       { status: 403 }
@@ -61,11 +83,25 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const quotaCheck = await checkAndMaybeRenewQuota(user.id, user.isAdmin);
+  const quotaCheck = await checkAndMaybeRenewQuota(user.id, isAdmin);
   if (quotaCheck.blocked) {
     return NextResponse.json({ error: quotaCheck.message, quotaExhausted: true }, { status: 403 });
   }
   const quotaRemaining = quotaCheck.remaining;
+
+  // حدود الاستهلاك والتكلفة: (1) رسايل في الدقيقة/الساعة، (2) رد واحد شغال في نفس الوقت لكل مستخدم.
+  // الأدمن مستثنى. شوف lib/usageGuard.ts لسبب الحدود دي.
+  if (!isAdmin) {
+    const lease = await acquireGenerationLease(user.id);
+    if (!lease) {
+      return NextResponse.json({ error: GENERATION_BUSY_MESSAGE, busy: true }, { status: 429 });
+    }
+    guard.lease = lease;
+    // لو المستخدم ضغط «إيقاف» أو قفل الصفحة نفك الحجز فورًا (مفيش سباق: الحجز مربوط بتوكن خاص بالطلب ده).
+    req.signal.addEventListener("abort", () => {
+      void lease.release();
+    });
+  }
 
   const existingRows = (await sql`
     SELECT id, content, reasoning, tokens_used FROM chat_messages
@@ -130,6 +166,7 @@ export async function POST(req: NextRequest) {
 
   const stream = new ReadableStream<Uint8Array>({
     async start(streamController) {
+      try {
       const encoder = new TextEncoder();
 
       const emit = (kind: "content" | "reasoning", text: string) => {
@@ -208,9 +245,15 @@ export async function POST(req: NextRequest) {
                 tokens_used = ${newTokensUsed}, is_truncated = ${isTruncated}
             WHERE id = ${messageId}
           `;
-          if (addedTokens > 0) await deductTokens(user.id, addedTokens, user.isAdmin);
         } catch (e) {
           console.error("failed to persist continued message", e);
+        }
+        if (addedTokens > 0) {
+          try {
+            await deductTokens(user.id, addedTokens, isAdmin);
+          } catch (e) {
+            console.error("failed to deduct tokens", e);
+          }
         }
       }
 
@@ -224,11 +267,16 @@ export async function POST(req: NextRequest) {
 
       // مهم: الحفظ في الداتابيز الأول، وبعدين إشارة [MLAG_SAVED] وقفل القناة
       // — يمنع العميل يعمل refresh قبل الحفظ فيختفي الرد.
+      // نفك الحجز قبل ما نبلّغ العميل إن الرد اتحفظ، عشان لو بعت الرسالة اللي بعدها فورًا مايترفضش.
+      await guard.lease?.release();
       try {
         streamController.enqueue(encoder.encode("data: [MLAG_SAVED]\n\n"));
         streamController.close();
       } catch {
         // العميل قطع الاتصال أو القناة مقفولة بالفعل
+      }
+      } finally {
+        await guard.lease?.release();
       }
     },
   });

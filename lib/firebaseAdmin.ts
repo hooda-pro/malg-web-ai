@@ -47,6 +47,14 @@ export async function verifyGoogleIdToken(idToken: string): Promise<GoogleIdenti
   if (!decoded.email) {
     throw new Error("حساب جوجل ده مفيهوش بريد إلكتروني ظاهر");
   }
+  // ربط الحساب بيتم على الإيميل، فلازم يكون مؤكَّد ومن جوجل فعلًا. من غير الفحص ده لو اتفعّلت
+  // طريقة تسجيل تانية في Firebase، حد يقدر يسجّل بإيميل مش بتاعه ويدخل على حساب حد تاني.
+  const provider = (decoded.firebase as { sign_in_provider?: string } | undefined)?.sign_in_provider;
+  if (provider !== "google.com" || decoded.email_verified !== true) {
+    const err = new Error("لازم تسجّل الدخول بحساب جوجل بريده الإلكتروني مؤكَّد");
+    err.name = "GoogleIdentityError";
+    throw err;
+  }
   return {
     uid: decoded.uid,
     email: decoded.email.trim().toLowerCase(),

@@ -5,23 +5,29 @@ import ChatShell from "./ChatShell";
 import { SettingsProvider } from "./SettingsContext";
 import AdminRoot from "./admin/AdminRoot";
 import ApiKeysPage from "./ApiKeysPage";
+import LandingPage from "./LandingPage";
 
-type Route = "chat" | "admin" | "api";
+type Route = "landing" | "chat" | "admin" | "api";
 
 function currentRoute(): Route {
-  if (typeof window === "undefined") return "chat";
+  if (typeof window === "undefined") return "landing";
   const hash = window.location.hash.replace(/^#\/?/, "").split(/[/?]/)[0];
   if (hash === "admin") return "admin";
   if (hash === "api") return "api";
-  return "chat";
+  if (hash === "chat") return "chat";
+  return "landing";
 }
 
 /**
- * راوتر بسيط بالـ hash: `/#/admin` لوحة الأدمن، `/#/api` لوحة الـ API للمطورين،
- * وأي حاجة تانية الشات. كل الشاشات جوه SettingsProvider عشان الثيم يبقى واحد.
+ * Hash router:
+ *  - `/`        → لاندنج سينمائية (لا دخول تلقائي للشات)
+ *  - `/#/chat`  → الشات
+ *  - `/#/api`   → لوحة الـ API للمطورين
+ *  - `/#/admin` → لوحة الأدمن
+ *  كل الشاشات داخل SettingsProvider لتوحيد الثيم.
  */
 export default function AppRouter() {
-  const [route, setRoute] = useState<Route>("chat");
+  const [route, setRoute] = useState<Route>("landing");
 
   useEffect(() => {
     setRoute(currentRoute());
@@ -41,8 +47,10 @@ export default function AppRouter() {
         </div>
       ) : route === "api" ? (
         <ApiKeysPage />
-      ) : (
+      ) : route === "chat" ? (
         <ChatShell />
+      ) : (
+        <LandingPage />
       )}
     </SettingsProvider>
   );

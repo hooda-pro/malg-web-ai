@@ -433,7 +433,7 @@ export default function UserDetail({
                         : "bg-accent-soft text-accent"
                     }`}
                   >
-                    {m.role === "user" ? "المستخدم" : "mlag"}
+                    {m.role === "user" ? "المستخدم" : "MALG"}
                   </span>
                   <span className="tnum min-w-0 flex-1 truncate text-[11px] text-ink-3">
                     {m.sessionTitle}

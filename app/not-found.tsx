@@ -13,14 +13,14 @@ export default function NotFound() {
           الصفحة دي مش موجودة
         </h1>
         <p dir="auto" className="mx-auto mt-3 max-w-[42ch] text-pretty text-[15px] leading-7 text-ink-2">
-          The page you are looking for doesn&apos;t exist or has moved. Head back to mlag AI and keep
+          The page you are looking for doesn&apos;t exist or has moved. Head back to MALG AI and keep
           building.
         </p>
         <Link
           href="/"
           className="mt-8 inline-flex h-11 items-center justify-center rounded-full bg-accent px-6 text-[14px] font-medium text-accent-ink shadow-accent transition-colors duration-1 ease-soft hover:bg-accent-hover"
         >
-          ارجع للرئيسية · Back to mlag AI
+          ارجع للرئيسية · Back to MALG AI
         </Link>
       </div>
     </main>

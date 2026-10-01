@@ -252,7 +252,7 @@ function MessageItem({
             <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent sm:hidden">
               <Sparkles size={13} className={isLive ? "pulse-dot" : undefined} />
             </span>
-            <span className="text-[13.5px] font-semibold tracking-label text-ink">mlag</span>
+            <span className="text-[13.5px] font-semibold tracking-label text-ink">MALG</span>
             {!isLive && message.tokensUsed > 0 && (
               <span className="tnum inline-flex items-center gap-1 text-[11.5px] text-ink-3">
                 <Zap size={11} className="text-accent" />

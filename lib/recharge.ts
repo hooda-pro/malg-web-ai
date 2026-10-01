@@ -66,7 +66,7 @@ export function buildRechargeMessage(
   pkg: RechargePackage | null,
   user?: { displayName?: string | null; email?: string | null } | null
 ): string {
-  const lines = ["مرحباً 👋", "عايز أشحن رصيد توكنز في موقع mlag AI:"];
+  const lines = ["مرحباً 👋", "عايز أشحن رصيد توكنز في موقع MALG AI:"];
 
   if (pkg) {
     lines.push(
@@ -99,7 +99,7 @@ export function buildApiRechargeMessage(
   tokens: number | null,
   user?: { displayName?: string | null; email?: string | null } | null
 ): string {
-  const lines = ["مرحباً 👋", "عايز أشحن رصيد الـ API (رصيد المطورين) في موقع mlag AI:"];
+  const lines = ["مرحباً 👋", "عايز أشحن رصيد الـ API (رصيد المطورين) في موقع MALG AI:"];
 
   if (tokens && tokens > 0) {
     const price = Math.round((tokens / 1_000_000) * API_TOKEN_PRICE_PER_MILLION);

@@ -50,7 +50,7 @@ export default function AdminLogin({ onLogin }: { onLogin: (admin: SessionUser) 
             <ShieldCheck size={20} />
           </span>
           <h1 className="mt-1 text-[17px] font-semibold tracking-title text-ink">
-            لوحة تحكم mlag
+            لوحة تحكم MALG
           </h1>
           <p className="text-pretty text-[13px] leading-6 text-ink-2">
             سجّل دخول بحساب الأدمن للوصول إلى لوحة الإدارة

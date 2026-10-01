@@ -322,8 +322,8 @@ let tokenHarborCursor = 0;
 
 function parseTokenHarborError(httpCode: number, rawJson: string): string {
   // نسجل التفاصيل الكاملة في الـ server logs بس، ونرجّع للمستخدم رسالة عامة
-  // بهوية mlag، من غير أي اسم مزوّد خارجي أو كود داخلي أو JSON خام.
-  console.error("[mlag upstream error]", httpCode, rawJson.slice(0, 500));
+  // بهوية MALG، من غير أي اسم مزوّد خارجي أو كود داخلي أو JSON خام.
+  console.error("[MALG upstream error]", httpCode, rawJson.slice(0, 500));
   try {
     const isDailyLimit = /limit|quota|rate.?limit/i.test(rawJson) && httpCode === 429;
     if (isDailyLimit) {
@@ -362,10 +362,10 @@ async function negotiateTokenHarbor(
 ): Promise<NegotiationResult> {
   const keys = getTokenHarborKeys();
   if (keys.length === 0) {
-    console.error("[mlag config] Token Harbor keys missing — set TOKENHARBOR_API_KEYS in env");
+    console.error("[MALG config] Token Harbor keys missing — set TOKENHARBOR_API_KEYS in env");
     return {
       ok: false,
-      errorMessage: "موديل mlag مش متاح حاليًا — تأكد من إعداد الخدمة وحاول تاني.",
+      errorMessage: "موديل MALG مش متاح حاليًا — تأكد من إعداد الخدمة وحاول تاني.",
     };
   }
 

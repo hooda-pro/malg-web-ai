@@ -139,12 +139,18 @@ export function ensureSchema(): Promise<void> {
       await sql`
         CREATE TABLE IF NOT EXISTS user_quota (
           user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-          total_allocated_tokens BIGINT NOT NULL DEFAULT 500000,
+          total_allocated_tokens BIGINT NOT NULL DEFAULT 100000,
           used_tokens BIGINT NOT NULL DEFAULT 0,
           quota_exhausted_at TIMESTAMPTZ,
           updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )
       `;
+
+      // حجز «رد واحد شغال في نفس الوقت» لكل مستخدم (lib/usageGuard.ts)
+      await sql`ALTER TABLE user_quota ADD COLUMN IF NOT EXISTS busy_until TIMESTAMPTZ`;
+      await sql`ALTER TABLE user_quota ADD COLUMN IF NOT EXISTS busy_token TEXT`;
+      // فهرس لحساب حد الرسايل في الدقيقة/الساعة بسرعة
+      await sql`CREATE INDEX IF NOT EXISTS idx_messages_created ON chat_messages(created_at)`;
 
       // ——— الأدمن: أعمدة الحظر + سجل الإجراءات ———
       await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_banned BOOLEAN NOT NULL DEFAULT FALSE`;

@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { sql, ensureSchema } from "@/lib/db";
-import { getSessionUser, isUserBanned } from "@/lib/auth";
+import { getSessionUser } from "@/lib/auth";
+import {
+  acquireGenerationLease,
+  checkMessageRate,
+  GENERATION_BUSY_MESSAGE,
+  getUserFlags,
+  type GenerationLease,
+} from "@/lib/usageGuard";
 import { checkAndMaybeRenewQuota, deductTokens } from "@/lib/quota";
 import {
   negotiateUpstream,
@@ -96,6 +103,20 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
+  const guard: { lease: GenerationLease | null } = { lease: null };
+  try {
+    const res = await handleChat(req, guard);
+    // أي رد مش stream (رفض/خطأ) معناه إن مفيش رد هيشتغل، فنفك الحجز فورًا.
+    // لو stream، الحجز بيتفك جوه الـstream نفسه (قبل إشارة الحفظ مباشرة).
+    if (!res.headers.get("Content-Type")?.startsWith("text/event-stream")) await guard.lease?.release();
+    return res;
+  } catch (e) {
+    await guard.lease?.release();
+    throw e;
+  }
+}
+
+async function handleChat(req: NextRequest, guard: { lease: GenerationLease | null }) {
   const requestStart = Date.now();
   const user = await getSessionUser();
   if (!user) {
@@ -121,7 +142,9 @@ export async function POST(req: NextRequest) {
 
   await ensureSchema();
 
-  if (await isUserBanned(user.id)) {
+  const flags = await getUserFlags(user.id);
+  const isAdmin = flags.isAdmin;
+  if (flags.isBanned) {
     return NextResponse.json(
       { error: "تم حظر حسابك من إدارة المنصة — مش قادر تبعث رسايل حاليًا." },
       { status: 403 }
@@ -147,12 +170,33 @@ export async function POST(req: NextRequest) {
   // الموديل سأل المستخدم في ردّه السابق عن تأكيد قفل الشات؟ (صالح للرسالة دي بس — بنصفّره بعد ما الاتصال بالموديل ينجح)
   const closePendingAtStart = !!sessionRows[0].close_pending;
 
-  const quotaCheck = await checkAndMaybeRenewQuota(user.id, user.isAdmin);
+  const quotaCheck = await checkAndMaybeRenewQuota(user.id, isAdmin);
   if (quotaCheck.blocked) {
     return NextResponse.json({ error: quotaCheck.message, quotaExhausted: true }, { status: 403 });
   }
   // التوكنز المتبقية للمستخدم قبل الرد ده (null = أدمن، مفيش حد) — بنقطع الرد في نصه لو خلصت.
   const quotaRemaining = quotaCheck.remaining;
+
+  // حدود الاستهلاك والتكلفة: (1) رسايل في الدقيقة/الساعة، (2) رد واحد شغال في نفس الوقت لكل مستخدم.
+  // الأدمن مستثنى. شوف lib/usageGuard.ts لسبب الحدود دي.
+  if (!isAdmin) {
+    const rate = await checkMessageRate(user.id);
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: rate.message, rateLimited: true },
+        { status: 429, headers: { "Retry-After": String(rate.retryAfterSeconds) } }
+      );
+    }
+    const lease = await acquireGenerationLease(user.id);
+    if (!lease) {
+      return NextResponse.json({ error: GENERATION_BUSY_MESSAGE, busy: true }, { status: 429 });
+    }
+    guard.lease = lease;
+    // لو المستخدم ضغط «إيقاف» أو قفل الصفحة نفك الحجز فورًا (مفيش سباق: الحجز مربوط بتوكن خاص بالطلب ده).
+    req.signal.addEventListener("abort", () => {
+      void lease.release();
+    });
+  }
 
   // 1) احفظ رسالة المستخدم
   // ملحوظة: Postgres بيرفض تخزين أي نص فيه بايت NUL (\u0000) في عمود text —
@@ -305,6 +349,7 @@ export async function POST(req: NextRequest) {
 
   const stream = new ReadableStream<Uint8Array>({
     async start(streamController) {
+      try {
       const encoder = new TextEncoder();
       let contentStartTime: number | null = null;
 
@@ -888,9 +933,16 @@ export async function POST(req: NextRequest) {
               ${totalTokens}
             )
           `;
-          if (totalTokens > 0) await deductTokens(user.id, totalTokens, user.isAdmin);
         } catch (e) {
           console.error("failed to persist assistant message", e);
+        }
+        // الخصم مستقل عن حفظ الرسالة: الرد وصل للمستخدم فعلًا والتكلفة اتحملت، فلو الحفظ فشل مانسيبوش ببلاش.
+        if (totalTokens > 0) {
+          try {
+            await deductTokens(user.id, totalTokens, isAdmin);
+          } catch (e) {
+            console.error("failed to deduct tokens", e);
+          }
         }
       }
 
@@ -940,11 +992,16 @@ export async function POST(req: NextRequest) {
       // مهم جداً: نحفظ في الداتابيز الأول (فوق)، وبعدين نرسل إشارة [MLAG_SAVED]
       // وبعد كده نقفل القناة. لو قفلنا القناة قبل الحفظ، العميل يعمل refresh
       // ويلاقي الرسايل لسه متسجلتش — فيختفي الرد من الواجهة رغم إنه اتحفظ بعدها.
+      // نفك الحجز قبل ما نبلّغ العميل إن الرد اتحفظ، عشان لو بعت الرسالة اللي بعدها فورًا مايترفضش.
+      await guard.lease?.release();
       try {
         streamController.enqueue(encoder.encode("data: [MLAG_SAVED]\n\n"));
         streamController.close();
       } catch {
         // العميل قطع الاتصال أو القناة مقفولة بالفعل
+      }
+      } finally {
+        await guard.lease?.release();
       }
     },
   });

@@ -65,11 +65,16 @@ export async function checkAndMaybeRenewQuota(
 
   const elapsed = now - exhaustedAt;
   if (elapsed >= QUOTA_RENEWAL_INTERVAL_MS) {
+    // التجديد الشهري بيرجّع الرصيد المجاني الأساسي بس. قبل كده كان بيصفّر الاستهلاك قدّام الرصيد
+    // الكلي، وده معناه إن أي توكنز اشتراها المستخدم كانت بترجع له كاملة كل 30 يوم.
+    // (التجديد بيحصل بس بعد نفاد الرصيد بالكامل، فمفيش توكنز مدفوعة متبقية بتضيع.)
     await sql`
-      UPDATE user_quota SET used_tokens = 0, quota_exhausted_at = NULL, updated_at = now()
+      UPDATE user_quota
+      SET used_tokens = 0, total_allocated_tokens = ${REGISTERED_TOKEN_QUOTA},
+          quota_exhausted_at = NULL, updated_at = now()
       WHERE user_id = ${userId}
     `;
-    return { blocked: false, remaining: totalAllocated };
+    return { blocked: false, remaining: REGISTERED_TOKEN_QUOTA };
   }
 
   const remainingMs = QUOTA_RENEWAL_INTERVAL_MS - elapsed;

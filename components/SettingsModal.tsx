@@ -242,6 +242,11 @@ function GeneralTab() {
           <Switch checked={showTime} onChange={setShowTime} label={t("settingsShowTime")} />
         </SettingRow>
       </Panel>
+
+      <SectionTitle>{t("aboutTitle")}</SectionTitle>
+      <Panel>
+        <p className="text-pretty px-4 py-3.5 text-[13px] leading-6 text-ink-3">{t("aboutBody")}</p>
+      </Panel>
     </>
   );
 }

@@ -70,7 +70,7 @@ function buildSnippet(id: SnippetId, base: string): { code: string; note?: React
     case "curl":
       return {
         code: `curl ${url}/chat/completions \\
-  -H "Authorization: Bearer $MLAG_API_KEY" \\
+  -H "Authorization: Bearer $MALG_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "messages": [{ "role": "user", "content": "أهلاً" }],
@@ -84,7 +84,7 @@ function buildSnippet(id: SnippetId, base: string): { code: string; note?: React
 
 client = OpenAI(
     base_url="${url}",
-    api_key="MLAG_API_KEY",
+    api_key="MALG_API_KEY",
 )
 
 res = client.chat.completions.create(
@@ -100,7 +100,7 @@ print(res.choices[0].message.content)`,
 
 const client = new OpenAI({
   baseURL: "${url}",
-  apiKey: process.env.MLAG_API_KEY,
+  apiKey: process.env.MALG_API_KEY,
 });
 
 const res = await client.chat.completions.create({
@@ -121,26 +121,26 @@ Model ID       malg-a3`,
       return {
         code: `{
   "provider": {
-    "mlag": {
+    "MALG": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "mlag AI",
+      "name": "MALG AI",
       "options": { "baseURL": "${url}" },
       "models": { "malg-a3": {} }
     }
   }
 }`,
-        note: "حطه في opencode.json، وبعدين opencode auth login ← Other ← اكتب mlag ← الصق مفتاحك، واختار mlag/malg-a3 من /models.",
+        note: "حطه في opencode.json، وبعدين opencode auth login ← Other ← اكتب MALG ← الصق مفتاحك، واختار MALG/malg-a3 من /models.",
       };
     case "codex":
       return {
         code: `# ~/.codex/config.toml
 model = "malg-a3"
-model_provider = "mlag"
+model_provider = "MALG"
 
-[model_providers.mlag]
-name = "mlag AI"
+[model_providers.MALG]
+name = "MALG AI"
 base_url = "${url}"
-env_key = "MLAG_API_KEY"
+env_key = "MALG_API_KEY"
 wire_api = "chat"`,
         note: "بعض إصدارات Codex الحديثة بتدعم wire_api = \"responses\" بس. لو ظهرلك خطأ برفض \"chat\" جرّب Cline أو OpenCode.",
         warn: true,
@@ -152,7 +152,7 @@ wire_api = "chat"`,
 export ANTHROPIC_BASE_URL="http://localhost:4000"
 # وLiteLLM نفسه يوجّه على:
 #   ${url}`,
-        note: "مفيش ربط مباشر — Cline أو OpenCode أسهل بكتير مع mlag.",
+        note: "مفيش ربط مباشر — Cline أو OpenCode أسهل بكتير مع MALG.",
         warn: true,
       };
   }
@@ -354,7 +354,7 @@ export default function ApiKeysPage() {
             <span className="grid h-7 w-7 place-items-center rounded-[9px] bg-accent text-accent-ink shadow-accent">
               <Sparkles size={14} />
             </span>
-            <span className="text-[14.5px] font-semibold tracking-title text-ink">mlag</span>
+            <span className="text-[14.5px] font-semibold tracking-title text-ink">MALG</span>
             <span className="rounded-full border border-hair px-2 py-0.5 font-mono text-[11px] text-ink-3" dir="ltr">
               API
             </span>
@@ -372,7 +372,7 @@ export default function ApiKeysPage() {
               API للمطورين
             </h1>
             <p className="mt-2 text-pretty text-[15px] leading-7 text-ink-2">
-              استخدم mlag جوه تطبيقاتك وأدواتك بواجهة متوافقة مع OpenAI. رصيد الـ API منفصل تمامًا عن رصيد الشات.
+              استخدم MALG جوه تطبيقاتك وأدواتك بواجهة متوافقة مع OpenAI. رصيد الـ API منفصل تمامًا عن رصيد الشات.
             </p>
           </div>
           <Button variant="primary" onClick={openCreate}>
@@ -440,7 +440,7 @@ export default function ApiKeysPage() {
                   <KeyRound size={18} />
                 </span>
                 <p className="mt-4 text-[15px] font-medium text-ink">لسه معندكش مفاتيح</p>
-                <p className="mt-1 text-[13px] text-ink-3">اعمل أول مفتاح وابدأ تكلّم mlag من كودك.</p>
+                <p className="mt-1 text-[13px] text-ink-3">اعمل أول مفتاح وابدأ تكلّم MALG من كودك.</p>
                 <Button variant="primary" size="sm" className="mt-5" onClick={openCreate}>
                   <Plus size={14} />
                   إنشاء مفتاح
@@ -549,7 +549,7 @@ export default function ApiKeysPage() {
             )}
           </Panel>
           <p className="mt-3 px-1 text-pretty text-[12.5px] leading-6 text-ink-3">
-            حتى جوه أدوات زي Cline، الموديل بيعرّف نفسه كـ mlag — الهوية دي مفروضة على مستوى الـ API ومش بتأثر على أداء المهمة.
+            حتى جوه أدوات زي Cline، الموديل بيعرّف نفسه كـ MALG — الهوية دي مفروضة على مستوى الـ API ومش بتأثر على أداء المهمة.
           </p>
         </section>
 

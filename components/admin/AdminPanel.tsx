@@ -67,7 +67,7 @@ export default function AdminPanel({
           </span>
           <div className="hidden md:block">
             <p className="text-[13px] font-semibold leading-tight tracking-title text-ink">
-              mlag admin
+              MALG admin
             </p>
             <p className="text-[11px] leading-tight text-ink-3">لوحة الإدارة</p>
           </div>

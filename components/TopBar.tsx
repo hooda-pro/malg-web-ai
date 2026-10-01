@@ -250,7 +250,7 @@ function ModelPicker({
         aria-expanded={open}
         className="flex h-9 items-center gap-1.5 rounded-full px-3 transition-colors duration-1 hover:bg-surface-3"
       >
-        <span className="text-[15px] font-semibold tracking-title text-ink">mlag</span>
+        <span className="text-[15px] font-semibold tracking-title text-ink">MALG</span>
         <span dir="ltr" className="text-[15px] font-medium tracking-title text-ink-3">
           {current.label.replace("malg-", "")}
         </span>
