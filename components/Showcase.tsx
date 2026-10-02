@@ -34,7 +34,7 @@ function prefersNoMotion() {
 }
 
 /** بيشغّل التسلسل مرة واحدة أول ما السكرين يظهر في الشاشة (ولو الحركة معطّلة بيعرض النتيجة النهائية فورًا). */
-function useTimeline(ref: RefObject<HTMLElement>) {
+function useTimeline(ref: RefObject<HTMLElement | null>) {
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
