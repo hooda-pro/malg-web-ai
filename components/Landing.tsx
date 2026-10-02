@@ -1,5 +1,6 @@
 import { ArrowLeft, Eye, Globe, KeyRound, MessageSquare, Smartphone, Sparkles, Terminal } from "lucide-react";
 import { getSiteUrl } from "@/lib/site";
+import Showcase from "./Showcase";
 
 const FEATURES = [
   { icon: MessageSquare, title: "شات فوري بالعربي", body: "الرد بيوصلك وهو بيتكتب، وواجهة RTL مظبوطة من الأساس." },
@@ -29,8 +30,8 @@ export default function Landing() {
   -d '{"messages":[{"role":"user","content":"Write a function that reverses a string"}]}'`;
 
   return (
-    <div className="min-h-[100dvh] bg-ground text-ink">
-      <header className="border-b border-hair pt-[env(safe-area-inset-top)]">
+    <div className="h-[100dvh] overflow-y-auto overscroll-contain bg-ground text-ink">
+      <header className="sticky top-0 z-sticky border-b border-hair bg-glass pt-[env(safe-area-inset-top)] backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-5">
           <span className="flex items-center gap-2.5 text-[16px] font-semibold tracking-display">
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-accent text-accent-ink shadow-accent">
@@ -61,6 +62,14 @@ export default function Landing() {
               API للمطورين
             </a>
           </div>
+        </section>
+
+        <section className="mx-auto max-w-5xl px-5 pb-16" aria-labelledby="showcase-title">
+          <h2 id="showcase-title" className="sr-only">
+            شوفه وهو شغّال
+          </h2>
+          <Showcase />
+          <p className="mt-4 text-center text-[13px] text-ink-3">مثال توضيحي لشكل التجربة</p>
         </section>
 
         <section className="mx-auto max-w-5xl px-5 pb-16" aria-labelledby="features-title">
