@@ -548,3 +548,18 @@ html.no-anim *::after {
 .glow-cyan {
   box-shadow: 0 0 0 1px rgba(79, 216, 255, 0.25), 0 0 18px rgba(79, 216, 255, 0.08);
 }
+
+/* علامة الصح لما الخطوة تخلص: بتنط بسرعة بدل ما تظهر فجأة */
+@keyframes mlag-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.animate-pop {
+  animation: mlag-pop var(--dur-2) var(--ease-spring) both;
+}

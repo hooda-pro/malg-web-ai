@@ -381,6 +381,18 @@ export default function ApiKeysPage() {
           </Button>
         </section>
 
+        <div className="animate-rise -mt-5 flex items-start gap-3 rounded-lg border border-accent-line bg-accent-soft px-4 py-3.5">
+          <Info size={16} className="mt-1 shrink-0 text-accent" />
+          <div className="text-pretty text-[13.5px] leading-6 text-ink">
+            <p className="font-semibold">ملاحظة: للاستخدام الكامل، استخدم الـ API</p>
+            <p className="mt-1 text-ink-2">
+              للحصول على كامل قدرات MALG، استخدمه عبر الـ API داخل Cline أو OpenCode أو أي أداة على جهازك. على الموقع يعمل
+              الكود في بيئة معزولة بموارد محدودة، لذلك قد تفشل بعض الأوامر، وقد لا يعمل مشروعك كما يعمل في بيئتك. أما مع
+              الـ API فأنت تتحكم في بيئة التنفيذ وتجرّب مشروعك بنفسك. ستجد أمثلة الربط في «البدء السريع» أدناه.
+            </p>
+          </div>
+        </div>
+
         <Panel className="grid grid-cols-1 sm:grid-cols-3">
           <div className="border-b border-hair p-5 sm:border-b-0 sm:border-e">
             <p className="text-[12.5px] text-ink-3">الرصيد المتبقي</p>
