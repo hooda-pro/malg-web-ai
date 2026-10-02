@@ -19,17 +19,19 @@ const STEPS = [
 ];
 
 const btnPrimary =
-  "inline-flex h-12 items-center justify-center gap-2 rounded-full bg-accent px-7 text-[15px] font-medium text-accent-ink shadow-accent transition-colors duration-1 ease-soft hover:bg-accent-hover";
+  "inline-flex h-11 items-center justify-center gap-2 rounded-full bg-accent px-6 text-[14.5px] font-medium text-accent-ink shadow-accent transition-colors duration-1 ease-soft hover:bg-accent-hover";
 const btnGhost =
-  "inline-flex h-12 items-center justify-center rounded-full border border-hair-2 px-7 text-[15px] font-medium text-ink transition-colors duration-1 ease-soft hover:bg-surface-2";
-const h2 = "text-balance text-[clamp(26px,4vw,38px)] font-semibold leading-tight tracking-display";
+  "inline-flex h-11 items-center justify-center rounded-full border border-hair-2 px-6 text-[14.5px] font-medium text-ink transition-colors duration-1 ease-soft hover:bg-surface-2";
+const h2 = "text-balance text-[clamp(22px,3.2vw,30px)] font-semibold leading-tight tracking-display";
+const section = "mx-auto max-w-6xl px-5 pb-12 sm:pb-16";
+const cell = "bg-surface p-6";
 
 export default function Landing() {
   const site = getSiteUrl();
   const curl = `curl ${site}/api/malg/v1/chat/completions \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{"messages":[{"role":"user","content":"Write a function that reverses a string"}]}'`;
+  -d '{"messages":[{"role":"user","content":"Hello"}]}'`;
 
   return (
     <div className="h-[100dvh] overflow-y-auto overscroll-contain bg-ground text-ink">
@@ -51,14 +53,14 @@ export default function Landing() {
       </header>
 
       <main id="mlag-main">
-        <section className="mx-auto max-w-6xl px-5 pb-14 pt-16 sm:pt-24">
-          <h1 className="max-w-[16ch] text-balance text-[clamp(40px,7.5vw,80px)] font-semibold leading-[1.1] tracking-display">
+        <section className="mx-auto max-w-6xl px-5 pb-10 pt-10 text-center sm:pt-14">
+          <h1 className="mx-auto max-w-[24ch] text-balance text-[clamp(32px,5.2vw,58px)] font-semibold leading-[1.15] tracking-display">
             من الفكرة إلى مشروع يعمل
           </h1>
-          <p className="mt-6 max-w-[48ch] text-pretty text-[clamp(16px,2vw,19px)] leading-8 text-ink-2">
+          <p className="mx-auto mt-4 max-w-[58ch] text-pretty text-[clamp(15px,1.7vw,18px)] leading-8 text-ink-2">
             MALG مساعد ذكي يكتب الكود وينفّذه في بيئة معزولة، ويعرض لك النتيجة مباشرة بجانب المحادثة.
           </p>
-          <div className="mt-9 flex flex-wrap items-center gap-3">
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
             <a href="/#/chat" className={btnPrimary}>
               ابدأ المحادثة
               <ArrowLeft size={17} />
@@ -69,89 +71,57 @@ export default function Landing() {
           </div>
         </section>
 
-        <section className="mx-auto max-w-6xl px-5 pb-24 sm:pb-32" aria-labelledby="showcase-title">
+        <section className={section} aria-labelledby="showcase-title">
           <h2 id="showcase-title" className="sr-only">
             عرض توضيحي
           </h2>
           <Showcase />
-          <p className="mt-4 text-center text-[13px] text-ink-3">عرض توضيحي لتجربة الاستخدام</p>
+          <p className="mt-3 text-center text-[13px] text-ink-3">عرض توضيحي لتجربة الاستخدام</p>
         </section>
 
-        <section className="mx-auto max-w-6xl px-5 pb-24 sm:pb-32" aria-labelledby="features-title">
-          <div className="grid gap-10 lg:grid-cols-[1fr_2fr] lg:gap-16">
-            <div>
-              <h2 id="features-title" className={h2}>
-                ما الذي يقدّمه MALG
-              </h2>
-              <p className="mt-4 max-w-[34ch] text-[16px] leading-8 text-ink-2">أدوات متكاملة داخل محادثة واحدة.</p>
-            </div>
-            <dl className="border-y border-hair">
-              {CAPABILITIES.map(({ title, body }, i) => (
-                <Reveal
-                  key={title}
-                  delay={(i % 3) * 60}
-                  className="grid gap-1.5 border-hair py-6 sm:grid-cols-[210px_1fr] sm:gap-8 [&:not(:first-child)]:border-t"
-                >
-                  <dt className="text-[17px] font-semibold">{title}</dt>
-                  <dd className="text-[15.5px] leading-8 text-ink-2">{body}</dd>
-                </Reveal>
-              ))}
-            </dl>
+        <section className={section} aria-labelledby="features-title">
+          <h2 id="features-title" className={h2}>
+            ما الذي يقدّمه MALG
+          </h2>
+          <div className="mt-6 grid gap-px overflow-hidden rounded-2xl border border-hair bg-hair sm:grid-cols-2 lg:grid-cols-3">
+            {CAPABILITIES.map(({ title, body }, i) => (
+              <Reveal key={title} delay={(i % 3) * 60} className={cell}>
+                <h3 className="text-[16px] font-semibold">{title}</h3>
+                <p className="mt-2 text-[14.5px] leading-7 text-ink-2">{body}</p>
+              </Reveal>
+            ))}
           </div>
         </section>
 
-        <section className="mx-auto max-w-6xl px-5 pb-24 sm:pb-32" aria-labelledby="steps-title">
+        <section className={section} aria-labelledby="steps-title">
           <h2 id="steps-title" className={h2}>
             ابدأ في ثلاث خطوات
           </h2>
-          <ol className="mt-10 grid border-y border-hair sm:grid-cols-3">
+          <ol className="mt-6 grid gap-px overflow-hidden rounded-2xl border border-hair bg-hair sm:grid-cols-3">
             {STEPS.map(({ title, body }, i) => (
-              <Reveal
-                as="li"
-                key={title}
-                delay={i * 90}
-                className="border-hair px-0 py-7 sm:px-7 sm:py-9 [&:not(:first-child)]:border-t sm:[&:not(:first-child)]:border-s sm:[&:not(:first-child)]:border-t-0 sm:first:ps-0"
-              >
-                <span className="tnum text-[14px] text-ink-3">{i + 1}</span>
-                <h3 className="mt-3 text-[18px] font-semibold">{title}</h3>
-                <p className="mt-2 text-[15px] leading-7 text-ink-2">{body}</p>
+              <Reveal as="li" key={title} delay={i * 90} className={cell}>
+                <h3 className="flex items-center gap-2.5 text-[16px] font-semibold">
+                  <span className="tnum grid h-6 w-6 shrink-0 place-items-center rounded-full bg-accent-soft text-[13px] text-accent">
+                    {i + 1}
+                  </span>
+                  {title}
+                </h3>
+                <p className="mt-2 text-[14.5px] leading-7 text-ink-2">{body}</p>
               </Reveal>
             ))}
           </ol>
         </section>
 
-        <section className="mx-auto max-w-6xl px-5 pb-24 sm:pb-32" aria-labelledby="api-title">
-          <div className="grid items-start gap-10 lg:grid-cols-2 lg:gap-14">
+        <section className={section} aria-labelledby="api-title">
+          <div className="grid items-center gap-8 lg:grid-cols-2 lg:gap-10">
             <Reveal>
               <h2 id="api-title" className={h2}>
                 للمطورين: استخدم MALG بكامل قدراته
               </h2>
-              <p className="mt-4 max-w-[52ch] text-[16px] leading-8 text-ink-2">
+              <p className="mt-3 max-w-[52ch] text-[15.5px] leading-8 text-ink-2">
                 اربط MALG بأدواتك عبر واجهة متوافقة مع OpenAI، مثل Cline وOpenCode، أو داخل أي تطبيق تبنيه.
               </p>
-
-              <div className="mt-7 rounded-2xl border border-accent-line bg-accent-soft">
-                <p className="flex items-center gap-2.5 px-5 pt-5 text-[15.5px] font-semibold">
-                  <Info size={18} className="shrink-0 text-accent" />
-                  ملاحظة: للاستخدام الكامل، استخدم الـ API
-                </p>
-                <dl className="mt-3 text-[14.5px] leading-7">
-                  <div className="border-t border-accent-line px-5 py-4">
-                    <dt className="font-semibold">على الموقع</dt>
-                    <dd className="mt-1 text-ink-2">
-                      يعمل الكود في بيئة معزولة بموارد محدودة، لذلك قد تفشل بعض الأوامر، وقد لا يعمل مشروعك كما يعمل في بيئتك.
-                    </dd>
-                  </div>
-                  <div className="border-t border-accent-line px-5 py-4">
-                    <dt className="font-semibold">عبر الـ API</dt>
-                    <dd className="mt-1 text-ink-2">
-                      تشغّل MALG داخل أداة على جهازك، فتتحكم في بيئة التنفيذ، وتجرّب مشروعك بنفسك، وتحصل على أفضل نتيجة.
-                    </dd>
-                  </div>
-                </dl>
-              </div>
-
-              <a href="/#/api" className={`${btnGhost} mt-7`}>
+              <a href="/#/api" className={`${btnGhost} mt-5`}>
                 احصل على مفتاح API
               </a>
             </Reveal>
@@ -160,15 +130,36 @@ export default function Landing() {
               <div dir="ltr" className="border-b border-hair px-5 py-3 font-mono text-[12px] text-ink-3">
                 POST /api/malg/v1/chat/completions
               </div>
-              <pre dir="ltr" className="overflow-x-auto p-5 text-left font-mono text-[12.5px] leading-6 text-ink-2">
+              <pre dir="ltr" className="overflow-x-auto p-5 text-left font-mono text-[13px] leading-7 text-ink-2">
                 <code>{curl}</code>
               </pre>
             </Reveal>
           </div>
+
+          <Reveal className="mt-8 overflow-hidden rounded-2xl border border-accent-line bg-accent-soft">
+            <p className="flex items-center gap-2.5 px-6 py-4 text-[15.5px] font-semibold">
+              <Info size={18} className="shrink-0 text-accent" />
+              ملاحظة: للاستخدام الكامل، استخدم الـ API
+            </p>
+            <dl className="grid border-t border-accent-line text-[14.5px] leading-7 sm:grid-cols-2">
+              <div className="px-6 py-5">
+                <dt className="font-semibold">على الموقع</dt>
+                <dd className="mt-1 text-ink-2">
+                  يعمل الكود في بيئة معزولة بموارد محدودة، لذلك قد تفشل بعض الأوامر، وقد لا يعمل مشروعك كما يعمل في بيئتك.
+                </dd>
+              </div>
+              <div className="border-t border-accent-line px-6 py-5 sm:border-s sm:border-t-0">
+                <dt className="font-semibold">عبر الـ API</dt>
+                <dd className="mt-1 text-ink-2">
+                  تشغّل MALG داخل أداة على جهازك، فتتحكم في بيئة التنفيذ، وتجرّب مشروعك بنفسك، وتحصل على أفضل نتيجة.
+                </dd>
+              </div>
+            </dl>
+          </Reveal>
         </section>
 
-        <section className="mx-auto max-w-6xl px-5 pb-24 sm:pb-32">
-          <div className="flex flex-wrap items-center justify-between gap-6 border-t border-hair pt-12">
+        <section className={section}>
+          <div className="flex flex-wrap items-center justify-between gap-5 rounded-2xl border border-hair bg-surface px-6 py-7 sm:px-8">
             <h2 className={h2}>ابدأ مشروعك الأول الآن</h2>
             <a href="/#/chat" className={btnPrimary}>
               ابدأ المحادثة

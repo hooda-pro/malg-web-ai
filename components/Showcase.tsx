@@ -136,18 +136,18 @@ function MockPreview({ tick, interactive }: { tick: number; interactive: boolean
       <div className="flex flex-1 items-center justify-center bg-[#f5f5f7] p-5">
         {!ready && <p className="text-[12.5px] text-[#9a9aa0]">ستظهر المعاينة هنا بعد التشغيل</p>}
         {ready && (
-          <div className="animate-materialize w-full max-w-[290px] rounded-2xl bg-white p-4 text-start shadow-[0_8px_30px_-12px_rgba(0,0,0,0.25)]">
-            <h4 className="text-[16px] font-semibold text-[#1d1d1f]">مهامي</h4>
-            <p className="tnum mt-0.5 text-[12px] text-[#6b6b70]">
+          <div className="animate-materialize w-full max-w-[340px] rounded-2xl bg-white p-5 text-start shadow-[0_8px_30px_-12px_rgba(0,0,0,0.25)]">
+            <h4 className="text-[19px] font-semibold text-[#1d1d1f]">مهامي</h4>
+            <p className="tnum mt-0.5 text-[13px] text-[#6b6b70]">
               {done.length} من {TASKS.length} مكتملة
             </p>
-            <ul className="mt-3 space-y-1.5">
+            <ul className="mt-4 space-y-2">
               {TASKS.map((task, i) => {
                 const isDone = done.includes(i);
                 const inner = (
                   <>
                     <span
-                      className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border text-white transition-colors duration-2 ${
+                      className={`grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full border text-white transition-colors duration-2 ${
                         isDone ? "border-[#0071e3] bg-[#0071e3]" : "border-black/20"
                       }`}
                     >
@@ -169,12 +169,12 @@ function MockPreview({ tick, interactive }: { tick: number; interactive: boolean
                         type="button"
                         onClick={() => toggle(i)}
                         aria-pressed={isDone}
-                        className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-start text-[13px] hover:bg-black/5"
+                        className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-start text-[14.5px] hover:bg-black/5"
                       >
                         {inner}
                       </button>
                     ) : (
-                      <div className="flex items-center gap-2.5 px-2 py-2 text-[13px]">{inner}</div>
+                      <div className="flex items-center gap-3 px-2 py-2.5 text-[14.5px]">{inner}</div>
                     )}
                   </li>
                 );
