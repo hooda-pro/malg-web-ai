@@ -38,6 +38,7 @@ import {
 import { createHash } from "crypto";
 import { getSandboxMemoryMb, isSandboxConfigured, SESSION_BUDGET_MS, SandboxSession } from "@/lib/sandbox";
 import {
+  EDIT_FILE_TOOL,
   LIST_FILES_TOOL,
   READ_FILE_TOOL,
   RUN_COMMAND_TOOL,
@@ -45,6 +46,7 @@ import {
   classifyCommandTool,
   collectSessionProjectFiles,
   isProjectTool,
+  runEditTool,
   runProjectTool,
 } from "@/lib/agentTools";
 import {
@@ -320,13 +322,13 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
 
   // الأدوات المتاحة للموديل في الرد ده:
   // - web_search: أداة بحث حقيقي في إيد الموديل — هو اللي يقرر يبحث إمتى وكام مرة وبأنهي مصادر.
-  // - list_files/read_file: لو فيه ملفات مشروع في المحادثة (مرفوعة أو كتبها الموديل) — من غير sandbox.
+  // - list_files/read_file/edit_file: لو فيه ملفات مشروع في المحادثة (مرفوعة أو كتبها الموديل) — من غير sandbox.
   // - run_command: لو E2B_API_KEY متظبط.
   // لو مفيش ولا واحدة، مبنبعتش tools خالص.
   // (SEARCH_ON متعرفة فوق جنب deepSearch)
   const availableTools: unknown[] = [
     ...(SEARCH_ON ? [WEB_SEARCH_TOOL] : []),
-    ...(initialProjectFiles.length > 0 ? [LIST_FILES_TOOL, READ_FILE_TOOL] : []),
+    ...(initialProjectFiles.length > 0 ? [LIST_FILES_TOOL, READ_FILE_TOOL, EDIT_FILE_TOOL] : []),
     ...(SANDBOX_ON ? [RUN_COMMAND_TOOL] : []),
     // أدوات الإشراف: تحذير محترم أولًا، وبعدين إنهاء المحادثة لو السلوك استمر
     ASK_CLOSE_CONFIRMATION_TOOL,
@@ -707,6 +709,47 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
                 detail: r.detail,
               });
               pushToolMessage(r.payload);
+              continue;
+            }
+
+            // --- edit_file (تعديل جراحي داخل ملف موجود، بدل إعادة كتابته) ---
+            if (callName === "edit_file") {
+              if (!argsValid) {
+                const msg = "معاملات الأداة مش JSON صالح.";
+                sendAgentEvent({ type: "tool_error", tool: "edit_file", id: call.id, message: msg });
+                sandboxSteps.push({ id: call.id, tool: "edit_file", status: "error", message: msg });
+                pushToolMessage({ ok: false, error: msg });
+                continue;
+              }
+              const editPath = typeof args.path === "string" ? args.path : "";
+              sendAgentEvent({ type: "tool_start", tool: "edit_file", id: call.id, path: editPath || "ملف" });
+              const r = runEditTool(args, projectFiles);
+              const editMsg = r.ok ? r.message || "تم التعديل" : r.message || "فشل التعديل";
+              sendAgentEvent({
+                type: r.ok ? "tool_result" : "tool_error",
+                tool: "edit_file",
+                id: call.id,
+                path: r.path ?? (editPath || undefined),
+                message: editMsg,
+                detail: r.detail,
+              });
+              sandboxSteps.push({
+                id: call.id,
+                tool: "edit_file",
+                path: r.path ?? editPath,
+                status: r.ok ? "done" : "error",
+                message: editMsg,
+                detail: r.detail,
+              });
+              pushToolMessage(r.payload);
+              if (r.ok && r.updated) {
+                // النسخة المحدّثة تنزل للقارئ واللوحة والـ sandbox ككتلة ملف عادية —
+                // بنفس الشكل لو الموديل كتبها بنفسه (وتُدمج مع أي نسخة سابقة بالمسار).
+                const ext = (r.updated.path.split(".").pop() || "text").toLowerCase();
+                const fence = "\n```" + ext + " path=\"" + r.updated.path + "\"\n" + r.updated.content + "\n```\n";
+                contentParts.push(fence);
+                emit("content", fence);
+              }
               continue;
             }
 

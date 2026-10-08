@@ -10,7 +10,7 @@
 
 import type { ProjectFile } from "./parseContent";
 import { extractDeliverableFiles } from "./parseContent";
-import { extractAgentStepsMeta } from "./agentEvents";
+import { extractAgentStepsMeta, filePreview } from "./agentEvents";
 import type { AgentToolName } from "./agentEvents";
 import { extractUserAttachmentFiles } from "./attachments";
 
@@ -48,6 +48,29 @@ export const READ_FILE_TOOL = {
         end_line: { type: "integer", description: "آخر سطر (شامل). الافتراضي start_line + 399" },
       },
       required: ["path"],
+    },
+  },
+} as const;
+
+export const EDIT_FILE_TOOL = {
+  type: "function",
+  function: {
+    name: "edit_file",
+    description:
+      "عدّل جزءًا من ملف مشروع موجود بدل إعادة كتابة الملف كله: حدد المسار (path) " +
+      "والنص القديم حرفيًا (old_string) والبديل (new_string). للتعديلات الصغيرة " +
+      "(سطر، دالة، قيمة) — أوفر بكتير من كتابة الملف كاملًا. النص القديم لازم يطابق " +
+      "الموجود حرفيًا بما فيه المسافات والأسطر — لو مش متأكد اقرأ الملف بـ read_file " +
+      "الأول. ممنوع لملف جديد (اكتبه بكتلة path)، وممنوع old_string فاضي، ولو النص " +
+      "مكرر في الملف زوّد سياقًا حوله لحد ما يبقى فريدًا.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "مسار الملف زي ما ظهر في قايمة الملفات" },
+        old_string: { type: "string", description: "الجزء المراد استبداله حرفيًا (لازم يوجد مرة واحدة بالظبط)" },
+        new_string: { type: "string", description: "النص البديل (ممكن فاضي للحذف)" },
+      },
+      required: ["path", "old_string", "new_string"],
     },
   },
 } as const;
@@ -167,13 +190,15 @@ export interface ProjectToolResult {
   message?: string;
   path?: string;
   detail?: { lines?: number; preview?: string };
+  /** النسخة الكاملة بعد التعديل (لأدوات التعديل فقط) — السيرفر يضيفها ككتلة ملف */
+  updated?: { path: string; content: string };
 }
 
 function normalizePath(p: string): string {
   return p.replace(/\\/g, "/").replace(/^\.?\/+/, "").trim();
 }
 
-function findFile(files: ProjectFile[], wanted: string): ProjectFile | null {
+export function findFile(files: ProjectFile[], wanted: string): ProjectFile | null {
   const w = normalizePath(wanted);
   const exact = files.find((f) => normalizePath(f.path) === w);
   if (exact) return exact;
@@ -284,5 +309,80 @@ export function runProjectTool(
     },
     message: `${start}–${end} من ${total}`,
     detail: { lines: end - start + 1, preview: chunk.slice(0, 6).join("\n") + (chunk.length > 6 ? "\n…" : "") },
+  };
+}
+
+/**
+ * تنفيذ edit_file: استبدال جراحي old_string ← new_string داخل ملف موجود.
+ * القواعد الصارمة (زي Claude Code): الملف لازم موجود، والنص القديم لازم يطابق
+ * حرفيًا مرة واحدة بالظبط — وإلا رسالة خطأ توجّه الموديل للتصحيح بدل التخمين.
+ */
+export function runEditTool(args: Record<string, unknown>, files: ProjectFile[]): ProjectToolResult {
+  const rawPath = typeof args.path === "string" ? args.path : "";
+  const oldString = typeof args.old_string === "string" ? args.old_string : "";
+  if (!rawPath.trim()) {
+    return { ok: false, payload: { ok: false, error: "لازم تحدد path." }, message: "path فاضي" };
+  }
+  if (!oldString) {
+    return {
+      ok: false,
+      payload: { ok: false, error: "old_string فاضي — حدد الجزء المراد استبداله حرفيًا." },
+      message: "old_string فاضي",
+    };
+  }
+  if (typeof args.new_string !== "string") {
+    return {
+      ok: false,
+      payload: { ok: false, error: "لازم تحدد new_string (ممكن فاضي للحذف)." },
+      message: "new_string ناقص",
+    };
+  }
+  const file = findFile(files, rawPath);
+  if (!file) {
+    return {
+      ok: false,
+      path: rawPath,
+      payload: {
+        ok: false,
+        error: "الملف " + rawPath + " مش موجود في ملفات المشروع.",
+        hint: "لو ملف جديد اكتبه بكتلة path بدل الأداة. لو موجود، هات المسار الصح بـ list_files.",
+      },
+      message: "الملف مش موجود",
+    };
+  }
+  const occurrences = file.content.split(oldString).length - 1;
+  if (occurrences === 0) {
+    return {
+      ok: false,
+      path: file.path,
+      payload: {
+        ok: false,
+        error: "النص القديم مش موجود حرفيًا في الملف (غالبًا فرق مسافات أو أسطر).",
+        hint: "اقرأ الجزء ده بـ read_file وانسخ منه حرفيًا.",
+      },
+      message: "لا تطابق",
+    };
+  }
+  if (occurrences > 1) {
+    return {
+      ok: false,
+      path: file.path,
+      payload: {
+        ok: false,
+        error: "النص القديم مكرر " + occurrences + " مرات — لازم يكون فريدًا.",
+        hint: "زوّد سياقًا حوله (سطور قبله وبعده) لحد ما يبقى مرة واحدة بس.",
+      },
+      message: "نص مكرر",
+    };
+  }
+  const updated = file.content.replace(oldString, args.new_string as string);
+  const preview = filePreview(updated);
+  return {
+    ok: true,
+    path: file.path,
+    payload: { ok: true, path: file.path },
+    message: "عدّل " + file.path,
+    detail: { lines: preview.lines, preview: preview.preview },
+    updated: { path: file.path, content: updated },
   };
 }

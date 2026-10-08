@@ -159,3 +159,13 @@ export function parseStreamingContent(content: string): StreamingSegment[] {
   }
   return segments;
 }
+
+/**
+ * يدمج الملفات حسب المسار (الأحدث يكسب) — لمنع تكرار نفس الملف في الكروت
+ * والمعاينة لو ظهر بأكثر من نسخة في نفس الرد (مثلًا تعديل أداة فوق كتلة مكتوبة).
+ */
+export function dedupeProjectFiles(files: ProjectFile[]): ProjectFile[] {
+  const byPath = new Map<string, ProjectFile>();
+  for (const f of files) byPath.set(f.path, f);
+  return [...byPath.values()];
+}

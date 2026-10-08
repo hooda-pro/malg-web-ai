@@ -4,7 +4,7 @@ import { memo, useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronRight, Copy, Eye, FileArchive, FileText, Pencil, Play, RefreshCw, ThumbsDown, ThumbsUp } from "lucide-react";
 import type { ChatMessage } from "@/lib/types";
 import type { ProjectFile } from "@/lib/parseContent";
-import { extractDeliverableFiles, parseMessageContent, parseStreamingContent } from "@/lib/parseContent";
+import { dedupeProjectFiles, extractDeliverableFiles, parseMessageContent, parseStreamingContent } from "@/lib/parseContent";
 import { extractAttachmentsMeta, extractAttachmentsPromptSection, formatBytes } from "@/lib/attachments";
 import {
   extractAgentStepsMeta,
@@ -90,7 +90,7 @@ function MessageItem({
     ? message.content
     : assistantCleanContent + (continuationStreamingContent || "");
   const projectFiles = useMemo(
-    () => (isUser ? [] : extractDeliverableFiles(displayContent)),
+    () => (isUser ? [] : dedupeProjectFiles(extractDeliverableFiles(displayContent))),
     [isUser, displayContent]
   );
   const hasProjectFiles = !isUser && projectFiles.length > 0;
