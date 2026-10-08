@@ -30,6 +30,9 @@ const CONTINUE_INSTRUCTION =
   "تابع من حيث توقفت بالضبط في ردك السابق. اكمل مباشرة بدون إعادة أو تلخيص أي جزء " +
   "سبق كتابته، وبدون أي مقدمة أو تعليق إضافي — فقط استكمل النص/الكود من آخر نقطة وصلت لها.";
 
+// أقصى عدد جولات تكملة تلقائية داخلية (نفس منطق /api/chat).
+const MAX_AUTO_CONTINUES = 3;
+
 // لو الرد السابق اتقطع في نص كتلة كود مفتوحة ( بلا إغلاق)، التكملة العامة
 // بتخلي الموديل يعيد الملف من الأول أو يفتح كتلة جديدة مكررة — فبنبعت تعليمات
 // تكملة داخل نفس الكتلة: يكمل من أول سطر ناقص ويقفلها، من غير إعادة ولا مقدمات.
@@ -230,7 +233,7 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
       const overBudget = () => quotaRemaining !== null && Math.floor(emittedChars / 3) + 10 >= quotaRemaining;
 
       let result = await readUpstreamStream(upstreamResponse, req.signal, emitCounted, overBudget, negotiated.protocol);
-      const quotaCutOff = !!result.stoppedByLimit;
+      let quotaCutOff = !!result.stoppedByLimit;
       if (quotaCutOff) {
         emit("content", "\n\n⚠️ رصيد التوكنز بتاعك خلص فوقفت الرد هنا. اشحن رصيدك أو استنى التجديد التلقائي، وبعدها ابعت «كمّل» تاني.");
       }
@@ -255,6 +258,65 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
             stoppedByUser: retryResult.stoppedByUser,
           };
         }
+      }
+
+      // تكملة تلقائية داخلية عند الانقطاع بطول المخرجات (نفس منطق /api/chat):
+      // المهمة التافهة مينفعش تقف كل شوية على زرار — نكمّل داخليًا لحد 3 جولات
+      // والزرار اليدوي يظهر بس لو لسه مقطوعًا بعدها. الرصيد/الإيقاف لهما سلوكهما.
+      let autoRounds = 0;
+      while (
+        result.finishReason === "length" &&
+        !result.stoppedByUser &&
+        !quotaCutOff &&
+        autoRounds < MAX_AUTO_CONTINUES &&
+        (result.toolCalls?.length ?? 0) === 0
+      ) {
+        autoRounds += 1;
+        const contNegotiated = await negotiateUpstream(
+          [
+            ...apiMessages,
+            {
+              role: "assistant",
+              content: result.content || "",
+              ...(result.reasoning ? { reasoning_content: result.reasoning } : {}),
+            },
+            { role: "user", content: CONTINUE_INSTRUCTION },
+          ],
+          controller.signal,
+          model
+        ).catch(() => null);
+        if (!contNegotiated || !contNegotiated.ok) break;
+        const contResult = await readUpstreamStream(
+          contNegotiated.response,
+          req.signal,
+          emitCounted,
+          overBudget,
+          contNegotiated.protocol
+        ).catch(() => null);
+        if (!contResult) break;
+        if (contResult.stoppedByLimit) {
+          quotaCutOff = true;
+          emit("content", "\n\n⚠️ رصيد التوكنز بتاعك خلص فوقفت الرد هنا. اشحن رصيدك أو استنى التجديد التلقائي، وبعدها ابعت «كمّل» تاني.");
+          result = { ...result, stoppedByLimit: true };
+          break;
+        }
+        result = {
+          content: result.content + contResult.content,
+          reasoning: contResult.reasoning
+            ? result.reasoning
+              ? result.reasoning + "\n\n" + contResult.reasoning
+              : contResult.reasoning
+            : result.reasoning,
+          finishReason: contResult.finishReason ?? result.finishReason,
+          stoppedByUser: result.stoppedByUser || contResult.stoppedByUser,
+          stoppedByLimit: result.stoppedByLimit || contResult.stoppedByLimit,
+          toolCalls: contResult.toolCalls?.length ? contResult.toolCalls : [],
+        };
+      }
+      if (autoRounds > 0) {
+        console.warn(
+          "[MALG auto-continue] route=continue rounds=" + autoRounds + " chars=" + result.content.length + " final=" + (result.finishReason ?? "?")
+        );
       }
 
       let usedFallback = false;

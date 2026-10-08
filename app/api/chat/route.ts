@@ -81,6 +81,12 @@ const QUOTA_CUTOFF_NOTE =
   "\n\n⚠️ رصيد التوكنز بتاعك خلص فوقفت الرد هنا. اشحن رصيدك أو استنى التجديد التلقائي، وبعدها ابعت «كمّل» وأكمل من نفس النقطة.";
 // أقصى عدد استدعاءات أدوات في الجولة الواحدة.
 const MAX_CALLS_PER_ROUND = 6;
+// أقصى عدد جولات تكملة تلقائية داخلية عند الانقطاع بطول المخرجات — بعدها
+// فقط يظهر زرار «كمّل» اليدوي (لو لسه مقطوعًا).
+const MAX_AUTO_CONTINUES = 3;
+// تعليمات التكملة الداخلية: مختصرة عمدًا (السياق الكامل موجود أصلًا في الرسائل).
+const AUTO_CONTINUE_INSTRUCTION =
+  "أكمل ردك السابق مباشرة من حيث توقفت — بدون إعادة أو مقدمات، تابع النص/الكود فورًا.";
 // تقدير ثابت لتكلفة الصورة الواحدة في الحسبة (بدل ما نعد بايتات Base64).
 const IMAGE_TOKEN_ESTIMATE = 800;
 // ميزانية الملفات الصغيرة اللي بتتحط inline في الرسايل الأقدم (الأحدث بياخد الميزانية الكاملة).
@@ -460,6 +466,71 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
             toolCalls: retryResult.toolCalls,
           };
         }
+      }
+
+      // *** تكملة تلقائية داخلية عند الانقطاع بطول المخرجات ***
+      // بعض المزوّدات (خصوصًا المجانية) تقطع الرد عند سقف مخرجات صغير حتى في
+      // المهام التافهة — فبدل ما نرمي زرار «كمّل» للمستخدم كل مرة، نكمّل داخليًا
+      // (لحد 3 جولات) بحيث يوصله رد واحد متصل يُبث لحظيًا. لا تُستخدم مع نفاد
+      // الرصيد/الوقت/إيقاف المستخدم — دي لها سلوكها الصريح — ولا لو الموديل طلب
+      // أدوات (حلقة الأدوات تتولاها بعدها).
+      let autoRounds = 0;
+      while (
+        result.finishReason === "length" &&
+        !result.stoppedByUser &&
+        !quotaCutOff &&
+        !timeCutOff &&
+        !result.stoppedByLimit &&
+        (result.toolCalls?.length ?? 0) === 0 &&
+        autoRounds < MAX_AUTO_CONTINUES &&
+        !pastRoundDeadline()
+      ) {
+        autoRounds += 1;
+        const contNegotiated = await negotiateUpstream(
+          [
+            ...apiMessages,
+            {
+              role: "assistant",
+              content: result.content || "",
+              ...(result.reasoning ? { reasoning_content: result.reasoning } : {}),
+            },
+            { role: "user", content: AUTO_CONTINUE_INSTRUCTION },
+          ],
+          controller.signal,
+          model,
+          toolOptions
+        ).catch(() => null);
+        if (!contNegotiated || !contNegotiated.ok) break;
+        const contResult = await readUpstreamStream(
+          contNegotiated.response,
+          req.signal,
+          emit,
+          shouldStopNow,
+          contNegotiated.protocol
+        ).catch(() => null);
+        if (!contResult) break;
+        if (contResult.stoppedByLimit) {
+          markLimitStop();
+          result = { ...result, stoppedByLimit: true };
+          break;
+        }
+        result = {
+          content: result.content + contResult.content,
+          reasoning: contResult.reasoning
+            ? result.reasoning
+              ? result.reasoning + "\n\n" + contResult.reasoning
+              : contResult.reasoning
+            : result.reasoning,
+          finishReason: contResult.finishReason ?? result.finishReason,
+          stoppedByUser: result.stoppedByUser || contResult.stoppedByUser,
+          stoppedByLimit: result.stoppedByLimit || contResult.stoppedByLimit,
+          toolCalls: contResult.toolCalls?.length ? contResult.toolCalls : [],
+        };
+      }
+      if (autoRounds > 0) {
+        console.warn(
+          "[MALG auto-continue] provider=\"" + negotiated.providerName + "\" model=\"" + negotiated.model + "\" rounds=" + autoRounds + " chars=" + result.content.length + " final=" + (result.finishReason ?? "?") + (result.finishReason === "length" ? " (still truncated — manual continue shown)" : "")
+        );
       }
 
       // ---------------------------------------------------------------
