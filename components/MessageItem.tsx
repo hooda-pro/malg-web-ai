@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useMemo, useRef, useState, type ReactNode } from "react";
-import { Check, ChevronRight, Copy, Eye, FileArchive, FileText, Pencil, Play, RefreshCw, Trash2 } from "lucide-react";
+import { Check, ChevronRight, Copy, Eye, FileArchive, FileText, Pencil, Play, RefreshCw } from "lucide-react";
 import type { ChatMessage } from "@/lib/types";
 import type { ProjectFile } from "@/lib/parseContent";
 import { extractDeliverableFiles, parseMessageContent, parseStreamingContent } from "@/lib/parseContent";
@@ -46,10 +46,7 @@ interface MessageItemProps {
   isRegenerating?: boolean;
   /** تعديل رسالة مستخدم — الواجهة الأم بتفتح وضع التحرير وتبعت */
   onEdit?: (message: ChatMessage) => void;
-  /** حذف رسالة واحدة (آخر رسالة) أو فرع من النقطة دي لآخر الشات */
-  onDeleteMessage?: (message: ChatMessage) => void;
-  onDeleteFromHere?: (message: ChatMessage) => void;
-  /** أي عملية شغالة (توليد/تعديل/حذف) — الأزرار بتتقفل وقتها */
+  /** أي عملية شغالة (توليد/تعديل) — الأزرار بتتقفل وقتها */
   actionsDisabled?: boolean;
 }
 
@@ -65,8 +62,6 @@ function MessageItem({
   onRegenerate,
   isRegenerating = false,
   onEdit,
-  onDeleteMessage,
-  onDeleteFromHere,
   actionsDisabled = false,
 }: MessageItemProps) {
   const { t, showTime } = useSettings();
@@ -245,17 +240,6 @@ function MessageItem({
               <Pencil size={13} />
             </button>
           )}
-          {onDeleteFromHere && (
-            <button
-              onClick={() => onDeleteFromHere(message)}
-              title={t("deleteFromHere")}
-              aria-label={t("deleteFromHere")}
-              disabled={actionsDisabled}
-              className="grid h-7 w-7 place-items-center rounded-full text-ink-3 transition-colors duration-1 hover:bg-danger-soft hover:text-danger disabled:opacity-40"
-            >
-              <Trash2 size={13} />
-            </button>
-          )}
         </div>
       </div>
     );
@@ -400,18 +384,6 @@ function MessageItem({
               >
                 <RefreshCw size={13} className={cn(isRegenerating && "animate-spin")} />
                 {isRegenerating ? t("regenerating") : t("regenerate")}
-              </button>
-            )}
-            {onDeleteMessage && (
-              <button
-                onClick={() => onDeleteMessage(message)}
-                tabIndex={isLive ? -1 : undefined}
-                title={t("deleteMessage")}
-                disabled={actionsDisabled}
-                className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[12px] text-ink-3 transition-colors duration-1 hover:bg-danger-soft hover:text-danger disabled:opacity-40"
-              >
-                <Trash2 size={13} />
-                {t("deleteMessage")}
               </button>
             )}
           </div>

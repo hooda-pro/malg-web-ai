@@ -762,7 +762,7 @@ export default function ChatShell() {
     ]
   );
 
-  // ===== تعديل / حذف / إعادة توليد الرسايل =====
+  // ===== تعديل / إعادة توليد الرسايل =====
   // ملحوظة ترتيب: الدوال دي بتستخدم sendMessage اللي متعرفة تحت، فبنخزنها في ref
   // — التعريف هنا فوق أول استخدام، والملء بعد تعريف sendMessage مباشرة.
   const sendMessageRef = useRef<(text: string, attachments?: ComposerAttachment[]) => Promise<boolean>>(
@@ -961,74 +961,6 @@ export default function ChatShell() {
     [messageActionsLocked, showToast, t, loadMessages, applyMessages]
   );
 
-  /** حذف رسالة واحدة (آخر رسالة بس حسب قواعد السيرفر) */
-  const askDeleteMessage = useCallback(
-    (m: ChatMessage) => {
-      if (messageActionsLocked) return;
-      setConfirmDelete({
-        title: t("confirmDeleteMsgTitle"),
-        body: t("confirmDeleteMsgBody"),
-        action: async () => {
-          const sessionId = currentSessionRef.current;
-          if (!sessionId) return;
-          setMsgActionBusy(true);
-          try {
-            const res = await fetch(`/api/messages/${sessionId}/delete?messageId=${m.id}`, {
-              method: "DELETE",
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-              showToast(data.error || t("toastDeleteMsgFail"));
-              return;
-            }
-            const fresh = await loadMessages(sessionId);
-            if (fresh) applyMessages(sessionId, fresh);
-          } catch {
-            showToast(t("toastDeleteMsgFail"));
-          } finally {
-            setMsgActionBusy(false);
-          }
-        },
-      });
-    },
-    [messageActionsLocked, showToast, t, loadMessages, applyMessages]
-  );
-
-  /** حذف الفرع: من الرسالة دي لآخر الشات */
-  const askDeleteFromHere = useCallback(
-    (m: ChatMessage) => {
-      if (messageActionsLocked) return;
-      const idx = messagesRef.current.findIndex((x) => x.id === m.id);
-      const count = idx >= 0 ? messagesRef.current.length - idx : 1;
-      setConfirmDelete({
-        title: t("confirmDeleteBranchTitle"),
-        body: t("confirmDeleteBranchBody", { n: count }),
-        action: async () => {
-          const sessionId = currentSessionRef.current;
-          if (!sessionId) return;
-          setMsgActionBusy(true);
-          try {
-            const res = await fetch(`/api/messages/${sessionId}/delete?fromMessageId=${m.id}`, {
-              method: "DELETE",
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-              showToast(data.error || t("toastDeleteMsgFail"));
-              return;
-            }
-            const fresh = await loadMessages(sessionId);
-            if (fresh) applyMessages(sessionId, fresh);
-          } catch {
-            showToast(t("toastDeleteMsgFail"));
-          } finally {
-            setMsgActionBusy(false);
-          }
-        },
-      });
-    },
-    [messageActionsLocked, t, showToast, loadMessages, applyMessages]
-  );
-
   const openSettings = useCallback((tab: SettingsTab = "general") => {
     setDrawerOpen(false);
     setSettingsTab(tab);
@@ -1140,8 +1072,6 @@ export default function ChatShell() {
           onRegenerate={regenerateReply}
           regeneratingMessageId={regeneratingMessageId}
           onEdit={startEdit}
-          onDeleteMessage={askDeleteMessage}
-          onDeleteFromHere={askDeleteFromHere}
           actionsDisabled={messageActionsLocked}
         />
 
