@@ -9,6 +9,17 @@ export async function PATCH(req: NextRequest, { params: paramsPromise }: { param
 
   await ensureSchema();
   const body = await req.json().catch(() => ({}));
+
+  // تثبيت/إلغاء تثبيت المحادثة أعلى القايمة
+  if (typeof body?.pinned === "boolean") {
+    try {
+      await sql`UPDATE chat_sessions SET is_pinned = ${body.pinned}, updated_at = now() WHERE id = ${params.id} AND user_id = ${user.id}`;
+    } catch {
+      return NextResponse.json({ error: "التثبيت غير متاح حاليًا" }, { status: 503 });
+    }
+    return NextResponse.json({ ok: true, pinned: body.pinned });
+  }
+
   const title = String(body?.title || "").trim();
   if (!title) return NextResponse.json({ error: "العنوان فارغ" }, { status: 400 });
 

@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { LogIn, PanelLeftClose, Search, SquarePen, Trash2, X } from "lucide-react";
-import Logo from "./Logo";
+import { Download, LogIn, PanelLeftClose, Pin, Search, Sparkles, SquarePen, Timer, Trash2, X } from "lucide-react";
 import type { ChatSession, SessionUser } from "@/lib/types";
 import { Button, IconButton, Kbd, modKeyLabel } from "./ui/Controls";
 import AccountMenu, { type SettingsTab } from "./AccountMenu";
+import Logo from "./Logo";
 import { useSettings } from "./SettingsContext";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +33,81 @@ function groupSessions(sessions: ChatSession[]): { key: GroupKey; items: ChatSes
     .map((k) => ({ key: k, items: groups[k] }));
 }
 
+type SessionWithSnippet = ChatSession & { snippet?: string | null };
+
+function SessionRow({
+  s,
+  active,
+  snippet,
+  onSelectSession,
+  onDeleteSession,
+  onTogglePin,
+  onExportSession,
+}: {
+  s: ChatSession;
+  active: boolean;
+  snippet?: string | null;
+  onSelectSession: (id: string) => void;
+  onDeleteSession: (id: string) => void;
+  onTogglePin: (id: string, pinned: boolean) => void;
+  onExportSession: (id: string) => void;
+}) {
+  const { t } = useSettings();
+  return (
+    <li className="group relative">
+      <button
+        onClick={() => onSelectSession(s.id)}
+        aria-current={active ? "page" : undefined}
+        className={cn(
+          "flex h-9 w-full items-center rounded-md pe-[104px] ps-2.5 text-start transition-colors duration-1",
+          active ? "bg-surface text-ink shadow-1" : "text-ink-2 hover:bg-surface-3 hover:text-ink"
+        )}
+      >
+        <span dir="auto" className="min-w-0 flex-1 truncate text-[13.5px]">
+          {s.title}
+        </span>
+      </button>
+      {snippet && (
+        <p dir="auto" className="truncate px-2.5 pb-1 text-[11.5px] leading-4 text-ink-3">
+          <span className="text-accent">{t("searchInContent")}</span>
+          {" — "}
+          {snippet}
+        </p>
+      )}
+      <div className="absolute end-1 top-[18px] flex -translate-y-1/2 items-center opacity-0 transition-opacity duration-1 focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
+        <button
+          onClick={() => onTogglePin(s.id, !s.isPinned)}
+          title={s.isPinned ? t("unpinChat") : t("pinChat")}
+          aria-label={`${s.isPinned ? t("unpinChat") : t("pinChat")}: ${s.title}`}
+          aria-pressed={!!s.isPinned}
+          className={cn(
+            "grid h-7 w-7 place-items-center rounded-full transition-colors duration-1 hover:bg-surface-3",
+            s.isPinned ? "text-accent opacity-100" : "text-ink-3 hover:text-ink"
+          )}
+        >
+          <Pin size={13} className={cn(s.isPinned && "fill-accent")} />
+        </button>
+        <button
+          onClick={() => onExportSession(s.id)}
+          title={t("exportChatMd")}
+          aria-label={`${t("exportChatMd")}: ${s.title}`}
+          className="grid h-7 w-7 place-items-center rounded-full text-ink-3 transition-colors duration-1 hover:bg-surface-3 hover:text-ink"
+        >
+          <Download size={13} />
+        </button>
+        <button
+          onClick={() => onDeleteSession(s.id)}
+          title={t("deleteChat")}
+          aria-label={`${t("deleteChat")}: ${s.title}`}
+          className="grid h-7 w-7 place-items-center rounded-full text-ink-3 transition-colors duration-1 hover:bg-danger-soft hover:text-danger"
+        >
+          <Trash2 size={13} />
+        </button>
+      </div>
+    </li>
+  );
+}
+
 export default function ChatDrawer({
   open,
   collapsed,
@@ -43,6 +118,10 @@ export default function ChatDrawer({
   onSelectSession,
   onNewChat,
   onDeleteSession,
+  onTogglePin,
+  onExportSession,
+  onNewTempChat,
+  inTempMode,
   user,
   quota,
   onOpenAuth,
@@ -60,6 +139,10 @@ export default function ChatDrawer({
   onSelectSession: (id: string) => void;
   onNewChat: () => void;
   onDeleteSession: (id: string) => void;
+  onTogglePin: (id: string, pinned: boolean) => void;
+  onExportSession: (id: string) => void;
+  onNewTempChat: () => void;
+  inTempMode: boolean;
   user: SessionUser | null;
   quota: { total: number; used: number } | null;
   onOpenAuth: () => void;
@@ -73,11 +156,44 @@ export default function ChatDrawer({
   const [mod, setMod] = useState("Ctrl");
   useEffect(() => setMod(modKeyLabel()), []);
 
+  // بحث شامل: عنوان + نص الرسايل عبر السيرفر (العناوين لوحدها لا تكفي).
+  // أقل من حرفين = فلترة محلية سريعة بالعناوين.
+  const trimmed = query.trim();
+  const isSearching = trimmed.length >= 2;
+  const [remote, setRemote] = useState<SessionWithSnippet[] | null>(null);
+  useEffect(() => {
+    if (!isSearching) {
+      setRemote(null);
+      return;
+    }
+    let cancelled = false;
+    const id = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/sessions/search?q=${encodeURIComponent(trimmed)}`);
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled) setRemote(Array.isArray(data.sessions) ? data.sessions : []);
+      } catch {
+        if (!cancelled) setRemote([]);
+      }
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trimmed]);
+
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = trimmed.toLowerCase();
     return q ? sessions.filter((s) => s.title.toLowerCase().includes(q)) : sessions;
-  }, [sessions, query]);
-  const groups = useMemo(() => groupSessions(filtered), [filtered]);
+  }, [sessions, trimmed]);
+  const pinned = useMemo(() => filtered.filter((s) => s.isPinned), [filtered]);
+  const groups = useMemo(
+    () => groupSessions(filtered.filter((s) => !s.isPinned)),
+    [filtered]
+  );
+
+  const rowProps = { onSelectSession, onDeleteSession, onTogglePin, onExportSession };
 
   return (
     <>
@@ -133,6 +249,21 @@ export default function ChatDrawer({
             </span>
           </button>
 
+          <button
+            onClick={onNewTempChat}
+            aria-pressed={inTempMode}
+            className={cn(
+              "flex h-10 w-full items-center gap-2.5 rounded-md border px-3",
+              "text-[13.5px] font-medium transition-colors duration-1",
+              inTempMode
+                ? "border-accent-line bg-accent-soft text-ink"
+                : "border border-hair bg-surface text-ink-2 shadow-1 hover:border-hair-2 hover:text-ink"
+            )}
+          >
+            <Timer size={16} className={inTempMode ? "text-accent" : "text-ink-3"} />
+            <span className="flex-1 text-start">{t("tempChat")}</span>
+          </button>
+
           {sessions.length > 0 && (
             <label className="relative block">
               <span className="sr-only">{t("searchChats")}</span>
@@ -159,48 +290,45 @@ export default function ChatDrawer({
             <p className="px-4 py-10 text-center text-pretty text-[12.5px] leading-5 text-ink-3">
               {user ? t("noSessions") : t("loginOrRegister")}
             </p>
-          ) : groups.length === 0 ? (
-            <p className="px-4 py-8 text-center text-[12.5px] text-ink-3">{t("noResults")}</p>
+          ) : isSearching ? (
+            remote === null ? (
+              <p className="px-4 py-8 text-center text-[12.5px] text-ink-3">{t("searching")}</p>
+            ) : remote.length === 0 ? (
+              <p className="px-4 py-8 text-center text-[12.5px] text-ink-3">{t("noResults")}</p>
+            ) : (
+              <ul className="mt-1">
+                {remote.map((s) => (
+                  <SessionRow key={s.id} s={s} active={s.id === currentSessionId} snippet={s.snippet ?? null} {...rowProps} />
+                ))}
+              </ul>
+            )
           ) : (
-            groups.map((g) => (
-              <section key={g.key} className="mt-3 first:mt-1">
-                <h3 className="px-2.5 pb-1 text-[11.5px] font-medium text-ink-3">{t(g.key)}</h3>
-                <ul>
-                  {g.items.map((s) => {
-                    const active = s.id === currentSessionId;
-                    return (
-                      <li key={s.id} className="group relative">
-                        <button
-                          onClick={() => onSelectSession(s.id)}
-                          aria-current={active ? "page" : undefined}
-                          className={cn(
-                            "flex h-9 w-full items-center rounded-md pe-9 ps-2.5 text-start transition-colors duration-1",
-                            active ? "bg-surface text-ink shadow-1" : "text-ink-2 hover:bg-surface-3 hover:text-ink"
-                          )}
-                        >
-                          <span dir="auto" className="min-w-0 flex-1 truncate text-[13.5px]">
-                            {s.title}
-                          </span>
-                        </button>
-                        <button
-                          onClick={() => onDeleteSession(s.id)}
-                          title={t("deleteChat")}
-                          aria-label={`${t("deleteChat")}: ${s.title}`}
-                          className={cn(
-                            "absolute end-1 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full text-ink-3",
-                            "opacity-0 transition-opacity duration-1 hover:bg-danger-soft hover:text-danger",
-                            "focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100",
-                            active && "opacity-100"
-                          )}
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            ))
+            <>
+              {pinned.length > 0 && (
+                <section className="mt-1">
+                  <h3 className="px-2.5 pb-1 text-[11.5px] font-medium text-ink-3">{t("pinnedSection")}</h3>
+                  <ul>
+                    {pinned.map((s) => (
+                      <SessionRow key={s.id} s={s} active={s.id === currentSessionId} {...rowProps} />
+                    ))}
+                  </ul>
+                </section>
+              )}
+              {groups.length === 0 && pinned.length === 0 ? (
+                <p className="px-4 py-8 text-center text-[12.5px] text-ink-3">{t("noResults")}</p>
+              ) : (
+                groups.map((g) => (
+                  <section key={g.key} className="mt-3 first:mt-1">
+                    <h3 className="px-2.5 pb-1 text-[11.5px] font-medium text-ink-3">{t(g.key)}</h3>
+                    <ul>
+                      {g.items.map((s) => (
+                        <SessionRow key={s.id} s={s} active={s.id === currentSessionId} {...rowProps} />
+                      ))}
+                    </ul>
+                  </section>
+                ))
+              )}
+            </>
           )}
         </nav>
 

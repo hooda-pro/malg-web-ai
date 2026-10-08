@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useMemo, useRef, useState, type ReactNode } from "react";
-import { Check, ChevronRight, Copy, Eye, FileArchive, FileText, Pencil, Play, RefreshCw } from "lucide-react";
+import { Check, ChevronRight, Copy, Eye, FileArchive, FileText, Pencil, Play, RefreshCw, ThumbsDown, ThumbsUp } from "lucide-react";
 import type { ChatMessage } from "@/lib/types";
 import type { ProjectFile } from "@/lib/parseContent";
 import { extractDeliverableFiles, parseMessageContent, parseStreamingContent } from "@/lib/parseContent";
@@ -44,6 +44,8 @@ interface MessageItemProps {
   isLastAssistant?: boolean;
   onRegenerate?: (messageId: string) => void;
   isRegenerating?: boolean;
+  /** تقييم الرد (👍/👎) — تكرار نفس التقييم يلغيه */
+  onFeedback?: (messageId: string, rating: 1 | -1) => void;
   /** تعديل رسالة مستخدم — الواجهة الأم بتفتح وضع التحرير وتبعت */
   onEdit?: (message: ChatMessage) => void;
   /** أي عملية شغالة (توليد/تعديل) — الأزرار بتتقفل وقتها */
@@ -61,6 +63,7 @@ function MessageItem({
   isLastAssistant = false,
   onRegenerate,
   isRegenerating = false,
+  onFeedback,
   onEdit,
   actionsDisabled = false,
 }: MessageItemProps) {
@@ -385,6 +388,38 @@ function MessageItem({
                 <RefreshCw size={13} className={cn(isRegenerating && "animate-spin")} />
                 {isRegenerating ? t("regenerating") : t("regenerate")}
               </button>
+            )}
+            {onFeedback && (
+              <>
+                <button
+                  onClick={() => onFeedback(message.id, 1)}
+                  tabIndex={isLive ? -1 : undefined}
+                  title={t("feedbackGood")}
+                  aria-label={t("feedbackGood")}
+                  aria-pressed={message.feedback === 1}
+                  disabled={actionsDisabled}
+                  className={cn(
+                    "grid h-7 w-7 place-items-center rounded-full transition-colors duration-1 disabled:opacity-40",
+                    message.feedback === 1 ? "text-accent" : "text-ink-3 hover:bg-surface-3 hover:text-ink"
+                  )}
+                >
+                  <ThumbsUp size={13} className={cn(message.feedback === 1 && "fill-accent")} />
+                </button>
+                <button
+                  onClick={() => onFeedback(message.id, -1)}
+                  tabIndex={isLive ? -1 : undefined}
+                  title={t("feedbackBad")}
+                  aria-label={t("feedbackBad")}
+                  aria-pressed={message.feedback === -1}
+                  disabled={actionsDisabled}
+                  className={cn(
+                    "grid h-7 w-7 place-items-center rounded-full transition-colors duration-1 disabled:opacity-40",
+                    message.feedback === -1 ? "text-accent" : "text-ink-3 hover:bg-surface-3 hover:text-ink"
+                  )}
+                >
+                  <ThumbsDown size={13} className={cn(message.feedback === -1 && "fill-accent")} />
+                </button>
+              </>
             )}
           </div>
         </div>

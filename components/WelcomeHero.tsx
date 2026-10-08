@@ -1,8 +1,7 @@
 "use client";
 
-import { ArrowUpRight, Zap } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import Logo from "./Logo";
-import { formatTokens } from "@/lib/ai";
 import { useSettings } from "./SettingsContext";
 
 const QUICK_PROMPT_KEYS = ["prompt1", "prompt2", "prompt3", "prompt4"] as const;
@@ -39,13 +38,6 @@ export default function WelcomeHero({
         <p className="mt-3 max-w-[46ch] text-pretty text-[15.5px] leading-7 text-ink-2">
           {t("heroSubtitle")}
         </p>
-
-        <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-hair bg-surface px-3.5 py-1.5 text-ink-2 shadow-1">
-          <Zap size={13} className="text-accent" />
-          <span className="tnum text-[12.5px] font-medium">
-            {t("balanceShort", { n: formatTokens(totalTokens) })}
-          </span>
-        </div>
 
         {/* ONE panel + hairline dividers instead of four floating cards */}
         <div className="mt-10 w-full overflow-hidden rounded-xl border border-hair bg-surface text-start shadow-2">

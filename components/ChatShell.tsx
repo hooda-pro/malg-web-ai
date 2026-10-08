@@ -22,6 +22,9 @@ import type { SettingsTab } from "./AccountMenu";
 import { useSettings, type ModelId } from "./SettingsContext";
 import { buildAttachmentsMetaBlock, buildAttachmentsPromptBlock, extractAttachmentsMeta, extractAttachmentsPromptSection } from "@/lib/attachments";
 import type { AgentEvent } from "@/lib/agentEvents";
+import { extractAgentStepsMeta } from "@/lib/agentEvents";
+import { Timer } from "lucide-react";
+import ShareDialog from "./ShareDialog";
 
 const PREVIEWABLE_EXTS = new Set(["html", "htm", "css", "js"]);
 const SESSION_MODELS_KEY = "mlag-session-models";
@@ -109,6 +112,10 @@ export default function ChatShell() {
   const [quotaRenewsAt, setQuotaRenewsAt] = useState<string | null>(null);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // الوضع المؤقت: جلسة حقيقية بعلَم مؤقت (كل المزايا شغالة) لكنها مخفية من
+  // القايمة وبتتمسح عند الخروج منها — واليتيم منها بيتنظف خلال يوم.
+  const [tempSessionId, setTempSessionId] = useState<string | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [toastSeq, setToastSeq] = useState(0);
@@ -421,12 +428,69 @@ export default function ChatShell() {
     return null;
   }, [currentSessionId, markLoaded]);
 
+  /** حذف جلسة مؤقتة بصمت (تجاهل الأخطاء) */
+  const dropTempSession = useCallback(
+    async (id: string | null) => {
+      if (!id) return;
+      try {
+        await fetch(`/api/sessions/${id}`, { method: "DELETE" });
+      } catch {
+        // تجاهل
+      }
+      forgetSessionModel(id);
+    },
+    [forgetSessionModel]
+  );
+
+  /** بدء محادثة مؤقتة — رسايلها مش بتظهر في القايمة وبتتمسح عند الخروج */
+  const startTempChat = useCallback(async () => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+    if (tempSessionId) await dropTempSession(tempSessionId);
+    try {
+      const res = await fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: t("tempChatTitle"), isTemp: true }),
+      });
+      const data = await res.json();
+      if (data.session) {
+        setTempSessionId(data.session.id);
+        setCurrentSessionId(data.session.id);
+        setMessages([]);
+        markLoaded(data.session.id);
+        setDrawerOpen(false);
+        setPanelOpen(false);
+      }
+    } catch {
+      showToast(t("toastNewChatFail"));
+    }
+  }, [user, tempSessionId, dropTempSession, showToast, t, markLoaded]);
+
+  /** الخروج من الوضع المؤقت = مسح الجلسة المؤقتة نهائيًا */
+  const exitTempChat = useCallback(async () => {
+    const id = tempSessionId;
+    setTempSessionId(null);
+    if (id) await dropTempSession(id);
+    setCurrentSessionId(null);
+    setMessages([]);
+    markLoaded(null);
+    setPanelOpen(false);
+  }, [tempSessionId, dropTempSession, markLoaded]);
+
   const handleNewChat = useCallback(async () => {
     if (!user) {
       setShowAuthModal(true);
       return;
     }
-    // لو الشات الحالي فاضي أصلاً ما نعملش واحد جديد فوقه
+    if (tempSessionId) {
+      const tid = tempSessionId;
+      setTempSessionId(null);
+      await dropTempSession(tid);
+    }
+    // لو الشات الحالي فاضي أصلًا ما نعملش واحد جديد فوقه
     if (currentSessionId && messages.length === 0) {
       setDrawerOpen(false);
       document.getElementById("mlag-composer")?.focus();
@@ -450,6 +514,11 @@ export default function ChatShell() {
   }, [user, currentSessionId, messages.length, showToast, t, markLoaded]);
 
   const handleSelectSession = (id: string) => {
+    if (tempSessionId && tempSessionId !== id) {
+      const tid = tempSessionId;
+      setTempSessionId(null);
+      void dropTempSession(tid);
+    }
     setCurrentSessionId(id);
     setDrawerOpen(false);
     setPanelOpen(false);
@@ -502,6 +571,11 @@ export default function ChatShell() {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } finally {
+      if (tempSessionId) {
+        const tid = tempSessionId;
+        setTempSessionId(null);
+        await dropTempSession(tid);
+      }
       setUser(null);
       setDrawerOpen(false);
       setShowAuthModal(true);
@@ -961,6 +1035,98 @@ export default function ChatShell() {
     [messageActionsLocked, showToast, t, loadMessages, applyMessages]
   );
 
+  /** تقييم رد (👍/👎) — تكرار نفس التقييم يلغيه */
+  const sendFeedback = useCallback(
+    async (messageId: string, rating: 1 | -1) => {
+      const sessionId = currentSessionRef.current;
+      if (!sessionId || messageActionsLocked) return;
+      const current = messagesRef.current.find((m) => m.id === messageId)?.feedback ?? null;
+      const next = current === rating ? 0 : rating;
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, feedback: (next === 0 ? null : next) as 1 | -1 | null } : m))
+      );
+      try {
+        const res = await fetch(`/api/messages/${sessionId}/feedback`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messageId, rating: next }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "failed");
+        if (data.feedback !== undefined) {
+          setMessages((prev) =>
+            prev.map((m) => (m.id === messageId ? { ...m, feedback: data.feedback } : m))
+          );
+        }
+      } catch {
+        const fresh = await loadMessages(sessionId);
+        if (fresh) applyMessages(sessionId, fresh);
+      }
+    },
+    [messageActionsLocked, loadMessages, applyMessages]
+  );
+
+  /** تثبيت/إلغاء تثبيت محادثة أعلى القايمة */
+  const togglePin = useCallback(
+    async (id: string, pinned: boolean) => {
+      try {
+        const res = await fetch(`/api/sessions/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pinned }),
+        });
+        if (!res.ok) throw new Error("pin failed");
+        await refreshSessions();
+      } catch {
+        showToast(t("errGeneric"));
+      }
+    },
+    [refreshSessions, showToast, t]
+  );
+
+  /** تحميل المحادثة كملف Markdown — النص المرئي فقط (بلا تفكير داخلي ولا توكنز) */
+  const exportSessionMd = useCallback(
+    async (id: string) => {
+      const target = sessions.find((s) => s.id === id);
+      try {
+        const res = await fetch(`/api/messages/${id}`);
+        const data = await res.json().catch(() => ({}));
+        const list: ChatMessage[] = Array.isArray(data.messages) ? data.messages : [];
+        if (list.length === 0) {
+          showToast(t("toastExportFail"));
+          return;
+        }
+        const lines: string[] = [`# ${target?.title || t("newChat")}`, ""];
+        for (const m of list) {
+          if (m.role !== "user" && m.role !== "assistant") continue;
+          lines.push(m.role === "user" ? `## ${t("exportYou")}` : "## MALG", "");
+          let text = String(m.content || "");
+          try {
+            text =
+              m.role === "assistant"
+                ? extractAgentStepsMeta(text).visibleText
+                : extractAttachmentsMeta(text).visibleText;
+          } catch {
+            // خام
+          }
+          lines.push(text.trim() || "…", "");
+        }
+        const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${(target?.title || "chat").slice(0, 40)}.md`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+      } catch {
+        showToast(t("toastExportFail"));
+      }
+    },
+    [sessions, showToast, t]
+  );
+
   const openSettings = useCallback((tab: SettingsTab = "general") => {
     setDrawerOpen(false);
     setSettingsTab(tab);
@@ -1013,6 +1179,7 @@ export default function ChatShell() {
   // الشات الحالي اتقفل؟ (الموديل أنهاه بعد تحذير) → خانة الكتابة بتختفي
   const currentSession = sessions.find((s) => s.id === currentSessionId);
   const currentSessionEnded = !!currentSession?.endedAt;
+  const inTempMode = tempSessionId !== null && currentSessionId === tempSessionId;
 
   // لحد ما نعرف الحساب والشات والرسايل: هيكل تحميل بدل شاشة الترحيب أو رسايل شات قديم
   const messagesLoading =
@@ -1030,6 +1197,10 @@ export default function ChatShell() {
         onSelectSession={handleSelectSession}
         onNewChat={handleNewChat}
         onDeleteSession={handleDeleteSession}
+        onTogglePin={togglePin}
+        onExportSession={exportSessionMd}
+        onNewTempChat={startTempChat}
+        inTempMode={inTempMode}
         user={user}
         quota={quota}
         onOpenAuth={() => {
@@ -1055,7 +1226,18 @@ export default function ChatShell() {
           onNewChat={handleNewChat}
           lockedModel={lockedModel}
           onPickModel={handlePickModel}
+          onShare={currentSessionId && !inTempMode ? () => setShareOpen(true) : undefined}
         />
+
+        {inTempMode && (
+          <div className="flex shrink-0 items-center justify-center gap-2 border-b border-hair bg-surface-2 px-4 py-1.5 text-[12px] text-ink-2">
+            <Timer size={13} className="shrink-0 text-accent" />
+            <span className="truncate">{t("tempBanner")}</span>
+            <button onClick={exitTempChat} className="shrink-0 font-medium text-accent hover:underline">
+              {t("tempExit")}
+            </button>
+          </div>
+        )}
 
         <MessageList
           messages={messages}
@@ -1072,6 +1254,7 @@ export default function ChatShell() {
           onRegenerate={regenerateReply}
           regeneratingMessageId={regeneratingMessageId}
           onEdit={startEdit}
+          onFeedback={sendFeedback}
           actionsDisabled={messageActionsLocked}
         />
 
@@ -1094,6 +1277,18 @@ export default function ChatShell() {
           files={liveStreamFiles && liveStreamFiles.length > 0 ? liveStreamFiles : panelFiles}
           focusPath={panelFocusPath}
           onClose={() => setPanelOpen(false)}
+        />
+      )}
+
+      {shareOpen && currentSessionId && !inTempMode && (
+        <ShareDialog
+          sessionId={currentSessionId}
+          sessionTitle={currentSession?.title || ""}
+          initialToken={currentSession?.shareToken ?? null}
+          onClose={() => setShareOpen(false)}
+          onTokenChange={(token) =>
+            setSessions((prev) => prev.map((s) => (s.id === currentSessionId ? { ...s, shareToken: token } : s)))
+          }
         />
       )}
 
@@ -1167,9 +1362,11 @@ function EditMessageDialog({
 }) {
   const { t } = useSettings();
   const [text, setText] = useState(() => plainUserText(message.content));
+  const [confirmSave, setConfirmSave] = useState(false);
 
   useEffect(() => {
     setText(plainUserText(message.content));
+    setConfirmSave(false);
   }, [message]);
 
   useEffect(() => {
@@ -1197,6 +1394,9 @@ function EditMessageDialog({
           <h2 className="text-[14px] font-semibold text-ink">{t("editMessage")}</h2>
         </div>
         <div className="p-4">
+          <p className="mb-2.5 rounded-md bg-warn-soft px-3 py-2 text-[12.5px] leading-5 text-warn">
+            {t("editDestructiveWarn")}
+          </p>
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -1217,12 +1417,18 @@ function EditMessageDialog({
             {t("editCancel")}
           </button>
           <button
-            onClick={() => void onSave(text)}
+            onClick={() => {
+              if (confirmSave) void onSave(text);
+              else {
+                setConfirmSave(true);
+                setTimeout(() => setConfirmSave(false), 4000);
+              }
+            }}
             disabled={busy || !text.trim()}
             className="flex flex-1 items-center justify-center gap-2 rounded-md bg-accent py-2.5 text-[13.5px] font-semibold text-accent-ink hover:bg-accent-hover disabled:opacity-40"
           >
             {busy && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-accent-ink border-t-transparent" />}
-            {t("editSave")}
+            {confirmSave ? t("editConfirmSave") : t("editSave")}
           </button>
         </div>
       </div>

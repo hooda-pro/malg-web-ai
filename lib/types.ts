@@ -18,6 +18,10 @@ export interface ChatSession {
   endedReason?: string | null;
   /** 'abuse' = الموديل قفلها بعد تحذير، 'user' = المستخدم طلب القفل وأكّد */
   endedBy?: "abuse" | "user" | null;
+  /** مثبتة أعلى القايمة */
+  isPinned?: boolean;
+  /** توكن المشاركة العامة — null = غير مشاركة */
+  shareToken?: string | null;
 }
 
 export interface ChatMessage {
@@ -30,6 +34,8 @@ export interface ChatMessage {
   isTruncated: boolean;
   tokensUsed: number;
   createdAt: string;
+  /** تقييم المستخدم للرد: 1 مفيد، -1 غير مفيد، null/undefined بلا تقييم */
+  feedback?: 1 | -1 | null;
   /**
    * مفتاح React ثابت على مستوى الواجهة بس (مش بيتخزّن في الداتابيز). بنستخدمه عشان
    * رسالة المستخدم المتفائلة (tmp-…) ورد المساعد الحيّ يفضلوا نفس عنصر الـDOM بعد ما

@@ -49,6 +49,7 @@ export default function MessageList({
   onRegenerate,
   regeneratingMessageId,
   onEdit,
+  onFeedback,
   actionsDisabled,
 }: {
   messages: ChatMessage[];
@@ -65,6 +66,7 @@ export default function MessageList({
   onRegenerate?: (messageId: string) => void;
   regeneratingMessageId?: string | null;
   onEdit?: (message: ChatMessage) => void;
+  onFeedback?: (messageId: string, rating: 1 | -1) => void;
   actionsDisabled?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -163,6 +165,7 @@ export default function MessageList({
       onRegenerate={onRegenerate}
       isRegenerating={regeneratingMessageId === m.id}
       onEdit={m.role === "user" ? onEdit : undefined}
+      onFeedback={onFeedback}
       actionsDisabled={actionsDisabled}
     />
   ));

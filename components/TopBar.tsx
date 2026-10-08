@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, Coins, Lock, PanelLeft, SquarePen } from "lucide-react";
+import { Check, ChevronDown, Coins, Lock, PanelLeft, Share2, SquarePen } from "lucide-react";
 import { formatTokens } from "@/lib/ai";
 import { IconButton } from "./ui/Controls";
 import { AVAILABLE_MODELS, useSettings, type ModelId } from "./SettingsContext";
@@ -16,6 +16,7 @@ export default function TopBar({
   onNewChat,
   lockedModel,
   onPickModel,
+  onShare,
 }: {
   onToggleDrawer: () => void;
   sidebarCollapsed: boolean;
@@ -26,6 +27,8 @@ export default function TopBar({
   /** الموديل اللي الشات الحالي متثبت عليه (لو اتبعت فيه رسايل بالفعل) */
   lockedModel?: ModelId | null;
   onPickModel: (id: ModelId) => void;
+  /** مشاركة المحادثة الحالية برابط — null = الزرار مخفي (مؤقت/لا جلسة) */
+  onShare?: (() => void) | null;
 }) {
   const { t } = useSettings();
 
@@ -50,6 +53,11 @@ export default function TopBar({
       )}
 
       <div className="ms-auto flex items-center gap-1">
+        {onShare && (
+          <IconButton label={t("shareChat")} onClick={onShare}>
+            <Share2 size={17} />
+          </IconButton>
+        )}
         <IconButton
           label={t("newChat")}
           onClick={onNewChat}

@@ -233,6 +233,23 @@ export function ensureSchema(): Promise<void> {
       // بروتوكول المزوّد (chat_completions / responses) — يُضاف للقواعد القديمة بأمان
       await sql`ALTER TABLE provider_settings ADD COLUMN IF NOT EXISTS protocol TEXT NOT NULL DEFAULT 'chat_completions'`;
 
+      // ——— تثبيت المحادثات + المؤقتة + المشاركة برابط (تفاعلات المستخدم) ———
+      await sql`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN NOT NULL DEFAULT FALSE`;
+      await sql`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS is_temp BOOLEAN NOT NULL DEFAULT FALSE`;
+      await sql`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS share_token TEXT`;
+      await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_share_token ON chat_sessions(share_token) WHERE share_token IS NOT NULL`;
+
+      // ——— تقييم الردود (👍👎) ———
+      await sql`
+        CREATE TABLE IF NOT EXISTS message_feedback (
+          message_id TEXT PRIMARY KEY REFERENCES chat_messages(id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL,
+          session_id TEXT NOT NULL,
+          rating SMALLINT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `;
+
       // ——— إعدادات عامة key/value (البحث وغيره) — الأدمن بيغيّرها من لوحة الإدارة ———
       await sql`
         CREATE TABLE IF NOT EXISTS app_settings (
