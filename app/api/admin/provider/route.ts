@@ -35,8 +35,18 @@ export async function POST(req: NextRequest) {
 
   await ensureSchema();
 
-  const body = await req.json().catch(() => ({}));
-  const checked = validateProviderInput(body ?? {});
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  // لو الأدمن عدّل الإعدادات من غير ما يبعت مفاتيح (إدارة المفاتيح بقى ليها
+  // كارت مستقل)، نحتفظ بالمفاتيح المحفوظة بدل ما نمسحها. أول حفظ فقط هو
+  // اللي بيتطلب مفاتيح — validateProviderInput بيرفض الفاضي بنفس رسالته.
+  const rawKeys = (body as { apiKeys?: unknown }).apiKeys;
+  const keysProvided = Array.isArray(rawKeys)
+    ? rawKeys.length > 0
+    : String(rawKeys ?? "").trim().length > 0;
+  const savedBefore = await getSavedProvider();
+  const checked = validateProviderInput(
+    keysProvided ? body : { ...body, apiKeys: savedBefore?.apiKeys ?? [] }
+  );
   if (!checked.ok) {
     return NextResponse.json({ error: checked.error }, { status: 400 });
   }

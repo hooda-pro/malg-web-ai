@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureSchema } from "@/lib/db";
 import { requireAdmin } from "@/lib/adminGuard";
-import { validateProviderInput, resolveProviderEndpoint } from "@/lib/provider";
+import { getSavedProvider, validateProviderInput, resolveProviderEndpoint } from "@/lib/provider";
 import { buildUpstreamBody, classifyUpstreamError, extractResponsesSample } from "@/lib/ai";
 
 export const dynamic = "force-dynamic";
@@ -20,13 +20,33 @@ export async function POST(req: NextRequest) {
 
   await ensureSchema();
 
-  const body = await req.json().catch(() => ({}));
-  const checked = validateProviderInput(body ?? {});
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown> & { savedKeyIndex?: unknown };
+  // وضعان: (1) اختبار قيم الفورم بمفتاح خام مبعوت (أول إعداد قبل الحفظ)،
+  // (2) اختبار بمفتاح محفوظ محدد برقمه — للحقول المعدلة أو لزر اختبار كل مفتاح
+  // في كارت المفاتيح. المفتاح المحفوظ لا يخرج من السيرفر أبدًا.
+  const savedIdx = typeof body.savedKeyIndex === "number" ? body.savedKeyIndex : null;
+  const checked = validateProviderInput(
+    savedIdx !== null ? { ...body, apiKeys: ["validation-placeholder-key"] } : body
+  );
   if (!checked.ok) {
     return NextResponse.json({ error: checked.error }, { status: 400 });
   }
   const v = checked.value;
-  const key = v.apiKeys[0];
+  let key: string;
+  let displayName = v.name;
+  if (savedIdx !== null) {
+    const saved = await getSavedProvider();
+    if (!saved) {
+      return NextResponse.json({ error: "لا يوجد مزوّد محفوظ — احفظ الإعداد الأول" }, { status: 400 });
+    }
+    if (!Number.isInteger(savedIdx) || savedIdx < 0 || savedIdx >= saved.apiKeys.length) {
+      return NextResponse.json({ error: "المفتاح غير موجود — حدّث الصفحة وحاول تاني" }, { status: 400 });
+    }
+    key = saved.apiKeys[savedIdx];
+    displayName = saved.name;
+  } else {
+    key = v.apiKeys[0];
+  }
   const endpoint = resolveProviderEndpoint(v.baseUrl, v.protocol);
 
   const controller = new AbortController();
@@ -61,7 +81,7 @@ export async function POST(req: NextRequest) {
     const text = await res.text().catch(() => "");
     // server log تشخيصي بدون المفتاح
     console.error(
-      `[MALG provider test] provider="${v.name}" model="${v.model}" protocol=${v.protocol} endpoint=${endpoint} status=${res.status} body=${text.slice(0, 300)}`
+      `[MALG provider test] provider="${displayName}" model="${v.model}" protocol=${v.protocol} endpoint=${endpoint} status=${res.status} body=${text.slice(0, 300)}`
     );
     if (res.ok) {
       let sample = "";
