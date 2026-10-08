@@ -549,7 +549,7 @@ export default function ActivityBlock({
         <span className="min-w-0 flex-1 truncate text-ink-2" dir="auto">
           {isActive ? liveText : doneText}
         </span>
-        
+
       </div>
     );
   }
@@ -573,7 +573,7 @@ export default function ActivityBlock({
           {isActive ? liveText : doneText}
         </span>
         {headerMeta && <span className="tnum shrink-0 text-[11.5px] text-ink-3">{headerMeta}</span>}
-        
+
         <ChevronRight size={12} className={cn("chev shrink-0 opacity-60 group-hover:opacity-100", open && "chev-open")} />
       </button>
 
