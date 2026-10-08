@@ -1075,6 +1075,9 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
         emit("content", note);
         contentParts.push(note);
       } else if (timeCutOff) {
+        console.warn(
+          "[MALG time-cutoff] elapsedMs=" + (Date.now() - requestStart) + " emittedChars=" + emittedChars + " toolTokens=" + toolTokens
+        );
         emit("content", TIME_CUTOFF_NOTE);
         contentParts.push(TIME_CUTOFF_NOTE);
       }
