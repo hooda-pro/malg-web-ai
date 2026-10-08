@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useMemo, useRef, useState, type ReactNode } from "react";
-import { Check, ChevronRight, Copy, Eye, FileArchive, FileText, Pencil, Play, RefreshCw, Trash2, Zap } from "lucide-react";
+import { Check, ChevronRight, Copy, Eye, FileArchive, FileText, Pencil, Play, RefreshCw, Trash2 } from "lucide-react";
 import type { ChatMessage } from "@/lib/types";
 import type { ProjectFile } from "@/lib/parseContent";
 import { extractDeliverableFiles, parseMessageContent, parseStreamingContent } from "@/lib/parseContent";
@@ -280,7 +280,7 @@ function MessageItem({
 
   return (
     <article
-      className={cn("msg-in w-full px-4 py-4 sm:px-6", animateIn && "animate-rise")}
+      className={cn("group msg-in w-full px-4 py-4 sm:px-6", animateIn && "animate-rise")}
       aria-busy={isLive || undefined}
       aria-live={isLive ? "polite" : undefined}
     >
@@ -288,12 +288,6 @@ function MessageItem({
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
             <span className="text-[12px] font-medium tracking-label text-ink-3">MALG</span>
-            {!isLive && message.tokensUsed > 0 && (
-              <span className="tnum inline-flex items-center gap-1 text-[11.5px] text-ink-3">
-                <Zap size={11} className="text-accent" />
-                {message.tokensUsed.toLocaleString("en-US")}
-              </span>
-            )}
             {!isLive && showTime && (
               <span className="tnum text-[11.5px] text-ink-3">{formatTime(message.createdAt)}</span>
             )}
@@ -380,7 +374,12 @@ function MessageItem({
 
           {/* صف النسخ محجوز مكانه من أول لحظة (مخفي أثناء البث) عشان الرسالة متزيدش
               ارتفاع فجأة لحظة ما تخلص. */}
-          <div className={cn("mt-2 flex items-center gap-1", isLive && "invisible")}>
+          <div
+            className={cn(
+              "mt-2 flex items-center gap-1 transition-opacity duration-1 focus-within:opacity-100 [@media(hover:none)]:opacity-100",
+              isLive ? "invisible" : "opacity-0 group-hover:opacity-100"
+            )}
+          >
             <button
               onClick={handleCopy}
               tabIndex={isLive ? -1 : undefined}

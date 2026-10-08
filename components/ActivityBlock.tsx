@@ -41,7 +41,7 @@ export interface ThinkingState {
   live: boolean;
 }
 
-function StatusIcon({ status, live }: { status: AgentStep["status"]; live?: boolean }) {
+function StatusIcon({ status }: { status: AgentStep["status"] }) {
   if (status === "done")
     return (
       <span className="animate-pop grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full bg-live-soft text-live">
@@ -55,12 +55,7 @@ function StatusIcon({ status, live }: { status: AgentStep["status"]; live?: bool
       </span>
     );
   return (
-    <span
-      className={cn(
-        "grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full bg-accent-soft text-accent",
-        live && "live-dot"
-      )}
-    >
+    <span className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full bg-accent-soft text-accent">
       <Loader2 size={11} className="animate-spin" />
     </span>
   );
@@ -532,7 +527,7 @@ export default function ActivityBlock({
       : null;
 
   const statusDot = isActive ? (
-    <span className="live-dot grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full bg-accent-soft text-accent">
+    <span className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full bg-accent-soft text-accent">
       <Loader2 size={11} className="animate-spin" />
     </span>
   ) : hasError ? (
@@ -554,13 +549,7 @@ export default function ActivityBlock({
         <span className="min-w-0 flex-1 truncate text-ink-2" dir="auto">
           {isActive ? liveText : doneText}
         </span>
-        {isActive && (
-          <span className="typing-dots shrink-0" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </span>
-        )}
+        
       </div>
     );
   }
@@ -584,13 +573,7 @@ export default function ActivityBlock({
           {isActive ? liveText : doneText}
         </span>
         {headerMeta && <span className="tnum shrink-0 text-[11.5px] text-ink-3">{headerMeta}</span>}
-        {isActive && (
-          <span className="typing-dots shrink-0" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </span>
-        )}
+        
         <ChevronRight size={12} className={cn("chev shrink-0 opacity-60 group-hover:opacity-100", open && "chev-open")} />
       </button>
 
@@ -603,17 +586,10 @@ export default function ActivityBlock({
         )}
       >
         <div className="min-h-0 overflow-hidden">
-          {/* تايم لاين رفيع: خط رأسي + نقاط حالة، من غير بطاقة كبيرة */}
-          <ol className="relative ms-[12px] mt-1.5 space-y-px border-s border-hair ps-3.5">
+          {/* صفوف هادئة بفواصل شعرية — بلا خط زمني ولا نقاط، بأسلوب كلود */}
+          <ol className="mt-1.5 space-y-px">
             {thinking && (
-              <li className="relative pb-0.5">
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    "absolute -start-[19px] top-[9px] h-[7px] w-[7px] rounded-full border-2 border-surface",
-                    thinking.live ? "bg-accent pulse-dot" : "bg-live"
-                  )}
-                />
+              <li className="pb-0.5">
                 <ThinkingRow
                   thinking={thinking}
                   open={thinkingOpen}
@@ -622,14 +598,7 @@ export default function ActivityBlock({
               </li>
             )}
             {steps.map((step) => (
-              <li key={step.id} className="relative pb-0.5 last:pb-0">
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    "absolute -start-[19px] top-[9px] h-[7px] w-[7px] rounded-full border-2 border-surface",
-                    step.status === "done" ? "bg-live" : step.status === "error" ? "bg-danger" : "bg-accent pulse-dot"
-                  )}
-                />
+              <li key={step.id} className="border-t border-hair py-0.5 first:border-t-0 last:pb-0">
                 <StepRow
                   step={step}
                   open={stepOpen[step.id] ?? step.status === "error"}
