@@ -36,7 +36,7 @@ import {
   type AgentStepDetail,
 } from "@/lib/agentEvents";
 import { createHash } from "crypto";
-import { getSandboxMemoryMb, isSandboxConfigured, SESSION_BUDGET_MS, SandboxSession } from "@/lib/sandbox";
+import { getSandboxMemoryMb, isSandboxConfigured, SandboxSession } from "@/lib/sandbox";
 import {
   EDIT_FILE_TOOL,
   LIST_FILES_TOOL,
@@ -92,14 +92,16 @@ const IMAGE_TOKEN_ESTIMATE = 800;
 // ميزانية الملفات الصغيرة اللي بتتحط inline في الرسايل الأقدم (الأحدث بياخد الميزانية الكاملة).
 const OLDER_INLINE_BUDGET_CHARS = 8_000;
 
-// --- الميزانية الزمنية للرد الواحد (maxDuration = 300 ثانية، والعدّ من لحظة وصول الطلب) ---
+// --- الميزانية الزمنية للرد الواحد (maxDuration = 800 ثانية للخطط المدفوعة، والعدّ من لحظة وصول الطلب) ---
 // قبل كده مفيش أي حد زمني على مستوى الطلب كله: كل نداء موديل + كل أمر كانوا بيتجمعوا لحد ما المنصة
 // تقتل الدالة عند 300 ثانية، وبما إن الرد بيتحفظ في الآخر خالص، النتيجة كانت: الرد يقطع ومفيش
 // حاجة تتحفظ. دلوقتي:
 //  - بعد NO_NEW_ROUND_AFTER_MS منبدأش جولة أدوات جديدة، ونروح على نداء الخلاصة النهائي.
 //  - بعد HARD_STOP_MS بنقفل قراءة الموديل ونحفظ اللي وصل (ومعاه زرار «كمّل»).
-const NO_NEW_ROUND_AFTER_MS = SESSION_BUDGET_MS + 5_000;
-const HARD_STOP_MS = 275_000;
+// حد بدء الجولات منفصل عن ميزانية الـ sandbox (200 ثانية للأوامر) — هنا انضباط
+// حلقات الأدوات فقط، مع إبقاء ذيل ~180 ثانية للخلاصة والحفظ قبل قتل المنصة.
+const NO_NEW_ROUND_AFTER_MS = 600_000;
+const HARD_STOP_MS = 780_000;
 // لو الأوامر فشلت كده ورا بعض، بنسحب أداة run_command ونطلب من الموديل يكتب الملفات ويلخّص بصراحة.
 const MAX_CONSECUTIVE_COMMAND_FAILURES = 3;
 // نبض كل 10 ثواني عشان أي بروكسي/شبكة موبايل ماتقفلش الاتصال أثناء أمر طويل (npm install...).
@@ -110,7 +112,7 @@ const TIME_CUTOFF_NOTE =
   "\n\n⏱️ وصلت للحد الزمني للرد الواحد فوقفت هنا وحفظت اللي اتعمل. ابعت «كمّل» وأكمل من نفس النقطة.";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
+export const maxDuration = 800;
 
 export async function POST(req: NextRequest) {
   const guard: { lease: GenerationLease | null } = { lease: null };

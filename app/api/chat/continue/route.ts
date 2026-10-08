@@ -24,7 +24,7 @@ import { findUnclosedFence } from "@/lib/parseContent";
 import { API_INLINE_TOTAL_MAX_CHARS, extractAttachmentsMeta, toApiUserContent } from "@/lib/attachments";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
+export const maxDuration = 800;
 
 const CONTINUE_INSTRUCTION =
   "تابع من حيث توقفت بالضبط في ردك السابق. اكمل مباشرة بدون إعادة أو تلخيص أي جزء " +
