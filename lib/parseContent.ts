@@ -29,6 +29,37 @@ function autoFileName(lang: string, used: Map<string, number>): string {
   return n === 0 ? key : `${base}-${n + 1}.${ext}`;
 }
 
+/** نتيجة فحص ذيل النص عن كتلة كود مفتوحة غير مقفولة (رد اتقطع في نص ملف). */
+export interface UnclosedFence {
+  language: string;
+  path: string;
+  body: string;
+}
+
+/**
+ * بيلاقي كتلة كود مفتوحة وغير مقفولة في النص — بيشيل الكتل المقفولة الأول
+ * وبعدين يدور على فتحة الكود بلا إغلاق بعدها. بيرجع null لو كل الكتل مقفولة
+ * أو مفيش كتل أصلًا. مستخدم في العرض (إخفاء الكود الناقص من الشات وإظهاره
+ * في كارت الملفات مع زرار «كمّل») وفي التكملة (تعليمات تكملة داخل نفس
+ * الكتلة بدل فتح واحدة جديدة مكررة).
+ */
+export function findUnclosedFence(content: string): UnclosedFence | null {
+  // نشيل الكتل المقفولة الأول — الباقي بس هو اللي ممكن يكون مقطوعًا.
+  // (سطر الإغلاق  نفسه بيطابق نمط الفتحة، فمن غير الخطوة دي أي رد مقفول
+  // كان هيتفسر غلط على إنه مفتوح.)
+  const withoutClosed = content.replace(new RegExp(GENERIC_FENCE_REGEX), "");
+  const m = /```([a-zA-Z0-9_+\-]*)(?:[ \t]+path="([^"]*)")?[ \t]*\r?\n([\s\S]*)$/.exec(withoutClosed);
+  if (!m) return null;
+  return { language: m[1] || "", path: (m[2] || "").trim(), body: m[3] };
+}
+
+/** هل الكتلة المفتوحة دي كود حقيقي يستاهل يتعامل كملف؟ (حماية من سطر  عابر
+ * في شرح نصي: فتحة عارية بسطر واحد بعده تفضل نصًا عاديًا.) */
+function isRealCodeBlock(open: UnclosedFence): boolean {
+  if (!open.body.replace(/\n+$/, "").trim()) return false;
+  return !!(open.path || open.language || open.body.includes("\n"));
+}
+
 /** يستخرج كل كتل الكود كملفات: اللي عليها path بياخده، واللي من غيره بيتسمى تلقائيًا.
  * ده بيضمن إن أي كود يكتبه الموديل عمره ما يظهر كنص في الشات — دايمًا ملف. */
 export function extractProjectFiles(content: string): ProjectFile[] {
@@ -44,6 +75,16 @@ export function extractProjectFiles(content: string): ProjectFile[] {
     const path = explicit ? explicit.replace(/^\//, "") || "file.txt" : autoFileName(lang, used);
     files.push({ path, content: fileContent });
   }
+  // ذيل غير مقفول (الرد اتقطع في نص ملف): اعتبره ملفًا ناقصًا بدل رميه كنص خام
+  // في الشات — كده يظهر في كارت الملفات والمعاينة مع زرار «كمّل»، ولما التكملة
+  // تكمله بيندمج في نفس الملف بدل ما يظهر مكررًا.
+  const open = findUnclosedFence(content);
+  if (open && isRealCodeBlock(open)) {
+    const body = open.body.replace(/\n+$/, "");
+    const path = open.path ? open.path.replace(/^\//, "") || "file.txt" : autoFileName(open.language, used);
+    files.push({ path, content: body });
+  }
+  // فتحة فاضية أو عابرة: تُسقط بصمت بدل عرض سطر ``` خام في الشات.
   return files;
 }
 
@@ -81,8 +122,25 @@ export function parseMessageContent(content: string): ContentSegment[] {
     lastIndex = match.index + match[0].length;
   }
   if (lastIndex < content.length) {
-    const text = content.slice(lastIndex);
-    if (text.trim()) segments.push({ type: "text", text });
+    const tail = content.slice(lastIndex);
+    // ذيل غير مقفول: نحوّله لكتلة كود (تتخبى في كارت الملفات لو فيه ملفات)
+    // بدل ما يظهر كنص خام بعلامات ``` في الشات.
+    const openMatch = /\`\`\`([a-zA-Z0-9_+\-]*)(?:[ \t]+path="[^"]*")?[ \t]*\r?\n/.exec(tail);
+    if (openMatch && openMatch.index !== undefined) {
+      const before = tail.slice(0, openMatch.index);
+      if (before.trim()) segments.push({ type: "text", text: before });
+      const code = tail.slice(openMatch.index + openMatch[0].length).replace(/\n+$/, "");
+      const looksReal = !!(openMatch[1] || code.trim().includes("\n"));
+      if (code.trim() && looksReal) {
+        segments.push({ type: "code", language: openMatch[1] || "text", code });
+      } else if (!code.trim()) {
+        // فتحة فاضية بلا محتوى: تُسقط بصمت.
+      } else {
+        segments.push({ type: "text", text: tail });
+      }
+    } else if (tail.trim()) {
+      segments.push({ type: "text", text: tail });
+    }
   }
   if (segments.length === 0 && content.trim()) {
     segments.push({ type: "text", text: content });

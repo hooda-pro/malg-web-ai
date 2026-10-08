@@ -558,9 +558,10 @@ export async function readUpstreamStream(
     if (type === "response.completed" || type === "response.incomplete" || type === "response.failed") {
       if (type === "response.completed") finishReason = finishReason ?? "stop";
       else if (type === "response.incomplete") {
-        const resp = json.response as Record<string, unknown> | undefined;
-        const reason = (resp?.incomplete_details as Record<string, unknown> | undefined)?.reason;
-        finishReason = finishReason ?? (reason === "max_output_tokens" ? "length" : "stop");
+        // أي incomplete معناه الرد اتقطع والمفروض يكمل — لازم finishReason تبقى
+        // "length" عشان زرار «كمّل» يظهر وعلامة is_truncated تتسجل. (حتى لو السبب
+        // فلترة محتوى، التكملة سلوكها آمن: الموديل بيرفض تاني باختصار.)
+        finishReason = finishReason ?? "length";
       }
       // احتياطي: استخراج المحتوى الكامل لو الـ deltas لم تصل
       const resp = (json.response ?? json) as Record<string, unknown>;

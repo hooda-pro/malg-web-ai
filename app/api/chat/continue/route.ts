@@ -19,6 +19,8 @@ import {
   type ApiMessage,
 } from "@/lib/ai";
 import { buildPersonalizationBlock, buildSystemPrompt } from "@/lib/systemPrompt";
+import { extractAgentStepsMeta } from "@/lib/agentEvents";
+import { findUnclosedFence } from "@/lib/parseContent";
 import { API_INLINE_TOTAL_MAX_CHARS, extractAttachmentsMeta, toApiUserContent } from "@/lib/attachments";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +29,15 @@ export const maxDuration = 300;
 const CONTINUE_INSTRUCTION =
   "تابع من حيث توقفت بالضبط في ردك السابق. اكمل مباشرة بدون إعادة أو تلخيص أي جزء " +
   "سبق كتابته، وبدون أي مقدمة أو تعليق إضافي — فقط استكمل النص/الكود من آخر نقطة وصلت لها.";
+
+// لو الرد السابق اتقطع في نص كتلة كود مفتوحة ( بلا إغلاق)، التكملة العامة
+// بتخلي الموديل يعيد الملف من الأول أو يفتح كتلة جديدة مكررة — فبنبعت تعليمات
+// تكملة داخل نفس الكتلة: يكمل من أول سطر ناقص ويقفلها، من غير إعادة ولا مقدمات.
+const CONTINUE_FENCE_INSTRUCTION =
+  "ردك السابق اتقطع في نص كتلة كود مفتوحة (آخر ``` بلا سطر إغلاق). أكمل الكود " +
+  "مباشرة من أول سطر ناقص داخل نفس الكتلة المفتوحة — ابدأ من حيث توقفت بالضبط، " +
+  "وعند الانتهاء أغلق الكتلة بسطر ``` وحده. ممنوع إعادة كتابة أي سطر سبق، " +
+  "وممنوع فتح كتلة كود جديدة، وممنوع أي مقدمة أو شرح قبل التكملة.";
 
 export async function POST(req: NextRequest) {
   const guard: { lease: GenerationLease | null } = { lease: null };
@@ -162,7 +173,19 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
             : m.content,
       }));
     })(),
-    { role: "user", content: CONTINUE_INSTRUCTION },
+    {
+      role: "user",
+      // النص المرئي بس (من غير كتلة بيانات خطوات الـAgent المخفية) هو اللي
+      // بيتفحص — وإلا سطر الإغلاق الوهمي جوه الـJSON كان هيلخبط الفحص.
+      content: (() => {
+        try {
+          const visible = extractAgentStepsMeta(existing.content ?? "").visibleText;
+          return findUnclosedFence(visible) ? CONTINUE_FENCE_INSTRUCTION : CONTINUE_INSTRUCTION;
+        } catch {
+          return CONTINUE_INSTRUCTION;
+        }
+      })(),
+    },
   ];
 
   const controller = new AbortController();
