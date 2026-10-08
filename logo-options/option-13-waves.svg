@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="w13a" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2F96FF"/>
+      <stop offset="1" stop-color="#0058C7"/>
+    </linearGradient>
+    <linearGradient id="w13b" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8FD0FF"/>
+      <stop offset="1" stop-color="#0A84FF"/>
+    </linearGradient>
+    <linearGradient id="w13c" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#BFE3FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="#0B0D10"/>
+  <path d="M10 40c6-1.5 9-5 11-10 2-4.5 5-8 10-9.5-3 3.5-4 7-4.5 11-.5 4.5-2.5 8-6.5 10.5-3 2-6.5 2.5-10-.5 0-1 0-1 0-1.5Z" fill="url(#w13a)"/>
+  <path d="M22 44.5c5-1 7.5-4 9-8.5 1.5-4 4-7 8-8.5-2.5 3-3.5 6-4 9.5-.5 4-2 7-5.5 9-2.5 1.5-5.5 2-8.5-.5l1-1Z" fill="url(#w13b)"/>
+  <path d="M33 48c4-.8 6-3.2 7.2-6.8 1.2-3.2 3.2-5.6 6.4-6.8-2 2.4-2.8 4.8-3.2 7.6-.4 3.2-1.6 5.6-4.4 7.2-2 1.2-4.4 1.6-6.8-.4l.8-.8Z" fill="url(#w13c)"/>
+</svg>

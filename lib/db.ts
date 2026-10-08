@@ -1,0 +1,253 @@
+import bcrypt from "bcryptjs";
+import { randomUUID } from "crypto";
+import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+
+// مهم: ما بنعملش neon(...) على مستوى الملف مباشرة، عشان Next.js بيستورد
+// الملف ده وقت الـ build (خطوة "Collecting page data") حتى لو الراوت
+// نفسه مش بيتنفذ — ولو DATABASE_URL مش متاح في اللحظة دي، هيوقع الـ build
+// كله. بدل كده بنأجل إنشاء الاتصال لحد أول استعلام فعلي وقت الطلب (runtime).
+let _sql: NeonQueryFunction<false, false> | null = null;
+
+function getClient(): NeonQueryFunction<false, false> {
+  if (!_sql) {
+    const connectionString = process.env.DATABASE_URL || "";
+    if (!connectionString) {
+      throw new Error(
+        "DATABASE_URL مش متضبط في متغيرات البيئة — ضيفه في Vercel Project Settings > Environment Variables (رابط الاتصال من Neon) وأعد النشر."
+      );
+    }
+    _sql = neon(connectionString);
+  }
+  return _sql;
+}
+
+// نفس شكل الاستخدام القديم: sql`SELECT ...` — لكن الاتصال الحقيقي
+// بيتعمل بس أول مرة تتنفذ فيها الدالة دي فعليًا.
+export const sql: NeonQueryFunction<false, false> = ((strings: TemplateStringsArray, ...values: unknown[]) =>
+  getClient()(strings, ...values)) as unknown as NeonQueryFunction<false, false>;
+
+let schemaReady: Promise<void> | null = null;
+
+/**
+ * بيتأكد إن فيه حساب أدمن واحد على الأقل في القاعدة — لو مفيش، بينشئ الحساب الافتراضي.
+ * الإيميل والباسورد بيتظبطوا من متغيرات البيئة ADMIN_EMAIL و ADMIN_PASSWORD
+ * (لو مش موجودين، مفيش حساب أدمن هيتعمل تلقائيًا — لازم تظبطهم في Vercel).
+ */
+async function seedDefaultAdmin() {
+  try {
+    const existing = await sql`SELECT id FROM users WHERE is_admin = TRUE LIMIT 1`;
+    if (existing.length > 0) return;
+
+    const email = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+    const password = process.env.ADMIN_PASSWORD || "";
+
+    if (!email || !password) {
+      console.error(
+        "[seed] ADMIN_EMAIL و/أو ADMIN_PASSWORD مش متظبطين في متغيرات البيئة — " +
+          "مفيش حساب أدمن هيتعمل تلقائيًا لأسباب أمنية. ضيفهم في Vercel Project " +
+          "Settings > Environment Variables (باسورد قوي وطويل) وأعد النشر."
+      );
+      return;
+    }
+    if (password.length < 12) {
+      console.error(
+        "[seed] ADMIN_PASSWORD قصير جدًا (أقل من 12 حرف) — اختار باسورد أقوى وأعد النشر. مفيش حساب أدمن هيتعمل دلوقتي."
+      );
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const id = randomUUID();
+
+    await sql`
+      INSERT INTO users (id, email, password_hash, display_name, is_admin, profile_complete)
+      VALUES (${id}, ${email}, ${passwordHash}, 'Admin', TRUE, TRUE)
+      ON CONFLICT (email) DO UPDATE SET is_admin = TRUE
+    `;
+    await sql`
+      INSERT INTO user_quota (user_id, total_allocated_tokens, used_tokens)
+      VALUES (${id}, 99000000, 0)
+      ON CONFLICT (user_id) DO NOTHING
+    `;
+    console.log(`[seed] تم إنشاء حساب الأدمن الافتراضي: ${email}`);
+  } catch (e) {
+    console.error("seedDefaultAdmin error", e);
+  }
+}
+
+/**
+ * ينشئ الجداول لو مش موجودة (idempotent). بتتكرر النتيجة بأمان.
+ * بتتنفذ مرة واحدة لكل نسخة سيرفر شغالة (cold start) بفضل الـ promise cache.
+ */
+export function ensureSchema(): Promise<void> {
+  if (!schemaReady) {
+    schemaReady = (async () => {
+      await sql`
+        CREATE TABLE IF NOT EXISTS users (
+          id TEXT PRIMARY KEY,
+          email TEXT UNIQUE NOT NULL,
+          password_hash TEXT,
+          display_name TEXT NOT NULL,
+          is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `;
+
+      // ——— تسجيل الدخول بجوجل (Firebase Auth): مفيش باسورد للحسابات دي ———
+      await sql`ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL`;
+      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uid TEXT`;
+      await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_firebase_uid ON users(firebase_uid) WHERE firebase_uid IS NOT NULL`;
+      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER`;
+      // الحسابات القديمة (بريد/باسورد، زي الأدمن) تعتبر بياناتها مكتملة افتراضيًا
+      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_complete BOOLEAN NOT NULL DEFAULT TRUE`;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS chat_sessions (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          title TEXT NOT NULL DEFAULT 'محادثة جديدة',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS idx_sessions_user ON chat_sessions(user_id)`;
+
+      // ——— إنهاء المحادثة (زي Claude): تحذيرات محترمة الأول، وبعدين قفل نهائي للشات ———
+      await sql`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS abuse_warnings INTEGER NOT NULL DEFAULT 0`;
+      await sql`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ`;
+      await sql`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS ended_reason TEXT`;
+      // مين قفل: 'abuse' (سلوك مسيء بعد تحذير) أو 'user' (المستخدم طلب وأكّد)
+      await sql`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS ended_by TEXT`;
+      // الموديل سأل المستخدم عن تأكيد قفل الشات في رده الأخير وبيستنى الإجابة (صالح لرسالة واحدة)
+      await sql`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS close_pending BOOLEAN NOT NULL DEFAULT FALSE`;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS chat_messages (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+          role TEXT NOT NULL,
+          content TEXT NOT NULL,
+          reasoning TEXT,
+          thinking_duration_ms BIGINT,
+          is_truncated BOOLEAN NOT NULL DEFAULT FALSE,
+          tokens_used INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS idx_messages_session ON chat_messages(session_id)`;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS user_quota (
+          user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          total_allocated_tokens BIGINT NOT NULL DEFAULT 100000,
+          used_tokens BIGINT NOT NULL DEFAULT 0,
+          quota_exhausted_at TIMESTAMPTZ,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `;
+
+      // حجز «رد واحد شغال في نفس الوقت» لكل مستخدم (lib/usageGuard.ts)
+      await sql`ALTER TABLE user_quota ADD COLUMN IF NOT EXISTS busy_until TIMESTAMPTZ`;
+      await sql`ALTER TABLE user_quota ADD COLUMN IF NOT EXISTS busy_token TEXT`;
+      // فهرس لحساب حد الرسايل في الدقيقة/الساعة بسرعة
+      await sql`CREATE INDEX IF NOT EXISTS idx_messages_created ON chat_messages(created_at)`;
+
+      // ——— الأدمن: أعمدة الحظر + سجل الإجراءات ———
+      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_banned BOOLEAN NOT NULL DEFAULT FALSE`;
+      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_at TIMESTAMPTZ`;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS admin_logs (
+          id TEXT PRIMARY KEY,
+          admin_id TEXT NOT NULL,
+          admin_email TEXT NOT NULL,
+          action TEXT NOT NULL,
+          target_user_id TEXT,
+          target_email TEXT,
+          details TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `;
+
+      // ——— API للمطورين: مفاتيح API + رصيد منفصل تمامًا عن رصيد الشات + لوج استخدام ———
+      await sql`
+        CREATE TABLE IF NOT EXISTS api_keys (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          label TEXT NOT NULL DEFAULT 'مفتاح API',
+          key_prefix TEXT NOT NULL,
+          key_hash TEXT NOT NULL UNIQUE,
+          model_id TEXT NOT NULL,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          last_used_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id)`;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS user_api_quota (
+          user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          total_allocated_tokens BIGINT NOT NULL DEFAULT 0,
+          used_tokens BIGINT NOT NULL DEFAULT 0,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS api_usage_logs (
+          id TEXT PRIMARY KEY,
+          api_key_id TEXT NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL,
+          model_id TEXT NOT NULL,
+          tokens_used INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS idx_api_usage_user ON api_usage_logs(user_id)`;
+
+      // ——— Rate limiting مشترك بين كل نسخ السيرفر (lib/rateLimit.ts → checkRateLimitShared) ———
+      await sql`
+        CREATE TABLE IF NOT EXISTS rate_limits (
+          key TEXT PRIMARY KEY,
+          count INTEGER NOT NULL DEFAULT 0,
+          window_start TIMESTAMPTZ NOT NULL DEFAULT now(),
+          blocked_until TIMESTAMPTZ
+        )
+      `;
+
+      // ——— إعداد مزوّد الموديل النشط (lib/provider.ts) — الأدمن بيغيّره من لوحة الإدارة ———
+      await sql`
+        CREATE TABLE IF NOT EXISTS provider_settings (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL DEFAULT 'مزود مخصص',
+          base_url TEXT NOT NULL,
+          model TEXT NOT NULL,
+          api_keys TEXT[] NOT NULL DEFAULT '{}',
+          temperature DOUBLE PRECISION NOT NULL DEFAULT 0.4,
+          max_tokens INTEGER NOT NULL DEFAULT 128000,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `;
+
+      // ——— إعدادات عامة key/value (البحث وغيره) — الأدمن بيغيّرها من لوحة الإدارة ———
+      await sql`
+        CREATE TABLE IF NOT EXISTS app_settings (
+          key TEXT PRIMARY KEY,
+          value JSONB NOT NULL DEFAULT '{}',
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `;
+
+      // إنشاء حساب الأدمن الافتراضي لو مفيش أي أدمن في القاعدة
+      await seedDefaultAdmin();
+    })().catch((e) => {
+      // لو التهيئة فشلت (مثلاً انقطاع لحظي في الاتصال) ما نسيبش الـ promise الفاشل متخزّن:
+      // من غير السطر ده كل طلب بعد كده على نفس النسخة كان بياخد نفس الخطأ لحد ما تتعمل إعادة تشغيل.
+      schemaReady = null;
+      throw e;
+    });
+  }
+  return schemaReady;
+}
