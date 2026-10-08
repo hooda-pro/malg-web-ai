@@ -954,9 +954,71 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
 
           result = await readUpstreamStream(nextNegotiated.response, req.signal, emit, shouldStopNow, nextNegotiated.protocol);
           if (result.stoppedByLimit) markLimitStop();
+          if (result.finishReason === "length") {
+            console.warn("[MALG truncation] phase=tool-round chars=" + result.content.length);
+          }
           contentParts.push(result.content);
           if (result.reasoning) reasoningParts.push(result.reasoning);
           extraTokens += estimateTokens(result.content, result.reasoning);
+        }
+
+        // *** تكملة تلقائية بعد حلقة الأدوات (نفس منطق البداية) ***
+        // القراءات اللاحقة للأدوات قد تنقطع بطول المخرجات أيضًا — أشهر حالة: كتابة
+        // ملف طويل بعد read_file — والزرار اليدوي كان يظهر فورًا. نكمّل داخليًا لحد
+        // 3 جولات قبل الاستسلام. نفس الشروط والحدود: لا رصيد/وقت/إيقاف/أدوات معلقة.
+        let postAuto = 0;
+        while (
+          result.finishReason === "length" &&
+          !result.stoppedByUser &&
+          !quotaCutOff &&
+          !timeCutOff &&
+          !result.stoppedByLimit &&
+          (result.toolCalls?.length ?? 0) === 0 &&
+          postAuto < MAX_AUTO_CONTINUES &&
+          !pastRoundDeadline()
+        ) {
+          postAuto += 1;
+          loopMessages.push({
+            role: "assistant",
+            content: result.content || "",
+            ...(result.reasoning ? { reasoning_content: result.reasoning } : {}),
+          });
+          loopMessages.push({ role: "user", content: AUTO_CONTINUE_INSTRUCTION });
+          const postNegotiated = await callUpstreamAfterTools(loopMessages, !toolsDisabled);
+          if (!postNegotiated || !postNegotiated.ok) break;
+          const postResult = await readUpstreamStream(
+            postNegotiated.response,
+            req.signal,
+            emit,
+            shouldStopNow,
+            postNegotiated.protocol
+          ).catch(() => null);
+          if (!postResult) break;
+          if (postResult.stoppedByLimit) {
+            markLimitStop();
+            result = { ...result, stoppedByLimit: true };
+            break;
+          }
+          result = {
+            content: result.content + postResult.content,
+            reasoning: postResult.reasoning
+              ? result.reasoning
+                ? result.reasoning + "\n\n" + postResult.reasoning
+                : postResult.reasoning
+              : result.reasoning,
+            finishReason: postResult.finishReason ?? result.finishReason,
+            stoppedByUser: result.stoppedByUser || postResult.stoppedByUser,
+            stoppedByLimit: result.stoppedByLimit || postResult.stoppedByLimit,
+            toolCalls: postResult.toolCalls?.length ? postResult.toolCalls : [],
+          };
+          contentParts.push(postResult.content);
+          if (postResult.reasoning) reasoningParts.push(postResult.reasoning);
+          extraTokens += estimateTokens(postResult.content, postResult.reasoning);
+        }
+        if (postAuto > 0) {
+          console.warn(
+            "[MALG auto-continue] phase=after-tools rounds=" + postAuto + " chars=" + result.content.length + " final=" + (result.finishReason ?? "?")
+          );
         }
 
         // الجولات خلصت والموديل لسه عايز يستدعي أدوات → نعمل نداء أخير من غير أدوات
