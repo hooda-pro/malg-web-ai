@@ -8,6 +8,7 @@ import {
   invalidateProviderCache,
   toPublicConfig,
   validateProviderInput,
+  type ProviderInput,
 } from "@/lib/provider";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
 
   await ensureSchema();
 
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const body = (await req.json().catch(() => ({}))) as ProviderInput;
   // لو الأدمن عدّل الإعدادات من غير ما يبعت مفاتيح (إدارة المفاتيح بقى ليها
   // كارت مستقل)، نحتفظ بالمفاتيح المحفوظة بدل ما نمسحها. أول حفظ فقط هو
   // اللي بيتطلب مفاتيح — validateProviderInput بيرفض الفاضي بنفس رسالته.
