@@ -17,6 +17,13 @@ export default function WelcomeHero({
 }) {
   const { t, nickname } = useSettings();
   const name = (nickname || userName || "").trim().split(/\s+/)[0];
+  // تحية زمنية بأسلوب كلود: الصباح/الظهيرة/المساء حسب توقيت المستخدم المحلي
+  const dayPart = (() => {
+    const h = new Date().getHours();
+    if (h < 12) return "heroMorning";
+    if (h < 18) return "heroAfternoon";
+    return "heroEvening";
+  })();
 
   return (
     <div className="relative flex min-h-0 flex-1 items-center justify-center px-5 pb-6 pt-10">
@@ -26,7 +33,7 @@ export default function WelcomeHero({
         </span>
 
         <h1 className="mt-6 text-balance text-[clamp(28px,5.2vw,40px)] font-semibold leading-[1.1] tracking-display text-ink">
-          {name ? t("heroGreeting", { name }) : t("heroTitle")}
+          {name ? t(dayPart, { name }) : t("heroTitle")}
         </h1>
         <p className="mt-3 max-w-[46ch] text-pretty text-[15.5px] leading-7 text-ink-2">
           {t("heroSubtitle")}

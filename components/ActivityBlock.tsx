@@ -500,6 +500,16 @@ export default function ActivityBlock({
 
   if (steps.length === 0 && !thinking) return null;
 
+  // بأسلوب كلود: تفكير فقط بدون أي أدوات → موسّع واحد هادئ بلا تايم لاين
+  // ولا نقاط حالة — العنوان المختصر هو الواجهة الأساسية.
+  if (steps.length === 0 && thinking && !thinking.live) {
+    return (
+      <div className="mb-2">
+        <ThinkingRow thinking={thinking} open={thinkingOpen} onToggle={() => setThinkingOpen((o) => !o)} />
+      </div>
+    );
+  }
+
   const hasError = steps.some((s) => s.status === "error");
   const doneCount = steps.filter((s) => s.status === "done").length;
   const kind = activityKind(steps);

@@ -17,7 +17,7 @@ type Dict = Record<string, string>;
 const ar: Dict = {
   send: "إرسال",
   stop: "إيقاف",
-  placeholder: "اكتب رسالتك هنا...",
+  placeholder: "رد على MALG…",
   disclaimer: "MALG AI ممكن يغلط أحياناً — راجع المعلومات المهمة.",
   newChat: "محادثة جديدة",
   noSessions: "لا يوجد محادثات بعد",
@@ -271,12 +271,15 @@ const ar: Dict = {
   confirmDelete: "حذف نهائي",
   topbarTokensHint: "رصيدك المتبقي — اضغط للشحن",
   heroGreeting: "أهلاً {name}، نبدأ بإيه النهارده؟",
+  heroMorning: "صباح الخير، {name}",
+  heroAfternoon: "طاب يومك، {name}",
+  heroEvening: "مساء الخير، {name}",
 };
 
 const en: Dict = {
   send: "Send",
   stop: "Stop",
-  placeholder: "Type your message here...",
+  placeholder: "Reply to MALG…",
   disclaimer: "MALG AI can make mistakes — double-check important info.",
   newChat: "New chat",
   noSessions: "No chats yet",
@@ -530,12 +533,15 @@ const en: Dict = {
   confirmDelete: "Delete permanently",
   topbarTokensHint: "Remaining credits — click to top up",
   heroGreeting: "Hi {name}, where should we start?",
+  heroMorning: "Good morning, {name}",
+  heroAfternoon: "Good afternoon, {name}",
+  heroEvening: "Good evening, {name}",
 };
 
 const fr: Dict = {
   send: "Envoyer",
   stop: "Arrêter",
-  placeholder: "Écrivez votre message ici...",
+  placeholder: "Répondre à MALG…",
   disclaimer: "MALG AI peut se tromper — vérifiez les informations importantes.",
   newChat: "Nouvelle discussion",
   noSessions: "Aucune discussion pour le moment",
@@ -789,12 +795,15 @@ const fr: Dict = {
   confirmDelete: "Supprimer définitivement",
   topbarTokensHint: "Crédits restants — cliquez pour recharger",
   heroGreeting: "Bonjour {name}, par quoi commence-t-on ?",
+  heroMorning: "Bonjour, {name}",
+  heroAfternoon: "Bon après-midi, {name}",
+  heroEvening: "Bonsoir, {name}",
 };
 
 const es: Dict = {
   send: "Enviar",
   stop: "Detener",
-  placeholder: "Escribe tu mensaje aquí...",
+  placeholder: "Responder a MALG…",
   disclaimer: "MALG AI puede equivocarse — revisa la información importante.",
   newChat: "Nuevo chat",
   noSessions: "Aún no hay chats",
@@ -1048,6 +1057,9 @@ const es: Dict = {
   confirmDelete: "Eliminar permanentemente",
   topbarTokensHint: "Saldo restante: haz clic para recargar",
   heroGreeting: "Hola {name}, ¿por dónde empezamos?",
+  heroMorning: "Buenos días, {name}",
+  heroAfternoon: "Buenas tardes, {name}",
+  heroEvening: "Buenas noches, {name}",
 };
 
 export const DICT: Record<Lang, Dict> = { ar, en, fr, es };

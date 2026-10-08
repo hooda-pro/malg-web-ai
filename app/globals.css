@@ -19,29 +19,29 @@
     --font-mono: var(--font-jetbrains, "JetBrains Mono"), ui-monospace, SFMono-Regular, Menlo, monospace;
 
     /* Surfaces ----------------------------------------------------- */
-    --ground: #f5f5f7;
+    --ground: #f4f3ed;
     --surface: #ffffff;
-    --surface-2: #fbfbfd;
-    --surface-3: #f0f0f3;
-    --surface-inset: #ececf0;
+    --surface-2: #faf9f4;
+    --surface-3: #edece4;
+    --surface-inset: #edebe1;
     --canvas: #ffffff;
 
     /* Hairlines (one family, never a hard 1px gray border) ---------- */
-    --hairline: rgba(0, 0, 0, 0.09);
-    --hairline-2: rgba(0, 0, 0, 0.16);
-    --hairline-3: rgba(0, 0, 0, 0.28);
+    --hairline: rgba(31, 30, 29, 0.1);
+    --hairline-2: rgba(31, 30, 29, 0.17);
+    --hairline-3: rgba(31, 30, 29, 0.3);
 
     /* Ink ----------------------------------------------------------- */
-    --ink: #1d1d1f;
-    --ink-2: #6b6b70;
-    --ink-3: #9a9aa0;
+    --ink: #1f1e1d;
+    --ink-2: #5f5d59;
+    --ink-3: #9b9893;
 
     /* Accent + status (color is reserved, never decoration) --------- */
-    --accent: #0071e3;
-    --accent-hover: #0077ed;
+    --accent: #c15f3c;
+    --accent-hover: #cf6f4b;
     --accent-ink: #ffffff;
-    --accent-soft: rgba(0, 113, 227, 0.1);
-    --accent-line: rgba(0, 113, 227, 0.28);
+    --accent-soft: rgba(193, 95, 60, 0.12);
+    --accent-line: rgba(193, 95, 60, 0.32);
     --live: #1d9e5b;
     --live-soft: rgba(29, 158, 91, 0.1);
     --warn: #b25000;
@@ -71,8 +71,8 @@
     --aurora-1: rgba(0, 113, 227, 0.1);
     --aurora-2: rgba(0, 150, 255, 0.07);
     --aurora-3: rgba(0, 200, 150, 0.07);
-    --send-gradient: linear-gradient(135deg, #0071e3 0%, #0090ff 100%);
-    --send-gradient-hover: linear-gradient(135deg, #0077ed 0%, #009aff 100%);
+    --send-gradient: linear-gradient(135deg, #c15f3c 0%, #d97757 100%);
+    --send-gradient-hover: linear-gradient(135deg, #cf6f4b 0%, #e0855f 100%);
 
     /* Layer scale --------------------------------------------------- */
     --z-nav: 20;
