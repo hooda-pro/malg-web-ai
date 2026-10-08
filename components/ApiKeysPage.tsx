@@ -12,7 +12,6 @@ import {
   MessageCircle,
   Plus,
   ShieldAlert,
-  Sparkles,
   Trash2,
   Zap,
 } from "lucide-react";
@@ -26,6 +25,7 @@ import {
 import { Button, Dialog, Field, IconButton, Panel } from "./ui/Controls";
 import { ThemeSwitch } from "./AccountMenu";
 import Toast from "./Toast";
+import Logo from "./Logo";
 import { useSettings } from "./SettingsContext";
 import { formatDateTime, timeAgo } from "./admin/helpers";
 import { cn } from "@/lib/utils";
@@ -352,7 +352,7 @@ export default function ApiKeysPage() {
           <span className="h-4 w-px bg-hair-2" aria-hidden="true" />
           <span className="flex items-center gap-2">
             <span className="grid h-7 w-7 place-items-center rounded-[9px] bg-accent text-accent-ink shadow-accent">
-              <Sparkles size={14} />
+              <Logo size={17} />
             </span>
             <span className="text-[14.5px] font-semibold tracking-title text-ink">MALG</span>
             <span className="rounded-full border border-hair px-2 py-0.5 font-mono text-[11px] text-ink-3" dir="ltr">

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Sparkles, User } from "lucide-react";
+import { User } from "lucide-react";
+import Logo from "./Logo";
 import type { SessionUser } from "@/lib/types";
 import { authErrorCode, isInAppBrowser, signInWithGoogle } from "@/lib/firebaseClient";
 import { Button, Dialog, Field } from "./ui/Controls";
@@ -130,7 +131,7 @@ export default function AuthModal({
       title={
         <span className="flex items-center gap-2.5">
           <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-accent text-accent-ink">
-            <Sparkles size={15} />
+            <Logo size={19} />
           </span>
           {step === "google" ? t("authWelcomeTitle") : t("authProfileTitle")}
         </span>

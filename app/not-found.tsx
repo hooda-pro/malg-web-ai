@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Sparkles } from "lucide-react";
+import Logo from "../components/Logo";
 
 export default function NotFound() {
   return (
@@ -12,7 +12,7 @@ export default function NotFound() {
       </div>
       <div className="relative text-center">
         <span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-accent text-accent-ink shadow-accent">
-          <Sparkles size={22} />
+          <Logo size={28} />
         </span>
         <p className="tnum mt-6 text-[13px] font-medium uppercase tracking-micro text-ink-3">404</p>
         <h1 className="mt-2 text-balance text-[clamp(24px,4vw,34px)] font-semibold tracking-display text-ink">

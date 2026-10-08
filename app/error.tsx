@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { Sparkles } from "lucide-react";
+import Logo from "../components/Logo";
 
 export default function ErrorPage({
   error,
@@ -25,7 +25,7 @@ export default function ErrorPage({
       </div>
       <div className="relative text-center">
         <span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-accent text-accent-ink shadow-accent">
-          <Sparkles size={22} />
+          <Logo size={28} />
         </span>
         <h1 className="mt-6 text-balance text-[clamp(24px,4vw,34px)] font-semibold tracking-display text-ink">
           حصلت مشكلة غير متوقعة

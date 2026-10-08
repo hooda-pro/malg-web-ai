@@ -2,14 +2,15 @@ import { ArrowLeft, Info } from "lucide-react";
 import { getSiteUrl } from "@/lib/site";
 import Reveal from "./Reveal";
 import Showcase from "./Showcase";
+import Logo from "./Logo";
 
 const CAPABILITIES = [
-  { title: "محادثة عربية فورية", body: "تصلك الردود أثناء كتابتها، بواجهة تدعم الاتجاه من اليمين إلى اليسار بالكامل." },
-  { title: "تنفيذ الكود", body: "يكتب الكود ويشغّله في بيئة معزولة، ويعرض لك كل خطوة نفّذها." },
-  { title: "معاينة مباشرة", body: "تظهر الصفحة أو الموقع الذي أُنشئ بجانب المحادثة، دون نقل أي ملفات." },
-  { title: "بحث في الويب", body: "يبحث عن المعلومات الحديثة عند الحاجة، ويضمّنها في إجابته." },
-  { title: "على كل أجهزتك", body: "محادثات محفوظة، ووضع فاتح وداكن، وتصدير للمحادثات في أي وقت." },
-  { title: "واجهة API متوافقة مع OpenAI", body: "استخدم MALG داخل تطبيقاتك وأدواتك باستخدام مفتاح API." },
+  { title: "يبني ويشغّل الكود", body: "اطلب موقعًا أو أداة، وشاهد كل أمر يُنفَّذ في بيئة معزولة مع مخرجاته خطوة بخطوة." },
+  { title: "معاينة حيّة بجانب المحادثة", body: "الصفحة أو الملفات تُفتح في لوحة عمل، وتتحدث تلقائيًا مع كل رد." },
+  { title: "بحث بالمصادر", body: "عند سؤاله عن الجديد، يبحث في الويب ويذكر مصادره بروابط داخل الإجابة." },
+  { title: "ملفات ومرفقات", body: "ارفع صورًا وملفات مضغوطة، واقرأ منها وناقش محتواها بدل نسخه ولصقه." },
+  { title: "جلسات منظمة", body: "محادثات محفوظة بعناوين وبحث، مع إكمال الردود الطويلة من حيث توقفت." },
+  { title: "API للمطورين", body: "استخدم MALG داخل تطبيقاتك وأدواتك مثل Cline وOpenCode بمفتاح API." },
 ];
 
 const STEPS = [
@@ -37,7 +38,12 @@ export default function Landing() {
     <div className="h-[100dvh] overflow-y-auto overscroll-contain bg-ground text-ink">
       <header className="sticky top-0 z-sticky border-b border-hair bg-glass pt-[env(safe-area-inset-top)] backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
-          <span className="text-[17px] font-semibold tracking-display">MALG</span>
+          <span className="flex items-center gap-2">
+            <span className="grid place-items-center text-ink">
+              <Logo size={26} />
+            </span>
+            <span className="text-[17px] font-semibold tracking-display">MALG</span>
+          </span>
           <nav className="flex items-center gap-1.5">
             <a
               href="/#/api"
@@ -67,6 +73,9 @@ export default function Landing() {
               className="aurora-blob aurora-blob-c left-[38%] top-[52%] h-64 w-64"
               style={{ background: "var(--aurora-3)" }}
             />
+          </div>
+          <div className="relative mx-auto mb-7 grid h-14 w-14 place-items-center rounded-2xl bg-accent text-accent-ink shadow-accent">
+            <Logo size={34} />
           </div>
           <h1 className="relative mx-auto max-w-[24ch] text-balance text-[clamp(32px,5.2vw,58px)] font-semibold leading-[1.15] tracking-display">
             من الفكرة إلى <span className="text-gradient">مشروع يعمل</span>

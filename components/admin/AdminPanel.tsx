@@ -10,7 +10,6 @@ import {
   ScrollText,
   Search,
   ShieldCheck,
-  Sparkles,
   Users,
   XCircle,
 } from "lucide-react";
@@ -22,6 +21,7 @@ import AdminLogs from "./AdminLogs";
 import AdminSecurity from "./AdminSecurity";
 import AdminProvider from "./AdminProvider";
 import AdminSearch from "./AdminSearch";
+import Logo from "../Logo";
 
 type Section = "overview" | "users" | "provider" | "search" | "logs" | "security";
 
@@ -71,7 +71,7 @@ export default function AdminPanel({
       <aside className="flex w-16 shrink-0 flex-col border-l border-hair bg-surface md:w-60">
         <div className="flex items-center justify-center gap-2.5 border-b border-hair px-3 py-4 md:justify-start md:px-4">
           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-accent text-accent-ink shadow-accent">
-            <Sparkles size={16} />
+            <Logo size={19} />
           </span>
           <div className="hidden md:block">
             <p className="text-[13px] font-semibold leading-tight tracking-title text-ink">

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { LogIn, PanelLeftClose, Search, Sparkles, SquarePen, Trash2, X } from "lucide-react";
+import { LogIn, PanelLeftClose, Search, SquarePen, Trash2, X } from "lucide-react";
+import Logo from "./Logo";
 import type { ChatSession, SessionUser } from "@/lib/types";
 import { Button, IconButton, Kbd, modKeyLabel } from "./ui/Controls";
 import AccountMenu, { type SettingsTab } from "./AccountMenu";
@@ -100,8 +101,8 @@ export default function ChatDrawer({
       >
         <div className="flex h-14 shrink-0 items-center justify-between gap-2 px-3">
           <a href="/#" className="flex min-w-0 items-center gap-2.5 rounded-md px-1.5 py-1" aria-label="MALG AI">
-            <span className="relative grid h-7 w-7 shrink-0 place-items-center rounded-[9px] bg-accent text-accent-ink shadow-accent">
-              <Sparkles size={14} />
+            <span className="grid h-7 w-7 shrink-0 place-items-center text-ink">
+              <Logo size={25} />
             </span>
             <span className="truncate text-[15px] font-semibold tracking-title text-ink">MALG AI</span>
           </a>
