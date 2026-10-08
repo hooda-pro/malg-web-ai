@@ -30,7 +30,7 @@ export default function TopBar({
   const { t } = useSettings();
 
   return (
-    <header className="glass sticky top-0 z-nav flex h-[calc(3.5rem+env(safe-area-inset-top))] shrink-0 items-center gap-1.5 border-b border-hair ps-[max(0.625rem,env(safe-area-inset-left))] pe-[max(0.625rem,env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] sm:px-4">
+    <header className="glass sticky top-0 z-nav flex h-[calc(3.25rem+env(safe-area-inset-top))] shrink-0 items-center gap-1.5 border-b border-hair ps-[max(0.625rem,env(safe-area-inset-left))] pe-[max(0.625rem,env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] sm:px-4">
       <IconButton
         label={t("toggleSidebar")}
         onClick={onToggleDrawer}

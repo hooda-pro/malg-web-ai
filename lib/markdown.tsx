@@ -186,8 +186,8 @@ function parseInline(text: string, keyPrefix: string): ReactNode[] {
 }
 
 const HEADING_SIZE: Record<1 | 2 | 3 | 4, string> = {
-  1: "text-[20px] tracking-title",
-  2: "text-[17.5px] tracking-title",
+  1: "text-[21px] tracking-title",
+  2: "text-[18px] tracking-title",
   3: "text-[16px]",
   4: "text-[15px]",
 };
@@ -220,29 +220,29 @@ export function renderFormattedText(text: string, keyPrefix: string): ReactNode 
             return (
               <p
                 key={key}
-                className={`mb-1 mt-5 text-balance font-semibold text-ink first:mt-0 ${HEADING_SIZE[block.level]}`}
+                className={`mb-1.5 mt-6 text-balance font-semibold text-ink first:mt-0 ${HEADING_SIZE[block.level]}`}
               >
                 {parseInline(block.text, key)}
               </p>
             );
           case "hr":
-            return <hr key={key} className="my-5 border-hair" />;
+            return <hr key={key} className="my-6 border-hair" />;
           case "quote":
             return (
               <blockquote
                 key={key}
-                className="my-3 whitespace-pre-wrap border-s-2 border-hair-2 ps-4 text-[15px] leading-7 text-ink-2"
+                className="my-3 whitespace-pre-wrap border-s-2 border-hair-2 ps-4 text-[15px] leading-7 text-ink-2 sm:text-[15.5px]"
               >
                 {parseInline(block.text, key)}
               </blockquote>
             );
           case "ul":
             return (
-              <ul key={key} className="my-2.5 list-disc ps-6 marker:text-ink-3 first:mt-0 last:mb-0">
+              <ul key={key} className="my-3 list-disc ps-6 marker:text-ink-3 first:mt-0 last:mb-0">
                 {block.items.map((item, ii) => (
                   <li
                     key={`${key}-${ii}`}
-                    className={`my-1 ps-1 text-[15px] leading-7 text-ink ${CHECKBOX_RE.test(item) ? "-ms-6 list-none" : ""}`}
+                    className={`my-1.5 ps-1 text-[15px] leading-7 text-ink sm:text-[15.5px] ${CHECKBOX_RE.test(item) ? "-ms-6 list-none" : ""}`}
                   >
                     {renderListItem(item, `${key}-${ii}`)}
                   </li>
@@ -251,9 +251,9 @@ export function renderFormattedText(text: string, keyPrefix: string): ReactNode 
             );
           case "ol":
             return (
-              <ol key={key} className="my-2.5 list-decimal ps-6 marker:text-ink-3 first:mt-0 last:mb-0">
+              <ol key={key} className="my-3 list-decimal ps-6 marker:text-ink-3 first:mt-0 last:mb-0">
                 {block.items.map((item, ii) => (
-                  <li key={`${key}-${ii}`} className="my-1 ps-1 text-[15px] leading-7 text-ink">
+                  <li key={`${key}-${ii}`} className="my-1.5 ps-1 text-[15px] leading-7 text-ink sm:text-[15.5px]">
                     {parseInline(item, `${key}-${ii}`)}
                   </li>
                 ))}
@@ -291,7 +291,7 @@ export function renderFormattedText(text: string, keyPrefix: string): ReactNode 
             );
           default:
             return (
-              <p key={key} className="my-2.5 whitespace-pre-wrap break-words text-pretty text-[15px] leading-7 text-ink first:mt-0 last:mb-0">
+              <p key={key} className="my-2.5 whitespace-pre-wrap break-words text-pretty text-[15px] leading-7 text-ink first:mt-0 last:mb-0 sm:text-[15.5px] sm:leading-8">
                 {parseInline(block.text, key)}
               </p>
             );

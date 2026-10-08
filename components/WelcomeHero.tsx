@@ -20,19 +20,9 @@ export default function WelcomeHero({
 
   return (
     <div className="relative flex min-h-0 flex-1 items-center justify-center px-5 pb-6 pt-10">
-      <div className="aurora" aria-hidden="true">
-        <span
-          className="aurora-blob left-[10%] top-[6%] h-60 w-60"
-          style={{ background: "var(--aurora-1)" }}
-        />
-        <span
-          className="aurora-blob aurora-blob-b right-[8%] top-[30%] h-64 w-64"
-          style={{ background: "var(--aurora-2)" }}
-        />
-      </div>
       <div className="stagger relative flex w-full max-w-[680px] flex-col items-center text-center">
-        <span className="live-dot grid h-12 w-12 place-items-center rounded-xl bg-accent text-accent-ink shadow-accent">
-          <Sparkles size={22} />
+        <span className="grid h-11 w-11 place-items-center rounded-xl bg-accent text-accent-ink shadow-accent">
+          <Sparkles size={20} />
         </span>
 
         <h1 className="mt-6 text-balance text-[clamp(28px,5.2vw,40px)] font-semibold leading-[1.1] tracking-display text-ink">

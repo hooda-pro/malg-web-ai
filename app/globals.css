@@ -86,20 +86,20 @@
   [data-theme="dark"] {
     color-scheme: dark;
 
-    --ground: #0a0a0c;
-    --surface: #141417;
-    --surface-2: #1a1a1e;
-    --surface-3: #232329;
-    --surface-inset: #0f0f12;
+    --ground: #09090b;
+    --surface: #111113;
+    --surface-2: #151518;
+    --surface-3: #1c1c20;
+    --surface-inset: #0d0d10;
     --canvas: #ffffff;
 
-    --hairline: rgba(255, 255, 255, 0.1);
-    --hairline-2: rgba(255, 255, 255, 0.18);
-    --hairline-3: rgba(255, 255, 255, 0.34);
+    --hairline: rgba(255, 255, 255, 0.08);
+    --hairline-2: rgba(255, 255, 255, 0.14);
+    --hairline-3: rgba(255, 255, 255, 0.3);
 
     --ink: #f5f5f7;
-    --ink-2: #a6a6ac;
-    --ink-3: #75757b;
+    --ink-2: #a1a1aa;
+    --ink-3: #71717a;
 
     --accent: #0a84ff;
     --accent-hover: #2f96ff;
@@ -725,9 +725,24 @@
   color: #dd8ce0;
 }
 
-/* An RTL-aware flip for directional icons (send arrow, etc.) */
+/* Directional-icon mirroring that composes with other transforms.
+   Uses the `scale` property (not `transform`) so it never clobbers
+   Tailwind translate/rotate utilities on the same element. */
 html[dir="rtl"] .flip-rtl {
-  transform: scaleX(-1);
+  scale: -1 1;
+}
+
+/* Expand chevrons: the open-state rotation lives in the `rotate` property
+   so it composes with the RTL mirror above. Collapsed = inline-start-facing
+   (right in LTR, left in RTL); open = pointing down in both directions. */
+.chev {
+  transition: rotate var(--dur-2) var(--ease-soft);
+}
+.chev-open {
+  rotate: 90deg;
+}
+html[dir="rtl"] .chev {
+  scale: -1 1;
 }
 
 /* "No animations" preference from Settings */

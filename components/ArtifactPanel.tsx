@@ -200,7 +200,7 @@ export default function ArtifactPanel({
           : "fixed inset-0 z-overlay lg:static lg:z-auto lg:w-[46%] lg:min-w-[440px] lg:border-s lg:border-hair"
       )}
     >
-      <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-hair px-3 sm:px-4">
+      <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-hair bg-surface-2/60 px-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <Segmented<Tab>
             size="sm"
@@ -292,7 +292,7 @@ export default function ArtifactPanel({
                     className={cn(
                       "shrink-0 truncate rounded-xs px-2.5 py-1.5 text-start font-mono text-[12px] transition-colors duration-1",
                       f.path === activeFile?.path
-                        ? "bg-surface text-ink shadow-1"
+                        ? "bg-surface-3 text-ink shadow-1"
                         : "text-ink-2 hover:bg-surface-3 hover:text-ink"
                     )}
                   >

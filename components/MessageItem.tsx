@@ -1,7 +1,7 @@
 "use client";
 
-import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Brain, Check, ChevronRight, Copy, Eye, FileArchive, FileText, Pencil, Play, RefreshCw, Sparkles, Trash2, Zap } from "lucide-react";
+import { memo, useMemo, useRef, useState } from "react";
+import { Check, ChevronRight, Copy, Eye, FileArchive, FileText, Pencil, Play, RefreshCw, Trash2, Zap } from "lucide-react";
 import type { ChatMessage } from "@/lib/types";
 import type { ProjectFile } from "@/lib/parseContent";
 import { extractProjectFiles, parseMessageContent, parseStreamingContent } from "@/lib/parseContent";
@@ -72,10 +72,8 @@ function MessageItem({
   const { t, showTime } = useSettings();
   const isUser = message.role === "user";
   const isLive = !!live;
-  const [reasoningOpen, setReasoningOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const reasoningBoxRef = useRef<HTMLDivElement>(null);
   const wasLive = useRef(isLive);
   if (isLive) wasLive.current = true;
 
@@ -135,12 +133,6 @@ function MessageItem({
     const secs = (message.thinkingDurationMs ?? 0) / 1000;
     return secs >= 1 ? t("thoughtFor", { n: Math.round(secs) }) : t("thinking");
   }, [message.thinkingDurationMs, t]);
-
-  // صندوق التفكير الحيّ بينزل لآخره لوحده مع وصول أفكار جديدة
-  useEffect(() => {
-    const box = reasoningBoxRef.current;
-    if (isLive && reasoningOpen && box) box.scrollTop = box.scrollHeight;
-  }, [isLive, reasoningOpen, message.reasoning]);
 
   const handleCopy = async () => {
     try {
@@ -212,7 +204,7 @@ function MessageItem({
             >
               <ChevronRight
                 size={12}
-                className={cn("flip-rtl transition-transform duration-2 ease-soft", filesOpen && "rotate-90")}
+                className={cn("chev shrink-0", filesOpen && "chev-open")}
               />
               {t("attachedFilesContent")}
             </button>
@@ -273,7 +265,17 @@ function MessageItem({
   // مش بتتعاد تركيبها لحظة تحويل الرد الحيّ لرسالة محفوظة.
   const keyBase = message.clientKey ?? message.id;
   const hasReasoning = !!message.reasoning;
-  const showThinkingRow = isLive ? !message.content || hasReasoning : hasReasoning;
+  // التفكير جزء من تجربة النشاط الموحّدة (ActivityBlock) — لا يُعرض كمكوّن منفصل
+  // ينافس خطوات الأدوات، ولا يُعرض التفكير الخام في الواجهة الرئيسية.
+  const showThinking = isLive ? !message.content || hasReasoning : hasReasoning;
+  const thinking = showThinking
+    ? {
+        label: thinkingLabel,
+        durationMs: message.thinkingDurationMs,
+        body: message.reasoning,
+        live: isLive,
+      }
+    : null;
   const showContinueRow = !isLive && (message.isTruncated || isContinuing);
 
   return (
@@ -283,17 +285,9 @@ function MessageItem({
       aria-live={isLive ? "polite" : undefined}
     >
       <div className="flex gap-3">
-        {/* على الموبايل الأفاتار بيدخل جوه سطر الاسم عشان النص ياخد العرض كله */}
-        <span className="mt-0.5 hidden h-7 w-7 shrink-0 place-items-center rounded-[9px] bg-accent-soft text-accent shadow-1 sm:grid">
-          <Sparkles size={14} className={isLive ? "pulse-dot" : undefined} />
-        </span>
-
         <div className="min-w-0 flex-1">
-          <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent sm:hidden">
-              <Sparkles size={13} className={isLive ? "pulse-dot" : undefined} />
-            </span>
-            <span className="text-[13.5px] font-semibold tracking-label text-ink">MALG</span>
+          <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="text-[12px] font-medium tracking-label text-ink-3">MALG</span>
             {!isLive && message.tokensUsed > 0 && (
               <span className="tnum inline-flex items-center gap-1 text-[11.5px] text-ink-3">
                 <Zap size={11} className="text-accent" />
@@ -305,69 +299,11 @@ function MessageItem({
             )}
           </div>
 
-          {showThinkingRow && (
-            <div className="mb-3">
-              <button
-                onClick={() => setReasoningOpen((o) => !o)}
-                aria-expanded={reasoningOpen}
-                title={isLive ? (reasoningOpen ? t("thinkHide") : t("thinkShow")) : undefined}
-                className={cn(
-                  "group inline-flex max-w-full items-center gap-2 rounded-full border py-1.5 pe-3 ps-2 text-[12.5px] font-medium transition-all duration-2 ease-soft",
-                  isLive
-                    ? "border-accent-line bg-accent-soft text-accent shadow-[0_0_16px_-6px_var(--accent-line)]"
-                    : "border-hair bg-surface-2 text-ink-3 hover:border-hair-2 hover:text-ink"
-                )}
-              >
-                {isLive ? (
-                  <span className="typing-dots" aria-hidden="true">
-                    <span />
-                    <span />
-                    <span />
-                  </span>
-                ) : (
-                  <Brain size={13} className="shrink-0" />
-                )}
-                <ChevronRight
-                  size={13}
-                  className={cn(
-                    "flip-rtl shrink-0 transition-transform duration-2 ease-soft",
-                    reasoningOpen && "rotate-90"
-                  )}
-                />
-                <span className="min-w-0 truncate">
-                  {isLive ? <span className="shimmer-text">{t("thinking")}</span> : thinkingLabel}
-                </span>
-                {!isLive && message.thinkingDurationMs != null && message.thinkingDurationMs > 0 && (
-                  <span className="tnum shrink-0 rounded-full bg-surface-3 px-1.5 py-px text-[10.5px] text-ink-3">
-                    {(message.thinkingDurationMs / 1000).toFixed(0)}s
-                  </span>
-                )}
-              </button>
-              {reasoningOpen && (
-                <div
-                  ref={reasoningBoxRef}
-                  className="animate-materialize relative mt-2 max-h-[240px] w-full overflow-y-auto rounded-xl border border-hair bg-surface-2 px-3.5 py-3 shadow-1"
-                >
-                  <span
-                    aria-hidden="true"
-                    className="pointer-events-none absolute inset-y-3 start-0 w-[3px] rounded-full bg-accent/40"
-                  />
-                  <div
-                    dir="auto"
-                    className="text-[13px] leading-6 text-ink-2 [&_p]:text-[13px] [&_p]:leading-6 [&_p]:text-ink-2"
-                  >
-                    {message.reasoning ? (
-                      renderFormattedText(message.reasoning, `${keyBase}-reasoning`)
-                    ) : (
-                      <p>...</p>
-                    )}
-                  </div>
-                </div>
-              )}
+          {(thinking || activitySteps.length > 0) && (
+            <div className="mb-2.5">
+              <ActivityBlock steps={activitySteps} isActive={isLive} thinking={thinking} />
             </div>
           )}
-
-          <ActivityBlock steps={activitySteps} isActive={isLive} />
 
           {!isLive && hasProjectFiles && (
             <div className={cn("measure mb-3", wasLive.current && "animate-materialize")}>

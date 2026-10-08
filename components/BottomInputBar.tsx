@@ -166,7 +166,7 @@ export default function BottomInputBar({
 
       <div
         className={cn(
-          "mx-auto w-full max-w-[760px] rounded-xl border border-hair bg-surface shadow-2 composer-glow",
+          "mx-auto w-full max-w-[760px] rounded-2xl border border-hair bg-surface-2 shadow-2 composer-glow",
           "transition-[border-color,box-shadow] duration-2 ease-soft",
           "focus-within:!border-accent-line focus-within:shadow-[0_2px_8px_rgba(0,0,0,0.05),0_28px_60px_-28px_var(--accent-line)]",
           dragOver && "!border-accent-line ring-2 ring-accent-line ring-offset-0"
@@ -255,7 +255,7 @@ export default function BottomInputBar({
               className={cn(
                 "btn-send grid h-9 w-9 shrink-0 place-items-center rounded-full text-accent-ink",
                 "transition-all duration-1 ease-soft",
-                "hover:scale-[1.05] active:scale-[0.92] disabled:bg-surface-3 disabled:text-ink-3 disabled:shadow-none"
+                "active:scale-[0.94] disabled:bg-surface-3 disabled:text-ink-3 disabled:shadow-none"
               )}
             >
               <ArrowUp size={17} strokeWidth={2.4} />
