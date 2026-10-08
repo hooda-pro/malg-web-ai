@@ -1,10 +1,10 @@
 "use client";
 
-import { memo, useMemo, useRef, useState } from "react";
+import { memo, useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronRight, Copy, Eye, FileArchive, FileText, Pencil, Play, RefreshCw, Trash2, Zap } from "lucide-react";
 import type { ChatMessage } from "@/lib/types";
 import type { ProjectFile } from "@/lib/parseContent";
-import { extractProjectFiles, parseMessageContent, parseStreamingContent } from "@/lib/parseContent";
+import { extractDeliverableFiles, parseMessageContent, parseStreamingContent } from "@/lib/parseContent";
 import { extractAttachmentsMeta, extractAttachmentsPromptSection, formatBytes } from "@/lib/attachments";
 import {
   extractAgentStepsMeta,
@@ -92,7 +92,7 @@ function MessageItem({
     ? message.content
     : assistantCleanContent + (continuationStreamingContent || "");
   const projectFiles = useMemo(
-    () => (isUser ? [] : extractProjectFiles(displayContent)),
+    () => (isUser ? [] : extractDeliverableFiles(displayContent)),
     [isUser, displayContent]
   );
   const hasProjectFiles = !isUser && projectFiles.length > 0;
@@ -313,19 +313,36 @@ function MessageItem({
 
           <div className="measure flex flex-col gap-3" dir="auto">
             {isLive
-              ? streamSegments.map((seg, i) =>
-                  seg.type === "prose" && seg.text.trim() ? (
-                    <div key={i} className={cn(i === streamSegments.length - 1 && "caret-last")}>
-                      {renderFormattedText(seg.text.trim(), `${keyBase}-${i}`)}
-                    </div>
-                  ) : null
-                )
+              // أثناء البث: الـ prose ممكن يحمل كتل شرح (من غير path) — نفكها هنا
+              // لقطع نص/كود inline بنفس منطق الرسالة المحفوظة. كتل التسليم (path)
+              // مكانها كارت الملفات والأكتيفيتي، مش نص الشات.
+              ? streamSegments.flatMap((seg, i): ReactNode[] => {
+                  if (seg.type !== "prose" || !seg.text.trim()) return [];
+                  const subs = parseMessageContent(seg.text);
+                  const isLastSeg = streamSegments
+                    .slice(i + 1)
+                    .every((s) => s.type !== "prose" || !s.text.trim());
+                  return subs.flatMap((sub, j): ReactNode[] => {
+                    const kk = `${keyBase}-live-${i}-${j}`;
+                    const isLast = isLastSeg && j === subs.length - 1;
+                    if (sub.type === "text") {
+                      if (!sub.text.trim()) return [];
+                      return [
+                        <div key={kk} className={cn(isLast && "caret-last")}>
+                          {renderFormattedText(sub.text.trim(), kk)}
+                        </div>,
+                      ];
+                    }
+                    if (sub.path) return [];
+                    return [<CodeBlock key={kk} language={sub.language} code={sub.code} />];
+                  });
+                })
               : segments.map((seg, i) =>
                   seg.type === "text" ? (
                     seg.text.trim() ? (
                       <div key={i}>{renderFormattedText(seg.text.trim(), `${keyBase}-${i}`)}</div>
                     ) : null
-                  ) : hasProjectFiles ? null : (
+                  ) : seg.path ? null : (
                     <CodeBlock key={i} language={seg.language} code={seg.code} />
                   )
                 )}

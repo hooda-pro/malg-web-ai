@@ -9,7 +9,7 @@
  */
 
 import type { ProjectFile } from "./parseContent";
-import { extractProjectFiles } from "./parseContent";
+import { extractDeliverableFiles } from "./parseContent";
 import { extractAgentStepsMeta } from "./agentEvents";
 import type { AgentToolName } from "./agentEvents";
 import { extractUserAttachmentFiles } from "./attachments";
@@ -134,7 +134,7 @@ export function collectSessionProjectFiles(
   for (const msg of history) {
     if (msg.role === "assistant") {
       const { visibleText } = extractAgentStepsMeta(msg.content);
-      for (const f of extractProjectFiles(visibleText)) {
+      for (const f of extractDeliverableFiles(visibleText)) {
         byPath.set(f.path, f.content);
       }
     } else if (msg.role === "user") {
@@ -144,7 +144,7 @@ export function collectSessionProjectFiles(
     }
   }
 
-  for (const f of extractProjectFiles(currentContent)) {
+  for (const f of extractDeliverableFiles(currentContent)) {
     byPath.set(f.path, f.content);
   }
 

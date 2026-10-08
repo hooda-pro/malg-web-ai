@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isLocalMessageId, type ChatMessage, type ChatSession, type SessionUser } from "@/lib/types";
 import { reconcileClientKeys } from "@/lib/messageKeys";
 import { consumeSSEStream } from "@/lib/streamClient";
-import { extractProjectFiles } from "@/lib/parseContent";
+import { extractDeliverableFiles } from "@/lib/parseContent";
 import type { ProjectFile } from "@/lib/parseContent";
 import TopBar from "./TopBar";
 import ChatDrawer from "./ChatDrawer";
@@ -28,7 +28,7 @@ const SESSION_MODELS_KEY = "mlag-session-models";
 const SIDEBAR_KEY = "mlag-sidebar-collapsed";
 
 function hasPreviewableFiles(content: string): boolean {
-  return extractProjectFiles(content).some((f) =>
+  return extractDeliverableFiles(content).some((f) =>
     PREVIEWABLE_EXTS.has((f.path.split(".").pop() || "").toLowerCase())
   );
 }
@@ -234,7 +234,7 @@ export default function ChatShell() {
     if (!isGenerating || !streamingContent) return;
     if (panelOpen) return;
     if (typeof window !== "undefined" && window.innerWidth < 1024) return;
-    const files = extractProjectFiles(streamingContent);
+    const files = extractDeliverableFiles(streamingContent);
     if (hasPreviewableFiles(streamingContent) && files.length > 0) openPanelWithFiles(files);
   }, [streamingContent, isGenerating, panelOpen, openPanelWithFiles]);
 
@@ -559,7 +559,7 @@ export default function ChatShell() {
 
       if (attachments.length === 0 && isPreviewCommand(trimmed)) {
         const lastAssistant = [...messagesRef.current].reverse().find((m) => m.role === "assistant");
-        const files = lastAssistant ? extractProjectFiles(lastAssistant.content) : [];
+        const files = lastAssistant ? extractDeliverableFiles(lastAssistant.content) : [];
         if (files.length > 0) {
           openPanelWithFiles(files);
           return true;
@@ -684,7 +684,7 @@ export default function ChatShell() {
       contentBatch.flush();
       reasoningBatch.flush();
 
-      const producedFiles = accContent ? extractProjectFiles(accContent) : [];
+      const producedFiles = accContent ? extractDeliverableFiles(accContent) : [];
       if (producedFiles.length > 0) {
         if (!panelOpen && hasPreviewableFiles(accContent)) {
           openPanelWithFiles(producedFiles);
@@ -825,7 +825,7 @@ export default function ChatShell() {
       batch.flush();
       const originalMsg = messagesRef.current.find((m) => m.id === messageId);
       const mergedContent = (originalMsg?.content || "") + accContent;
-      const producedFiles = mergedContent ? extractProjectFiles(mergedContent) : [];
+      const producedFiles = mergedContent ? extractDeliverableFiles(mergedContent) : [];
       if (producedFiles.length > 0) {
         if (!panelOpen && hasPreviewableFiles(mergedContent)) {
           openPanelWithFiles(producedFiles);
@@ -1068,7 +1068,7 @@ export default function ChatShell() {
   const remainingTokens = quota ? Math.max(quota.total - quota.used, 0) : null;
 
   const liveStreamFiles =
-    isGenerating && streamingContent ? extractProjectFiles(streamingContent) : null;
+    isGenerating && streamingContent ? extractDeliverableFiles(streamingContent) : null;
 
   // الرد الحيّ بيظهر بس في الشات اللي اتبعت منه
   const live = useMemo<LiveReplyState | null>(

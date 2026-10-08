@@ -26,7 +26,7 @@ import {
   REGISTERED_TOKEN_QUOTA,
 } from "@/lib/systemPrompt";
 import { isDeepSearchEnabled, runDeepSearch, runToolSearch } from "@/lib/webSearch";
-import { extractProjectFiles } from "@/lib/parseContent";
+import { extractDeliverableFiles } from "@/lib/parseContent";
 import {
   buildAgentStepsMetaBlock,
   clipOutput,
@@ -952,7 +952,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
             detail: { queries: deepSearch.queries, sources: deepSearch.sources },
           });
         }
-        const writtenFiles = finalContent ? extractProjectFiles(finalContent) : [];
+        const writtenFiles = finalContent ? extractDeliverableFiles(finalContent) : [];
         writtenFiles.forEach((f, i) => {
           agentSteps.push({
             id: `file-${i + 1}-${f.path}`,
