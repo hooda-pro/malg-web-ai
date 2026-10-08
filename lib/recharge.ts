@@ -2,10 +2,12 @@ import { formatTokens } from "./ai";
 
 /**
  * إعدادات الشحن — يوزر واتساب الدعم اللي بيتحول عليه زرار الشحن.
- * غيّره من هنا، أو ضيف متغير بيئة NEXT_PUBLIC_WHATSAPP_USERNAME في Vercel.
- * الرابط بصيغة wa.me/<username> — الصيغة الرسمية لدعم اليوزرنيم الجديد في واتساب.
+ * غيّره من هنا، أو ضيف متغير بيئة NEXT_PUBLIC_WHATSAPP_USERNAME في Vercel
+ * (لو المتغير موجود في Vercel فهو اللي بيكسب — حدّثه هناك أو امسحه).
+ * ملحوظة: wa.me مضمون 100% مع أرقام الهواتف بصيغة wa.me/<رقم بالكود الدولي>.
+ * صيغة اليوزرنيم (wa.me/<username>) قد لا تفتح المحادثة على كل الأجهزة.
  */
-export const WHATSAPP_USERNAME = process.env.NEXT_PUBLIC_WHATSAPP_USERNAME || "GM-Y16";
+export const WHATSAPP_USERNAME = process.env.NEXT_PUBLIC_WHATSAPP_USERNAME || "x9_vk";
 
 export interface RechargePackage {
   id: string;
