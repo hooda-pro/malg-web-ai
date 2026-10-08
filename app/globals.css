@@ -745,6 +745,17 @@ html[dir="rtl"] .chev {
   scale: -1 1;
 }
 
+/* شعار MALG (صورة أصلية بخلفية بيضاء) — الخلفية تختفي بالمزج:
+   الفاتح: multiply ‎(الأبيض يذوب في السطح)‎، الداكن: invert + screen
+   ‎(العلامة تنقلب أبيض والأسود يذوب)‎ — بلا أي صندوق حول الشعار. */
+.logo-img {
+  mix-blend-mode: multiply;
+}
+[data-theme="dark"] .logo-img {
+  mix-blend-mode: screen;
+  filter: invert(1);
+}
+
 /* "No animations" preference from Settings */
 html.no-anim *,
 html.no-anim *::before,

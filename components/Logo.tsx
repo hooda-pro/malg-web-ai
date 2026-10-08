@@ -1,50 +1,24 @@
+import { cn } from "@/lib/utils";
+
 /**
- * علامة MALG الجديدة — ثلاث ريش منحنية (pinwheel) برؤوس مدببة وحافة خارجية
- * عريضة، تحاكي اللوجو المعتمد. تستخدم currentColor فتتكيف مع الفاتح/الداكن
- * تلقائيًا (أسود على الفاتح، أبيض على الداكن أو داخل الصناديق الملونة).
+ * علامة MALG الأصلية (public/logo.png — مقصوصة من ملف اللوجو المعتمد).
+ * الخلفية البيضاء تُخفى تلقائيًا بتقنية المزج:
+ * - الفاتح: multiply (الأبيض يختفي، الأسود يظهر)
+ * - الداكن: invert + screen (العلامة تظهر بيضاء بدون صندوق)
+ * فتندمج على أي سطح — بما فيها الصناديق الملونة — من غير أي صندوق أبيض.
  */
 export default function Logo({ size = 20, className }: { size?: number; className?: string }) {
   return (
-    <svg
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/logo.png"
+      alt=""
+      aria-hidden="true"
+      draggable={false}
+      decoding="async"
       width={size}
       height={size}
-      viewBox="0 0 64 64"
-      fill="none"
-      aria-hidden="true"
-      focusable="false"
-      className={className}
-    >
-      <g transform="rotate(-25 32 32)">
-        <defs>
-          <path
-            id="malg-blade"
-            d="M 10.7 17.1 A 26 26 0 0 1 53.3 17.1 L 39.5 21.4 A 13 13 0 0 0 24.5 21.4 Z"
-          />
-        </defs>
-        <use
-          href="#malg-blade"
-          fill="currentColor"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinejoin="round"
-        />
-        <use
-          href="#malg-blade"
-          transform="rotate(120 32 32)"
-          fill="currentColor"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinejoin="round"
-        />
-        <use
-          href="#malg-blade"
-          transform="rotate(240 32 32)"
-          fill="currentColor"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinejoin="round"
-        />
-      </g>
-    </svg>
+      className={cn("logo-img shrink-0 select-none", className)}
+    />
   );
 }
