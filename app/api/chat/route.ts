@@ -430,7 +430,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
         }
       }
 
-      let result = await readUpstreamStream(upstreamResponse, req.signal, emit, shouldStopNow);
+      let result = await readUpstreamStream(upstreamResponse, req.signal, emit, shouldStopNow, negotiated.protocol);
       if (result.stoppedByLimit) markLimitStop();
 
       // *** الإصلاح الأساسي ***
@@ -445,7 +445,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
           toolOptions
         ).catch(() => null);
         if (retryNegotiated?.ok) {
-          const retryResult = await readUpstreamStream(retryNegotiated.response, req.signal, emit);
+          const retryResult = await readUpstreamStream(retryNegotiated.response, req.signal, emit, undefined, retryNegotiated.protocol);
           result = {
             content: result.content + retryResult.content,
             reasoning: retryResult.reasoning
@@ -838,7 +838,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
             break;
           }
 
-          result = await readUpstreamStream(nextNegotiated.response, req.signal, emit, shouldStopNow);
+          result = await readUpstreamStream(nextNegotiated.response, req.signal, emit, shouldStopNow, nextNegotiated.protocol);
           if (result.stoppedByLimit) markLimitStop();
           contentParts.push(result.content);
           if (result.reasoning) reasoningParts.push(result.reasoning);
@@ -867,7 +867,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
           });
           const finalNegotiated = await callUpstreamAfterTools(loopMessages, false);
           if (finalNegotiated?.ok) {
-            result = await readUpstreamStream(finalNegotiated.response, req.signal, emit, shouldStopNow);
+            result = await readUpstreamStream(finalNegotiated.response, req.signal, emit, shouldStopNow, finalNegotiated.protocol);
             if (result.stoppedByLimit) markLimitStop();
             contentParts.push(result.content);
             if (result.reasoning) reasoningParts.push(result.reasoning);

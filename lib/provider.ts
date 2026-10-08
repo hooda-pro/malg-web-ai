@@ -6,13 +6,44 @@ import { sql } from "./db";
  *
  * الأولوية: صف `provider_settings` النشط في الداتابيز، ولو مفيش
  * بنرجع لإعدادات البيئة القديمة (Token Harbor) كـ fallback.
+ *
+ * النظام Protocol-agnostic: كل مزوّد ليه protocol صريح
+ * (chat_completions أو responses)، والـ endpoint بيتحل حسب البروتوكول
+ * عن طريق resolveProviderEndpoint — مش بفرض /chat/completions على الكل.
  */
+
+/** بروتوكولات الـ API المدعومة — مصممة للتوسع بدون إعادة بناء */
+export type ProviderProtocol = "chat_completions" | "responses";
+
+export const PROVIDER_PROTOCOLS: ProviderProtocol[] = ["chat_completions", "responses"];
+
+export const PROTOCOL_LABELS: Record<ProviderProtocol, string> = {
+  chat_completions: "Chat Completions",
+  responses: "Responses API",
+};
+
+export function isProviderProtocol(v: unknown): v is ProviderProtocol {
+  return v === "chat_completions" || v === "responses";
+}
+
+/** يستنتج البروتوكول من الرابط لو الأدمن ماحددش — آمن ومحافظ */
+export function inferProtocolFromUrl(url: string): ProviderProtocol {
+  const t = String(url ?? "").toLowerCase();
+  if (/\/responses\/?(\?.*)?$/.test(t)) return "responses";
+  return "chat_completions";
+}
 
 export interface ProviderConfig {
   id: string;
   name: string;
-  /** رابط /chat/completions الكامل — لازم يكون OpenAI-compatible */
+  /**
+   * الـ Base URL كما أدخله الأدمن (منظّف فقط — بدون فرض أي مسار).
+   * الـ endpoint النهائي بيتحل عبر resolveProviderEndpoint حسب البروتوكول.
+   * قيم قديمة مخزنة قد تحتوي المسار الكامل (/v1/chat/completions) —
+   * resolveProviderEndpoint بيتعامل معها للتوافق الخلفي.
+   */
   baseUrl: string;
+  protocol: ProviderProtocol;
   /** اسم الموديل زي ما المزوّد مسمّيه (مثال: deepseek-v4.1-flash:free) */
   model: string;
   /** المفاتيح الخام — موجودة على السيرفر بس، عمرها ما بتتبعت للواجهة */
@@ -31,6 +62,7 @@ export interface ProviderConfigPublic extends Omit<ProviderConfig, "apiKeys"> {
 
 const FALLBACK_BASE_URL = "https://tokenharbor.ai/v1/chat/completions";
 const FALLBACK_MODEL = "deepseek-v4.1-flash:free";
+const FALLBACK_PROTOCOL: ProviderProtocol = "chat_completions";
 
 /** مفاتيح env القديمة — بتستخدم كقيمة ابتدائية أول مرة بس */
 function envKeys(): string[] {
@@ -57,11 +89,20 @@ function envKeys(): string[] {
   return [...new Set(keys)];
 }
 
+function envProtocol(): ProviderProtocol {
+  const raw = (process.env.PROVIDER_PROTOCOL || process.env.PROVIDER_API_PROTOCOL || "").trim().toLowerCase();
+  if (isProviderProtocol(raw)) return raw;
+  const base = process.env.PROVIDER_BASE_URL?.trim() || FALLBACK_BASE_URL;
+  return inferProtocolFromUrl(base);
+}
+
 function envFallback(): ProviderConfig {
+  const base = process.env.PROVIDER_BASE_URL?.trim() || FALLBACK_BASE_URL;
   return {
     id: "env-fallback",
     name: "Token Harbor (من متغيرات البيئة)",
-    baseUrl: process.env.PROVIDER_BASE_URL?.trim() || FALLBACK_BASE_URL,
+    baseUrl: cleanBaseUrl(base) || FALLBACK_BASE_URL,
+    protocol: envProtocol(),
     model: process.env.PROVIDER_MODEL?.trim() || FALLBACK_MODEL,
     apiKeys: envKeys(),
     temperature: 0.4,
@@ -100,13 +141,19 @@ export interface ProviderRow {
   max_tokens: unknown;
   is_active: boolean;
   updated_at: string | null;
+  protocol?: unknown;
 }
 
 export function rowToConfig(r: ProviderRow): ProviderConfig {
+  const rawProto = typeof r.protocol === "string" ? r.protocol.trim().toLowerCase() : "";
+  const protocol: ProviderProtocol = isProviderProtocol(rawProto)
+    ? rawProto
+    : inferProtocolFromUrl(String(r.base_url ?? ""));
   return {
     id: r.id,
     name: r.name,
-    baseUrl: r.base_url,
+    baseUrl: String(r.base_url ?? ""),
+    protocol,
     model: r.model,
     apiKeys: Array.isArray(r.api_keys) ? r.api_keys.filter((k) => typeof k === "string" && k.trim()) : [],
     temperature: Number(r.temperature ?? 0.4),
@@ -118,22 +165,41 @@ export function rowToConfig(r: ProviderRow): ProviderConfig {
 /**
  * المزوّد النشط الحالي — الداتابيز أولاً، وenv fallback لو الجدول فاضي.
  * التعليمات (system prompt) والـ agent loop والبحث والتخزين زي ما هما بالظبط،
- * اللي بيتغيّر بس: الرابط + الموديل + المفتاح.
+ * اللي بيتغيّر بس: البروتوكول + الرابط + الموديل + المفتاح.
  */
 export async function getActiveProvider(): Promise<ProviderConfig> {
   if (cache && Date.now() - cache.at < CACHE_MS) return cache.config;
+  // نحاول قراءة عمود protocol الجديد — لو قاعدة قديمة لسه ماعملتش migration
+  // بنرجع للاستعلام القديم ونستنتج البروتوكول من الرابط.
   try {
-    const rows = (await sql`
-      SELECT id, name, base_url, model, api_keys, temperature, max_tokens, is_active, updated_at
-      FROM provider_settings
-      WHERE is_active = TRUE
-      ORDER BY updated_at DESC
-      LIMIT 1
-    `) as ProviderRow[];
-    if (rows[0]) {
-      const config = rowToConfig(rows[0]);
-      cache = { config, at: Date.now() };
-      return config;
+    try {
+      const rows = (await sql`
+        SELECT id, name, base_url, model, api_keys, temperature, max_tokens, is_active, updated_at, protocol
+        FROM provider_settings
+        WHERE is_active = TRUE
+        ORDER BY updated_at DESC
+        LIMIT 1
+      `) as ProviderRow[];
+      if (rows[0]) {
+        const config = rowToConfig(rows[0]);
+        cache = { config, at: Date.now() };
+        return config;
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/protocol/i.test(msg)) throw e;
+      const rows = (await sql`
+        SELECT id, name, base_url, model, api_keys, temperature, max_tokens, is_active, updated_at
+        FROM provider_settings
+        WHERE is_active = TRUE
+        ORDER BY updated_at DESC
+        LIMIT 1
+      `) as ProviderRow[];
+      if (rows[0]) {
+        const config = rowToConfig(rows[0]);
+        cache = { config, at: Date.now() };
+        return config;
+      }
     }
   } catch {
     // الجدول لسه متعملش (أول تشغيل قبل ensureSchema) — نرجع للـ fallback
@@ -146,26 +212,90 @@ export async function getActiveProvider(): Promise<ProviderConfig> {
 /** آخر إعداد محفوظ حتى لو مش نشط — للعرض في لوحة الأدمن */
 export async function getSavedProvider(): Promise<ProviderConfig | null> {
   try {
-    const rows = (await sql`
-      SELECT id, name, base_url, model, api_keys, temperature, max_tokens, is_active, updated_at
-      FROM provider_settings
-      ORDER BY updated_at DESC
-      LIMIT 1
-    `) as ProviderRow[];
-    return rows[0] ? rowToConfig(rows[0]) : null;
+    try {
+      const rows = (await sql`
+        SELECT id, name, base_url, model, api_keys, temperature, max_tokens, is_active, updated_at, protocol
+        FROM provider_settings
+        ORDER BY updated_at DESC
+        LIMIT 1
+      `) as ProviderRow[];
+      return rows[0] ? rowToConfig(rows[0]) : null;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/protocol/i.test(msg)) throw e;
+      const rows = (await sql`
+        SELECT id, name, base_url, model, api_keys, temperature, max_tokens, is_active, updated_at
+        FROM provider_settings
+        ORDER BY updated_at DESC
+        LIMIT 1
+      `) as ProviderRow[];
+      return rows[0] ? rowToConfig(rows[0]) : null;
+    }
   } catch {
     return null;
   }
 }
 
-/** تطبيع رابط المزوّد — يقبل الدومين لوحده أو المسار الكامل */
-export function normalizeBaseUrl(input: string): string {
-  const t = input.trim().replace(/\/+$/, "");
+/**
+ * تنظيف أساسي للرابط — يشيل المسافات والسلاشات الزيادة ويضيف https لو ناقص.
+ * لا يفرض أي مسار (/chat/completions أو /responses) — الـ endpoint النهائي
+ * بيتحل عبر resolveProviderEndpoint حسب البروتوكول.
+ */
+export function cleanBaseUrl(input: string): string {
+  const t = String(input ?? "").trim().replace(/\/+$/, "");
   if (!t) return "";
-  if (!/^https?:\/\//i.test(t)) return `https://${t}/v1/chat/completions`;
-  if (/\/chat\/completions\/?$/i.test(t)) return t;
-  if (/\/v1\/?$/i.test(t)) return `${t}/chat/completions`;
-  return `${t}/v1/chat/completions`;
+  if (!/^https?:\/\//i.test(t)) return `https://${t}`.replace(/\/+$/, "");
+  return t;
+}
+
+/**
+ * تطبيع رابط المزوّد — يقبل الدومين لوحده أو المسار الكامل.
+ *
+ * سلوك جديد (متوافق خلفيًا): ينظّف فقط ولا يفرض مسارًا.
+ * الباراميتر الثاني (protocol) اختياري ومحفوظ للتوافق مع النداءات القديمة —
+ * لا يؤثر على التنظيف نفسه، لأن الحل النهائي يتم في resolveProviderEndpoint.
+ */
+export function normalizeBaseUrl(input: string, _protocol?: ProviderProtocol | string): string {
+  void _protocol;
+  return cleanBaseUrl(input);
+}
+
+/**
+ * حل الـ endpoint النهائي حسب البروتوكول — من الـ base المخزّن.
+ *
+ * - chat_completions: ينتهي بـ /chat/completions
+ * - responses: ينتهي بـ /responses
+ *
+ * يتعامل مع كل الأشكال:
+ * - مسار كامل قديم (…/v1/chat/completions) → يُستخدم كما هو (chat) أو يُستبدل (responses)
+ * - جذر ينتهي بـ /v1 → يُضاف المسار المناسب
+ * - دومين bare أو prefix مخصص (…/inference/openai) → يُبنى المسار المناسب
+ */
+export function resolveProviderEndpoint(baseUrl: string, protocol: ProviderProtocol): string {
+  const b = cleanBaseUrl(baseUrl);
+  if (!b) return "";
+  const proto: ProviderProtocol = isProviderProtocol(protocol) ? protocol : "chat_completions";
+
+  if (proto === "responses") {
+    if (/\/responses\/?(\?.*)?$/i.test(b)) return b;
+    if (/\/chat\/completions\/?(\?.*)?$/i.test(b)) {
+      return b.replace(/\/chat\/completions\/?(\?.*)?$/i, "/responses");
+    }
+    if (/\/v1\/?(\?.*)?$/i.test(b)) return `${b}/responses`;
+    // قاعدة تحتوي /v1 في المنتصف (مثال: …/inference/openai/v1/custom؟ لا —
+    // لو فيها /v1/ فعلًا نضيف /responses فقط بدل تكرار v1)
+    if (/\/v1\//i.test(b)) return `${b}/responses`.replace(/\/+/g, "/").replace(":/", "://");
+    return `${b}/v1/responses`;
+  }
+
+  // chat_completions
+  if (/\/chat\/completions\/?(\?.*)?$/i.test(b)) return b;
+  if (/\/responses\/?(\?.*)?$/i.test(b)) {
+    return b.replace(/\/responses\/?(\?.*)?$/i, "/chat/completions");
+  }
+  if (/\/v1\/?(\?.*)?$/i.test(b)) return `${b}/chat/completions`;
+  if (/\/v1\//i.test(b)) return `${b}/chat/completions`.replace(/([^:])\/+/g, "$1/");
+  return `${b}/v1/chat/completions`;
 }
 
 export interface ProviderInput {
@@ -175,21 +305,42 @@ export interface ProviderInput {
   apiKeys?: unknown;
   temperature?: unknown;
   maxTokens?: unknown;
+  protocol?: unknown;
+  /** أسماء بديلة مقبولة من الواجهة */
+  apiProtocol?: unknown;
+  api_protocol?: unknown;
 }
 
 export type ProviderValidation =
-  | { ok: true; value: { name: string; baseUrl: string; model: string; apiKeys: string[]; temperature: number; maxTokens: number } }
+  | { ok: true; value: { name: string; baseUrl: string; protocol: ProviderProtocol; model: string; apiKeys: string[]; temperature: number; maxTokens: number } }
   | { ok: false; error: string };
+
+function parseProtocolInput(input: ProviderInput, baseUrlRaw: string): ProviderProtocol {
+  const candidates = [input.protocol, input.apiProtocol, input.api_protocol];
+  for (const c of candidates) {
+    if (typeof c === "string") {
+      const t = c.trim().toLowerCase();
+      // أسماء ودية من الواجهة
+      if (t === "responses" || t === "responses_api" || t === "responses-api" || t === "openai-responses") return "responses";
+      if (t === "chat" || t === "chat_completions" || t === "chat-completions" || t === "chat-completion" || t === "openai-chat") return "chat_completions";
+      if (isProviderProtocol(t)) return t;
+    }
+  }
+  // لو الأدمن ماحددش: استنتاج آمن من الرابط (ينتهي بـ /responses → responses)
+  return inferProtocolFromUrl(baseUrlRaw);
+}
 
 export function validateProviderInput(input: ProviderInput): ProviderValidation {
   const name = String(input.name ?? "").trim().slice(0, 80) || "مزود مخصص";
-  const baseUrl = normalizeBaseUrl(String(input.baseUrl ?? ""));
+  const rawBase = String(input.baseUrl ?? "");
+  const protocol = parseProtocolInput(input, rawBase);
+  const baseUrl = normalizeBaseUrl(rawBase, protocol);
   if (!baseUrl) return { ok: false, error: "رابط المزوّد (Base URL) مطلوب" };
   try {
     const u = new URL(baseUrl);
     if (u.protocol !== "https:" && u.protocol !== "http:") throw new Error("bad");
   } catch {
-    return { ok: false, error: "رابط المزوّد غير صالح — مثال: https://api.openai.com/v1/chat/completions" };
+    return { ok: false, error: "رابط المزوّد غير صالح — مثال: https://api.openai.com/v1" };
   }
   const model = String(input.model ?? "").trim().slice(0, 200);
   if (!model) return { ok: false, error: "اسم الموديل مطلوب — زي ما المزوّد مسمّيه بالظبط" };
@@ -214,5 +365,5 @@ export function validateProviderInput(input: ProviderInput): ProviderValidation 
   if (!Number.isFinite(maxTokens) || maxTokens <= 0) maxTokens = 128000;
   maxTokens = Math.min(Math.max(maxTokens, 1000), 256000);
 
-  return { ok: true, value: { name, baseUrl, model, apiKeys, temperature, maxTokens } };
+  return { ok: true, value: { name, baseUrl, protocol, model, apiKeys, temperature, maxTokens } };
 }

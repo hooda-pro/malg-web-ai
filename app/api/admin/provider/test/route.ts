@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureSchema } from "@/lib/db";
 import { requireAdmin } from "@/lib/adminGuard";
-import { validateProviderInput } from "@/lib/provider";
+import { validateProviderInput, resolveProviderEndpoint } from "@/lib/provider";
+import { buildUpstreamBody, classifyUpstreamError, extractResponsesSample } from "@/lib/ai";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
- * اختبار اتصال المزوّد قبل الحفظ — بيبعت طلب chat حقيقي مصغر
- * (max_tokens صغير) بأول مفتاح ويقولك شغال ولا لأ وسبب الفشل.
+ * اختبار اتصال المزوّد قبل الحفظ — بيبعت طلب حقيقي مصغر بأول مفتاح
+ * بنفس البروتوكول الذي سيُستخدم أثناء التشغيل الفعلي:
+ * - chat_completions: messages + max_tokens + stream:false
+ * - responses: input + max_output_tokens + stream:false
  * المفاتيح عمرها ما بتتخزن هنا — بتتجرب وتترمي.
  */
 export async function POST(req: NextRequest) {
@@ -24,43 +27,98 @@ export async function POST(req: NextRequest) {
   }
   const v = checked.value;
   const key = v.apiKeys[0];
+  const endpoint = resolveProviderEndpoint(v.baseUrl, v.protocol);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 45_000);
   try {
-    const res = await fetch(v.baseUrl, {
+    // نفس بناء الطلب الفعلي (buildUpstreamBody) لكن برسالة اختبار مصغرة وبدون stream
+    const testBody =
+      v.protocol === "responses"
+        ? buildUpstreamBody("responses", {
+            model: v.model,
+            messages: [{ role: "user", content: "رد بكلمة واحدة: تمام" }],
+            temperature: v.temperature,
+            maxTokens: 16,
+            stream: false,
+          })
+        : buildUpstreamBody("chat_completions", {
+            model: v.model,
+            messages: [{ role: "user", content: "رد بكلمة واحدة: تمام" }],
+            temperature: v.temperature,
+            maxTokens: 10,
+            stream: false,
+          });
+    const res = await fetch(endpoint, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${key}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: v.model,
-        messages: [{ role: "user", content: "رد بكلمة واحدة: تمام" }],
-        temperature: v.temperature,
-        max_tokens: 10,
-        stream: false,
-      }),
+      body: JSON.stringify(testBody),
       signal: controller.signal,
     });
     const text = await res.text().catch(() => "");
+    // server log تشخيصي بدون المفتاح
+    console.error(
+      `[MALG provider test] provider="${v.name}" model="${v.model}" protocol=${v.protocol} endpoint=${endpoint} status=${res.status} body=${text.slice(0, 300)}`
+    );
     if (res.ok) {
       let sample = "";
       try {
         const json = JSON.parse(text);
-        sample = String(json?.choices?.[0]?.message?.content ?? "").slice(0, 200);
+        if (v.protocol === "responses") {
+          sample = extractResponsesSample(json);
+          if (!sample && Array.isArray((json as Record<string, unknown>)?.choices)) {
+            sample = String(
+              ((json as Record<string, unknown>).choices as Array<Record<string, unknown>>)?.[0]?.message
+                ? (((json as Record<string, unknown>).choices as Array<Record<string, unknown>>)[0].message as Record<string, unknown>).content ?? ""
+                : ""
+            ).slice(0, 200);
+          }
+        } else {
+          sample = String(
+            (json as Record<string, unknown>)?.choices
+              ? (((json as Record<string, unknown>).choices as Array<Record<string, unknown>>)[0]?.message as Record<string, unknown> | undefined)?.content ?? ""
+              : ""
+          ).slice(0, 200);
+          // بعض البوابات ترجع صيغة responses حتى في وضع chat — حاول استخراجها أيضًا
+          if (!sample) sample = extractResponsesSample(json);
+        }
       } catch {
         sample = "";
       }
-      return NextResponse.json({ ok: true, sample });
+      return NextResponse.json({ ok: true, sample, protocol: v.protocol, endpoint });
     }
+    const classified = classifyUpstreamError(res.status, text);
     let hint = "";
-    if (res.status === 401 || res.status === 403) hint = "المفتاح مرفوض — راجع الـ API Key";
-    else if (res.status === 402) hint = "رصيد المزوّد خلصان (payment/quota)";
-    else if (res.status === 404) hint = "اسم الموديل مش موجود عند المزوّد ده — راجع اسم الموديل بالظبط";
-    else if (res.status === 429) hint = "المزوّد مضغوط حاليًا (rate limit) — الإعداد شكله صح، جرّب تاني";
+    switch (classified.category) {
+      case "invalid_api_key":
+        hint = "المفتاح مرفوض — راجع الـ API Key";
+        break;
+      case "forbidden_model":
+        hint = "المزوّد رفض النموذج/الصلاحية (403) — قد يكون الموديل غير مسموح لهذا المفتاح أو يحتاج بروتوكولًا مختلفًا، راجع اسم الموديل والبروتوكول";
+        break;
+      case "wrong_endpoint":
+        hint = "الرابط/المسار غلط (404) — راجع الـ Base URL والبروتوكول (Chat يحتاج /chat/completions وResponses يحتاج /responses)";
+        break;
+      case "unsupported_protocol":
+        hint = "البروتوكول غير مدعوم من المزوّد — جرّب تبديل البروتوكول بين Chat Completions وResponses API";
+        break;
+      case "quota_payment":
+        hint = "رصيد المزوّد خلصان (payment/quota)";
+        break;
+      case "rate_limit":
+        hint = "المزوّد مضغوط حاليًا (rate limit) — الإعداد شكله صح، جرّب تاني";
+        break;
+      case "model_not_found":
+        hint = "اسم الموديل مش موجود عند المزوّد ده — راجع اسم الموديل بالظبط";
+        break;
+      default:
+        hint = "";
+    }
     return NextResponse.json(
-      { ok: false, error: `المزوّد رد بخطأ ${res.status}${hint ? ` — ${hint}` : ""}`, detail: text.slice(0, 500) },
+      { ok: false, error: `المزوّد رد بخطأ ${res.status}${hint ? ` — ${hint}` : ""}`, detail: text.slice(0, 500), protocol: v.protocol, endpoint },
       { status: 502 }
     );
   } catch (e) {

@@ -230,6 +230,8 @@ export function ensureSchema(): Promise<void> {
           updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )
       `;
+      // بروتوكول المزوّد (chat_completions / responses) — يُضاف للقواعد القديمة بأمان
+      await sql`ALTER TABLE provider_settings ADD COLUMN IF NOT EXISTS protocol TEXT NOT NULL DEFAULT 'chat_completions'`;
 
       // ——— إعدادات عامة key/value (البحث وغيره) — الأدمن بيغيّرها من لوحة الإدارة ———
       await sql`

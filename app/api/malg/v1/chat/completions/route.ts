@@ -261,7 +261,7 @@ export async function POST(req: NextRequest) {
           send({ ...chunkBase, choices: [{ index: 0, delta: { content: text }, finish_reason: null }] });
         };
 
-        let result = await readUpstreamStream(upstreamResponse, controller.signal, onDelta);
+        let result = await readUpstreamStream(upstreamResponse, controller.signal, onDelta, undefined, negotiated.protocol);
 
         // نفس منطق إعادة المحاولة الموجود في /api/chat: لو الاستجابة رجعت فاضية
         // تمامًا (مش نص ولا حتى استدعاء أداة — عطل مؤقت شائع في الموديلات
@@ -275,7 +275,7 @@ export async function POST(req: NextRequest) {
             negotiateOptions
           ).catch(() => null);
           if (retryNegotiated?.ok) {
-            const retryResult = await readUpstreamStream(retryNegotiated.response, controller.signal, onDelta);
+            const retryResult = await readUpstreamStream(retryNegotiated.response, controller.signal, onDelta, undefined, retryNegotiated.protocol);
             result = {
               content: result.content + retryResult.content,
               reasoning: result.reasoning || retryResult.reasoning,
@@ -355,7 +355,7 @@ export async function POST(req: NextRequest) {
   // ————————————————————————————————————————————————————————————
   // الوضع الافتراضي: رد كامل دفعة واحدة (JSON عادي)
   // ————————————————————————————————————————————————————————————
-  let result = await readUpstreamStream(upstreamResponse, controller.signal, () => {});
+  let result = await readUpstreamStream(upstreamResponse, controller.signal, () => {}, undefined, negotiated.protocol);
 
   if (!result.content.trim() && !result.stoppedByUser && (result.toolCalls?.length ?? 0) === 0) {
     const retryNegotiated = await negotiateUpstream(
@@ -365,7 +365,7 @@ export async function POST(req: NextRequest) {
       negotiateOptions
     ).catch(() => null);
     if (retryNegotiated?.ok) {
-      const retryResult = await readUpstreamStream(retryNegotiated.response, controller.signal, () => {});
+      const retryResult = await readUpstreamStream(retryNegotiated.response, controller.signal, () => {}, undefined, retryNegotiated.protocol);
       result = {
         content: result.content + retryResult.content,
         reasoning: result.reasoning || retryResult.reasoning,

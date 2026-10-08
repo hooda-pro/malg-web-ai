@@ -44,10 +44,20 @@ export async function POST(req: NextRequest) {
 
   await sql`UPDATE provider_settings SET is_active = FALSE WHERE is_active = TRUE`;
   const id = randomUUID();
-  await sql`
-    INSERT INTO provider_settings (id, name, base_url, model, api_keys, temperature, max_tokens, is_active)
-    VALUES (${id}, ${v.name}, ${v.baseUrl}, ${v.model}, ${v.apiKeys}, ${v.temperature}, ${v.maxTokens}, TRUE)
-  `;
+  // عمود protocol قد لا يوجد في قواعد قديمة قبل migration — نحاول به ثم بدونه
+  try {
+    await sql`
+      INSERT INTO provider_settings (id, name, base_url, protocol, model, api_keys, temperature, max_tokens, is_active)
+      VALUES (${id}, ${v.name}, ${v.baseUrl}, ${v.protocol}, ${v.model}, ${v.apiKeys}, ${v.temperature}, ${v.maxTokens}, TRUE)
+    `;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!/protocol/i.test(msg)) throw e;
+    await sql`
+      INSERT INTO provider_settings (id, name, base_url, model, api_keys, temperature, max_tokens, is_active)
+      VALUES (${id}, ${v.name}, ${v.baseUrl}, ${v.model}, ${v.apiKeys}, ${v.temperature}, ${v.maxTokens}, TRUE)
+    `;
+  }
   invalidateProviderCache();
 
   const active = await getActiveProvider();
@@ -56,7 +66,7 @@ export async function POST(req: NextRequest) {
     "update_provider",
     null,
     null,
-    `تغيير المزوّد: ${v.name} — ${v.model} (${v.apiKeys.length} مفتاح)`
+    `تغيير المزوّد: ${v.name} — ${v.model} [${v.protocol}] (${v.apiKeys.length} مفتاح)`
   );
 
   return NextResponse.json({ ok: true, active: toPublicConfig(active) });

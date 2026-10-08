@@ -206,7 +206,7 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
       };
       const overBudget = () => quotaRemaining !== null && Math.floor(emittedChars / 3) + 10 >= quotaRemaining;
 
-      let result = await readUpstreamStream(upstreamResponse, req.signal, emitCounted, overBudget);
+      let result = await readUpstreamStream(upstreamResponse, req.signal, emitCounted, overBudget, negotiated.protocol);
       const quotaCutOff = !!result.stoppedByLimit;
       if (quotaCutOff) {
         emit("content", "\n\n⚠️ رصيد التوكنز بتاعك خلص فوقفت الرد هنا. اشحن رصيدك أو استنى التجديد التلقائي، وبعدها ابعت «كمّل» تاني.");
@@ -220,7 +220,7 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
           () => null
         );
         if (retryNegotiated?.ok) {
-          const retryResult = await readUpstreamStream(retryNegotiated.response, req.signal, emit);
+          const retryResult = await readUpstreamStream(retryNegotiated.response, req.signal, emit, undefined, retryNegotiated.protocol);
           result = {
             content: result.content + retryResult.content,
             reasoning: retryResult.reasoning

@@ -2,27 +2,34 @@
 
 import { useEffect, useState } from "react";
 import { FlaskConical, Loader2, PlugZap, RefreshCw, Save } from "lucide-react";
-import type { ProviderConfigPublic } from "@/lib/provider";
+import type { ProviderConfigPublic, ProviderProtocol } from "@/lib/provider";
 
 interface Loaded {
   active: ProviderConfigPublic;
   fromEnv: boolean;
 }
 
-const PRESETS: { label: string; name: string; baseUrl: string; model: string }[] = [
-  { label: "Token Harbor — DeepSeek V4.1", name: "Token Harbor", baseUrl: "https://tokenharbor.ai/v1/chat/completions", model: "deepseek-v4.1-flash:free" },
-  { label: "OpenRouter", name: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1/chat/completions", model: "deepseek/deepseek-chat-v3-0324:free" },
-  { label: "DeepSeek", name: "DeepSeek", baseUrl: "https://api.deepseek.com/v1/chat/completions", model: "deepseek-chat" },
-  { label: "OpenAI", name: "OpenAI", baseUrl: "https://api.openai.com/v1/chat/completions", model: "gpt-4o-mini" },
-  { label: "Groq", name: "Groq", baseUrl: "https://api.groq.com/openai/v1/chat/completions", model: "llama-3.3-70b-versatile" },
+const PRESETS: { label: string; name: string; baseUrl: string; model: string; protocol: ProviderProtocol }[] = [
+  { label: "Token Harbor — DeepSeek V4.1", name: "Token Harbor", baseUrl: "https://tokenharbor.ai/v1", model: "deepseek-v4.1-flash:free", protocol: "chat_completions" },
+  { label: "OpenRouter", name: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1", model: "deepseek/deepseek-chat-v3-0324:free", protocol: "chat_completions" },
+  { label: "DeepSeek", name: "DeepSeek", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat", protocol: "chat_completions" },
+  { label: "OpenAI", name: "OpenAI", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini", protocol: "chat_completions" },
+  { label: "OpenAI — Responses", name: "OpenAI", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini", protocol: "responses" },
+  { label: "Groq", name: "Groq", baseUrl: "https://api.groq.com/openai/v1", model: "llama-3.3-70b-versatile", protocol: "chat_completions" },
 ];
 
-/** قسم مزوّد الموديل — الأدمن بيغيّر الرابط/الموديل/المفاتيح من غير كود */
+const PROTOCOL_OPTIONS: { value: ProviderProtocol; label: string; hint: string }[] = [
+  { value: "chat_completions", label: "Chat Completions", hint: "messages + /chat/completions — الأنسب لمعظم المزوّدات" },
+  { value: "responses", label: "Responses API", hint: "input + /responses — لبعض النماذج مثل Muse Spark" },
+];
+
+/** قسم مزوّد الموديل — الأدمن بيغيّر البروتوكول/الرابط/الموديل/المفاتيح من غير كود */
 export default function AdminProvider({ notify }: { notify: (type: "ok" | "err", text: string) => void }) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
+  const [protocol, setProtocol] = useState<ProviderProtocol>("chat_completions");
   const [model, setModel] = useState("");
   const [apiKeys, setApiKeys] = useState("");
   const [temperature, setTemperature] = useState("0.4");
@@ -41,6 +48,7 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
       const a = data.active as ProviderConfigPublic;
       setName(a.name || "");
       setBaseUrl(a.baseUrl || "");
+      setProtocol((a as { protocol?: ProviderProtocol }).protocol === "responses" ? "responses" : "chat_completions");
       setModel(a.model || "");
       setTemperature(String(0.4));
       setMaxTokens(String(128000));
@@ -58,7 +66,7 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
   }, []);
 
   const payload = () => ({
-    name, baseUrl, model, apiKeys,
+    name, baseUrl, protocol, model, apiKeys,
     temperature: Number(temperature),
     maxTokens: Number(maxTokens),
   });
@@ -77,7 +85,7 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
         setTestResult({ ok: false, text: data.error || "فشل الاتصال" });
         return;
       }
-      setTestResult({ ok: true, text: data.sample ? `شغال — رد الموديل: ${data.sample}` : "شغال — الاتصال ناجح" });
+      setTestResult({ ok: true, text: data.sample ? `شغال [${data.protocol ?? protocol}] — رد الموديل: ${data.sample}` : `شغال [${data.protocol ?? protocol}] — الاتصال ناجح` });
     } catch {
       setTestResult({ ok: false, text: "مشكلة في الاتصال — حاول تاني" });
     } finally {
@@ -97,7 +105,7 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
       if (!res.ok) throw new Error(data.error || "فشل الحفظ");
       setLoaded({ active: data.active, fromEnv: false });
       setApiKeys("");
-      notify("ok", `تم تفعيل المزوّد: ${data.active.name} — ${data.active.model}`);
+      notify("ok", `تم تفعيل المزوّد: ${data.active.name} — ${data.active.model} [${data.active.protocol ?? protocol}]`);
     } catch (e) {
       notify("err", e instanceof Error ? e.message : "فشل الحفظ");
     } finally {
@@ -134,6 +142,10 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
             <span className="font-medium text-ink">{loaded.active.name}</span>
           </div>
           <div className="flex items-center justify-between gap-3 rounded-md border border-hair bg-surface-2 px-3 py-2">
+            <span className="shrink-0 text-ink-3">البروتوكول</span>
+            <span className="tnum text-ink" dir="ltr">{(loaded.active as { protocol?: string }).protocol === "responses" ? "Responses API" : "Chat Completions"}</span>
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-md border border-hair bg-surface-2 px-3 py-2">
             <span className="shrink-0 text-ink-3">الرابط</span>
             <span className="tnum truncate text-ink" dir="ltr">{loaded.active.baseUrl}</span>
           </div>
@@ -158,14 +170,14 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
       <div className="rounded-lg border border-hair bg-surface p-4 shadow-1">
         <h2 className="mb-1 text-[13px] font-semibold text-ink">تغيير المزوّد</h2>
         <p className="mb-3 text-[12px] leading-5 text-ink-3">
-          التعليمات وشخصية MALG والبحث والتخزين ثابتين — اللي بيتغيّر بس الرابط والموديل والمفتاح.
+          التعليمات وشخصية MALG والبحث والتخزين ثابتين — اللي بيتغيّر بس البروتوكول والرابط والموديل والمفتاح.
         </p>
 
         <div className="mb-3 flex flex-wrap gap-1.5">
           {PRESETS.map((p) => (
             <button
               key={p.label}
-              onClick={() => { setName(p.name); setBaseUrl(p.baseUrl); setModel(p.model); }}
+              onClick={() => { setName(p.name); setBaseUrl(p.baseUrl); setModel(p.model); setProtocol(p.protocol); }}
               className="rounded-full border border-hair bg-surface-2 px-2.5 py-1 text-[11.5px] text-ink-2 hover:border-accent-line hover:text-accent"
             >
               {p.label}
@@ -179,8 +191,17 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="مثال: DeepSeek" className={inputCls} />
           </div>
           <div>
-            <label className="mb-1 block text-[12px] text-ink-2">رابط الـ API</label>
-            <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.deepseek.com/v1/chat/completions" dir="ltr" className={`${inputCls} tnum`} />
+            <label className="mb-1 block text-[12px] text-ink-2">بروتوكول الـ API</label>
+            <select value={protocol} onChange={(e) => setProtocol(e.target.value === "responses" ? "responses" : "chat_completions")} className={`${inputCls} tnum`} dir="ltr">
+              {PROTOCOL_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11.5px] text-ink-3">{PROTOCOL_OPTIONS.find((o) => o.value === protocol)?.hint}</p>
+          </div>
+          <div>
+            <label className="mb-1 block text-[12px] text-ink-2">رابط الـ API (Base URL — المسار النهائي بيتبني حسب البروتوكول)</label>
+            <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.openai.com/v1" dir="ltr" className={`${inputCls} tnum`} />
           </div>
           <div>
             <label className="mb-1 block text-[12px] text-ink-2">اسم الموديل (زي ما المزوّد مسمّيه بالظبط)</label>
