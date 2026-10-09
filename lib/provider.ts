@@ -60,6 +60,233 @@ export interface ProviderConfigPublic extends Omit<ProviderConfig, "apiKeys"> {
   keysCount: number;
 }
 
+// ---------------------------------------------------------------------------
+// الموديلات المتعددة: كل موديل (id ظاهر للمستخدم) مربوط بإعداد مزوّد كامل خاص بيه
+// ---------------------------------------------------------------------------
+
+/** ملخص موديل للقوائم (عام — بدون مفاتيح خام) */
+export interface ModelSummary {
+  id: string;
+  name: string;
+  description: string;
+  isDefault: boolean;
+  isActive: boolean;
+  keysCount: number;
+  updatedAt: string | null;
+}
+
+/** إعداد مزوّد مربوط بموديل معين — اللي بيستخدمه التفاوض الفعلي */
+export interface ModelProviderConfig extends ProviderConfig {
+  /** id صف ai_models (slug ظاهر للمستخدم) */
+  modelId: string;
+  /** الاسم المعروض للموديل (ai_models.name) — للهوية في system prompt */
+  displayName: string;
+  /** هل ده الموديل الافتراضي */
+  isDefault: boolean;
+}
+
+export interface ModelRow {
+  id: string;
+  name: string;
+  description: unknown;
+  base_url: string;
+  protocol: unknown;
+  model: string;
+  api_keys: string[];
+  temperature: unknown;
+  max_tokens: unknown;
+  is_active: boolean;
+  is_default: unknown;
+  updated_at: string | null;
+}
+
+/** تحويل slug الموديل لصيغة آمنة: حروف صغيرة وأرقام و- و_ فقط */
+export function sanitizeModelId(raw: unknown): string {
+  return String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-_]/g, "")
+    .slice(0, 64);
+}
+
+/** توليد slug من اسم العرض (لو الأدمن مدخلش id صريح) */
+export function slugifyModelName(name: string): string {
+  const slug = sanitizeModelId(name).replace(/^[-_]+|[-_]+$/g, "");
+  return slug;
+}
+
+export interface ModelInput {
+  id?: unknown;
+  name?: unknown;
+  description?: unknown;
+}
+
+export type ModelValidation =
+  | { ok: true; value: { id: string; name: string; description: string } }
+  | { ok: false; error: string };
+
+export function validateModelInput(input: ModelInput): ModelValidation {
+  const name = String(input.name ?? "").trim().slice(0, 60);
+  if (!name) return { ok: false, error: "اسم الموديل مطلوب" };
+  let id = sanitizeModelId(input.id ?? "");
+  if (!id) id = slugifyModelName(name);
+  if (!id || id.length < 2) return { ok: false, error: "تعذر اشتقاق معرف صالح من الاسم — اكتب id يدويًا (حروف إنجليزية وأرقام و- و_)" };
+  const description = String(input.description ?? "").trim().slice(0, 500);
+  return { ok: true, value: { id, name, description } };
+}
+
+function modelRowToConfig(r: ModelRow): ModelProviderConfig {
+  const base = rowToConfig({
+    id: r.id,
+    name: r.name,
+    base_url: r.base_url,
+    model: r.model,
+    api_keys: r.api_keys,
+    temperature: r.temperature,
+    max_tokens: r.max_tokens,
+    is_active: r.is_active,
+    updated_at: r.updated_at,
+    protocol: r.protocol,
+  });
+  return {
+    ...base,
+    modelId: r.id,
+    displayName: r.name,
+    isDefault: r.is_default === true,
+  };
+}
+
+function modelRowToSummary(r: ModelRow): ModelSummary {
+  const keys = Array.isArray(r.api_keys) ? r.api_keys.filter((k) => typeof k === "string" && k.trim()) : [];
+  return {
+    id: r.id,
+    name: r.name,
+    description: typeof r.description === "string" ? r.description : "",
+    isDefault: r.is_default === true,
+    isActive: !!r.is_active,
+    keysCount: keys.length,
+    updatedAt: r.updated_at ?? null,
+  };
+}
+
+/** كاش لكل موديل على حدة (نفس فكرة الكاش القديم) */
+const modelCache = new Map<string, { config: ModelProviderConfig; at: number }>();
+
+export function invalidateModelCache(modelId?: string) {
+  if (modelId) modelCache.delete(modelId);
+  else modelCache.clear();
+}
+
+async function selectModelRows(whereActive: boolean): Promise<ModelRow[]> {
+  if (whereActive) {
+    return (await sql`
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at
+      FROM ai_models
+      WHERE is_active = TRUE
+      ORDER BY is_default DESC, sort_order ASC, created_at ASC
+    `) as ModelRow[];
+  }
+  return (await sql`
+    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at
+    FROM ai_models
+    ORDER BY is_default DESC, sort_order ASC, created_at ASC
+  `) as ModelRow[];
+}
+
+/** كل الموديلات (للأدمن: الكل، للواجهة: النشطة فقط) — فارغ لو الجدول لسه متعملش */
+export async function listModels(activeOnly = false): Promise<ModelSummary[]> {
+  try {
+    const rows = await selectModelRows(activeOnly);
+    return rows.map(modelRowToSummary);
+  } catch {
+    return [];
+  }
+}
+
+/** id الموديل الافتراضي النشط — أو أول موديل نشط — أو 'malg-a3' كحل أخير */
+export async function getDefaultModelId(): Promise<string> {
+  try {
+    const rows = (await sql`
+      SELECT id FROM ai_models
+      WHERE is_active = TRUE
+      ORDER BY is_default DESC, sort_order ASC, created_at ASC
+      LIMIT 1
+    `) as { id: string }[];
+    if (rows[0]?.id) return rows[0].id;
+  } catch {
+    // الجدول لسه متعملش — نكمل للـ fallback
+  }
+  return "malg-a3";
+}
+
+/**
+ * مزوّد موديل معين بالـ slug — مع fallback متدرج:
+ * 1) صف ai_models نشط بنفس الـ id
+ * 2) الموديل الافتراضي النشط
+ * 3) المسار القديم (provider_settings/env) ملفوفًا كهوية الموديل المطلوب
+ */
+export async function getModelProvider(modelId: string): Promise<ModelProviderConfig> {
+  const id = sanitizeModelId(modelId) || "malg-a3";
+  const cached = modelCache.get(id);
+  if (cached && Date.now() - cached.at < CACHE_MS) return cached.config;
+
+  const wrapLegacy = (cfg: ProviderConfig): ModelProviderConfig => ({
+    ...cfg,
+    modelId: id,
+    displayName: "Malg-A3",
+    isDefault: id === "malg-a3",
+  });
+
+  try {
+    const rows = (await sql`
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at
+      FROM ai_models
+      WHERE id = ${id} AND is_active = TRUE
+      LIMIT 1
+    `) as ModelRow[];
+    if (rows[0]) {
+      const config = modelRowToConfig(rows[0]);
+      modelCache.set(id, { config, at: Date.now() });
+      return config;
+    }
+    // fallback: الموديل الافتراضي النشط
+    const defs = (await sql`
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at
+      FROM ai_models
+      WHERE is_active = TRUE
+      ORDER BY is_default DESC, sort_order ASC, created_at ASC
+      LIMIT 1
+    `) as ModelRow[];
+    if (defs[0]) {
+      const config = modelRowToConfig(defs[0]);
+      modelCache.set(id, { config, at: Date.now() });
+      return config;
+    }
+  } catch {
+    // الجدول لسه متعملش — نكمل للمسار القديم
+  }
+  const legacy = await getActiveProvider();
+  const config = wrapLegacy(legacy);
+  modelCache.set(id, { config, at: Date.now() });
+  return config;
+}
+
+/** آخر إعداد محفوظ لموديل معين حتى لو مش نشط — للعرض في لوحة الأدمن */
+export async function getSavedModelProvider(modelId: string): Promise<ModelProviderConfig | null> {
+  const id = sanitizeModelId(modelId) || "malg-a3";
+  try {
+    const rows = (await sql`
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at
+      FROM ai_models
+      WHERE id = ${id}
+      LIMIT 1
+    `) as ModelRow[];
+    return rows[0] ? modelRowToConfig(rows[0]) : null;
+  } catch {
+    return null;
+  }
+}
+
 const FALLBACK_BASE_URL = "https://tokenharbor.ai/v1/chat/completions";
 const FALLBACK_MODEL = "deepseek-v4.1-flash:free";
 const FALLBACK_PROTOCOL: ProviderProtocol = "chat_completions";
@@ -118,6 +345,7 @@ const CACHE_MS = 15_000;
 
 export function invalidateProviderCache() {
   cache = null;
+  modelCache.clear();
 }
 
 export function maskKey(key: string): string {

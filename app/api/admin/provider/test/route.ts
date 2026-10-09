@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureSchema } from "@/lib/db";
 import { requireAdmin } from "@/lib/adminGuard";
-import { getSavedProvider, validateProviderInput, resolveProviderEndpoint, type ProviderInput } from "@/lib/provider";
+import { getDefaultModelId, getSavedModelProvider, sanitizeModelId, validateProviderInput, resolveProviderEndpoint, type ProviderInput } from "@/lib/provider";
 import { buildUpstreamBody, classifyUpstreamError, extractResponsesSample } from "@/lib/ai";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +20,8 @@ export async function POST(req: NextRequest) {
 
   await ensureSchema();
 
-  const body = (await req.json().catch(() => ({}))) as ProviderInput & { savedKeyIndex?: unknown };
+  const body = (await req.json().catch(() => ({}))) as ProviderInput & { savedKeyIndex?: unknown; modelId?: unknown };
+  const modelId = sanitizeModelId(body.modelId ?? "") || (await getDefaultModelId());
   // وضعان: (1) اختبار قيم الفورم بمفتاح خام مبعوت (أول إعداد قبل الحفظ)،
   // (2) اختبار بمفتاح محفوظ محدد برقمه — للحقول المعدلة أو لزر اختبار كل مفتاح
   // في كارت المفاتيح. المفتاح المحفوظ لا يخرج من السيرفر أبدًا.
@@ -35,9 +36,9 @@ export async function POST(req: NextRequest) {
   let key: string;
   let displayName = v.name;
   if (savedIdx !== null) {
-    const saved = await getSavedProvider();
+    const saved = await getSavedModelProvider(modelId);
     if (!saved) {
-      return NextResponse.json({ error: "لا يوجد مزوّد محفوظ — احفظ الإعداد الأول" }, { status: 400 });
+      return NextResponse.json({ error: "لا يوجد مزوّد محفوظ للموديل — احفظ الإعداد الأول" }, { status: 400 });
     }
     if (!Number.isInteger(savedIdx) || savedIdx < 0 || savedIdx >= saved.apiKeys.length) {
       return NextResponse.json({ error: "المفتاح غير موجود — حدّث الصفحة وحاول تاني" }, { status: 400 });

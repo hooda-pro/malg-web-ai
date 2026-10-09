@@ -14,7 +14,7 @@
 // - responses: OpenAI Responses API (input/model/temperature/max_output_tokens/stream)
 // التصميم يسمح بإضافة بروتوكولات أخرى عبر نفس الـ adapter بدون إعادة بناء.
 
-import { getActiveProvider, resolveProviderEndpoint, type ProviderProtocol } from "./provider";
+import { getModelProvider, resolveProviderEndpoint, type ProviderProtocol } from "./provider";
 
 /**
  * الموديل المتاح للمستخدم من الواجهة — لازم يتطابق مع components/SettingsContext.tsx
@@ -25,13 +25,18 @@ import { getActiveProvider, resolveProviderEndpoint, type ProviderProtocol } fro
  * الافتراضي والوحيد — وجوه، بقى شغال بالكامل على مزوّد واحد بس (Token Harbor
  * / DeepSeek V4.1 Flash) بدل الثلاثة القدام.
  */
-export type ModelId = "malg-a3";
+export type ModelId = string;
 export const DEFAULT_MODEL: ModelId = "malg-a3";
 
-/** لسه بتقبل القيم القديمة (malg-2 / malg-2.1 / malg-2.2) من جلسات/localStorage
- * قديمة قبل الدمج، وبترجعها كلها لنفس الموديل الموحّد الجديد. */
+/** توحيد معرف الموديل القادم من الواجهة/الجلسات/مفاتيح API:
+ * - القيم القديمة (malg-2 / malg-2.1 / malg-2.2) → "malg-a3" للتوافق الخلفي.
+ * - أي slug صالح [a-z0-9-_] يُقبل كما هو (الموديلات التي يضيفها الأدمن).
+ * - الفارغ/غير الصالح → الموديل الافتراضي. */
 export function normalizeModelId(_raw: unknown): ModelId {
-  return "malg-a3";
+  const t = String(_raw ?? "").trim().toLowerCase();
+  if (t === "malg-2" || t === "malg-2.1" || t === "malg-2.2") return DEFAULT_MODEL;
+  if (/^[a-z0-9][a-z0-9-_]{0,62}[a-z0-9]$/.test(t) || /^[a-z0-9]$/.test(t)) return t;
+  return DEFAULT_MODEL;
 }
 
 /** جزء واحد من محتوى رسالة متعدد الوسائط (نص أو صورة) — صيغة OpenAI-compatible
@@ -393,10 +398,12 @@ export function logUpstreamError(ctx: UpstreamLogContext, httpCode: number, rawT
  * المتعمد وبين استجابة فاضية فعلاً محتاجة إعادة محاولة.
  */
 // لو المزوّد فتح الاتصال وبعدين سكت تمامًا (مفيش ولا بايت، حتى تعليقات keep-alive) المدة دي،
-// بنقفل القراءة ونكمّل باللي وصل — بدل ما الطلب يتعلّق لحد ما المنصة تقتل الدالة (300 ثانية)
+// بنقفل القراءة ونكمّل باللي وصل — بدل ما الطلب يتعلّق لحد ما المنصة تقتل الدالة (800 ثانية)
 // قبل ما الرد يتحفظ، والمستخدم يشوف الرد واقف وبعدين يختفي. الـ reasoning بيوصل كـ chunks
 // باستمرار، فمهلة طويلة زي دي مابتقطعش موديل بيفكر فعلًا.
-export const UPSTREAM_IDLE_TIMEOUT_MS = Number(process.env.UPSTREAM_IDLE_TIMEOUT_MS) > 0 ? Number(process.env.UPSTREAM_IDLE_TIMEOUT_MS) : 90_000;
+// 5 دقايق افتراضي: الـ reasoning بيوصل كـ chunks باستمرار فمابتقطعش موديل بيفكر
+// فعلًا، وبتحمي بس من التعليق الحقيقي. قابلة للتغيير عبر UPSTREAM_IDLE_TIMEOUT_MS.
+export const UPSTREAM_IDLE_TIMEOUT_MS = Number(process.env.UPSTREAM_IDLE_TIMEOUT_MS) > 0 ? Number(process.env.UPSTREAM_IDLE_TIMEOUT_MS) : 300_000;
 
 export async function readUpstreamStream(
   response: Response,
@@ -770,9 +777,10 @@ function parseUpstreamError(
 async function negotiateDynamicProvider(
   apiMessages: ApiMessage[],
   signal: AbortSignal,
-  options: NegotiateOptions = {}
+  options: NegotiateOptions = {},
+  modelId: ModelId = DEFAULT_MODEL
 ): Promise<NegotiationResult> {
-  const provider = await getActiveProvider();
+  const provider = await getModelProvider(modelId);
   const keys = provider.apiKeys;
   if (keys.length === 0) {
     console.error(`[MALG config] No API keys for provider "${provider.name}" protocol=${provider.protocol} model=${provider.model} — غيّر المزوّد من لوحة الأدمن`);
@@ -843,9 +851,8 @@ async function negotiateDynamicProvider(
 }
 
 /**
- * نقطة الدخول الموحدة: الموديل بقى واحد اسمه Malg-A3 من ناحية الواجهة،
- * لكن تحته المزوّد ديناميكي (الأدمن بيغيّره من لوحة الإدارة).
- * الباراميتر modelId موجود للتوافق مع الكود القديم بس.
+ * نقطة الدخول الموحدة: الموديل المطلوب (slug) يحدد أي إعداد مزوّد يُستخدم —
+ * كل موديل ليه base URL ومفاتيح وبروتوكول خاصة بيه من لوحة الأدمن.
  */
 export async function negotiateUpstream(
   apiMessages: ApiMessage[],
@@ -853,6 +860,5 @@ export async function negotiateUpstream(
   modelId: ModelId = DEFAULT_MODEL,
   options: NegotiateOptions = {}
 ): Promise<NegotiationResult> {
-  void modelId;
-  return negotiateDynamicProvider(apiMessages, signal, options);
+  return negotiateDynamicProvider(apiMessages, signal, options, normalizeModelId(modelId));
 }

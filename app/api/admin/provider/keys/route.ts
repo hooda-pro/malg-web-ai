@@ -2,23 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureSchema } from "@/lib/db";
 import { requireAdmin, logAdminAction } from "@/lib/adminGuard";
 import {
-  getActiveProvider,
-  getSavedProvider,
+  getDefaultModelId,
+  getModelProvider,
+  getSavedModelProvider,
   invalidateProviderCache,
   maskKey,
+  sanitizeModelId,
   toPublicConfig,
 } from "@/lib/provider";
 
 export const dynamic = "force-dynamic";
 
 /**
- * إدارة مفاتيح المزوّد مفتاحًا بمفتاح — من غير ما تعيد كتابة كل المفاتيح:
+ * إدارة مفاتيح مزوّد موديل معين (body.modelId — أو الافتراضي) مفتاحًا بمفتاح:
  * - { action: "add", key } → يضيف مفتاحًا جديدًا لآخر القايمة
  * - { action: "remove", index } → يمسح مفتاحًا برقمه (ممنوع مسح آخر مفتاح)
  *
- * السيرفر أصلًا بيوزّع الحمل على المفاتيح (round-robin) وبيقلب تلقائيًا على
- * المفتاح اللي بعده لو واحد خلص أو اترفض (401/402/403/429) — فإضافة مفاتيح
- * هنا معناها استمرارية فورية من غير أي تدخل.
+ * السيرفر بيوزّع الحمل على مفاتيح الموديل (round-robin) وبيقلب تلقائيًا على
+ * المفتاح اللي بعده لو واحد خلص أو اترفض — فإضافة مفاتيح هنا معناها استمرارية.
  * المفاتيح الخام عمرها ما بتتبعت للواجهة — الراجع masked فقط.
  */
 export async function POST(req: NextRequest) {
@@ -27,13 +28,16 @@ export async function POST(req: NextRequest) {
 
   await ensureSchema();
 
-  const body = (await req.json().catch(() => ({}))) as { action?: unknown; key?: unknown; index?: unknown };
+  const body = (await req.json().catch(() => ({}))) as { action?: unknown; key?: unknown; index?: unknown; modelId?: unknown };
   const action = String(body.action ?? "");
+  const modelId = sanitizeModelId(body.modelId ?? "") || (await getDefaultModelId());
 
-  const saved = await getSavedProvider();
+  const saved = await getSavedModelProvider(modelId);
   if (!saved) {
-    return NextResponse.json({ error: "لا يوجد مزوّد محفوظ — احفظ إعداد المزوّد الأول" }, { status: 400 });
+    return NextResponse.json({ error: "الموديل غير موجود — أنشئه أولًا من إدارة الموديلات" }, { status: 404 });
   }
+
+  const refresh = async () => toPublicConfig(await getModelProvider(modelId));
 
   if (action === "add") {
     const key = String(body.key ?? "").trim();
@@ -48,12 +52,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "وصلت للحد الأقصى (20 مفتاح) — امسح واحد قديم الأول" }, { status: 400 });
     }
     const next = [...saved.apiKeys, key];
-    await sql`UPDATE provider_settings SET api_keys = ${next}, updated_at = now() WHERE id = ${saved.id}`;
+    await sql`UPDATE ai_models SET api_keys = ${next}, updated_at = now() WHERE id = ${saved.modelId}`;
     invalidateProviderCache();
-    await logAdminAction(guard.admin, "update_provider", null, null, `إضافة مفتاح جديد للمزوّد: ${saved.name} (${maskKey(key)} — بقوا ${next.length})`);
+    await logAdminAction(guard.admin, "update_provider", null, null, `إضافة مفتاح جديد لموديل ${saved.modelId}: ${saved.displayName} (${maskKey(key)} — بقوا ${next.length})`);
 
-    const active = await getActiveProvider();
-    return NextResponse.json({ ok: true, active: toPublicConfig(active) });
+    return NextResponse.json({ ok: true, active: await refresh() });
   }
 
   if (action === "remove") {
@@ -66,12 +69,11 @@ export async function POST(req: NextRequest) {
     }
     const removed = saved.apiKeys[idx];
     const next = saved.apiKeys.filter((_, i) => i !== idx);
-    await sql`UPDATE provider_settings SET api_keys = ${next}, updated_at = now() WHERE id = ${saved.id}`;
+    await sql`UPDATE ai_models SET api_keys = ${next}, updated_at = now() WHERE id = ${saved.modelId}`;
     invalidateProviderCache();
-    await logAdminAction(guard.admin, "update_provider", null, null, `مسح مفتاح من المزوّد: ${saved.name} (${maskKey(removed)} — بقوا ${next.length})`);
+    await logAdminAction(guard.admin, "update_provider", null, null, `مسح مفتاح من موديل ${saved.modelId}: ${saved.displayName} (${maskKey(removed)} — بقوا ${next.length})`);
 
-    const active = await getActiveProvider();
-    return NextResponse.json({ ok: true, active: toPublicConfig(active) });
+    return NextResponse.json({ ok: true, active: await refresh() });
   }
 
   return NextResponse.json({ error: "إجراء غير معروف" }, { status: 400 });

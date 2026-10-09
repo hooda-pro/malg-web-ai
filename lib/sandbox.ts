@@ -29,18 +29,32 @@ export interface RunCommandResult {
   hint?: string;
 }
 
-// حد أقصى لكل أمر واحد. npm install لمشروع Next بياخد غالبًا أكتر من 90 ثانية،
-// فرفعناه (الـ route نفسه maxDuration = 300 ثانية).
-const COMMAND_TIMEOUT_MS = 150_000;
+// حد أقصى لكل أمر واحد — افتراضي 10 دقايق (قابل للرفع عبر E2B_COMMAND_TIMEOUT_MS)
+// عشان مهام البناء/التثبيت الطويلة تكمل بدل ما تتقطع. السقف الفعلي لكل رد
+// بيتحكّم فيه SESSION_BUDGET_MS + maxDuration بتاع الـ route.
+const COMMAND_TIMEOUT_MS =
+  Number(process.env.E2B_COMMAND_TIMEOUT_MS) > 0
+    ? Math.floor(Number(process.env.E2B_COMMAND_TIMEOUT_MS))
+    : 600_000;
 // عمر الـ sandbox نفسه (بيتقفل تلقائيًا بعده لو نسينا نقفله يدويًا لأي سبب).
-const SANDBOX_LIFETIME_MS = 6 * 60_000;
-// مهلة إجمالية لكل أوامر الرد الواحد — بعدها منبدأش أمر جديد عشان الرد نفسه (300 ثانية)
+// ساعة كاملة عشان يغطي مهمة طويلة (كل رد بيفتح جلسة خاصة بيه وبيقفلها في الآخر).
+const SANDBOX_LIFETIME_MS =
+  Number(process.env.E2B_LIFETIME_MS) > 0
+    ? Math.floor(Number(process.env.E2B_LIFETIME_MS))
+    : 60 * 60_000;
+// مهلة إجمالية لكل أوامر الرد الواحد — بعدها منبدأش أمر جديد عشان الرد نفسه
 // يلحق يخلص ويتحفظ بدل ما الـ route يتقطع في النص.
 // مهم: العدّ بيبدأ من لحظة وصول الطلب (مش من لحظة فتح الـ sandbox) — قبل كده كان بيبدأ بعد أول
 // نداء للموديل (ممكن ياخد دقيقة+)، فمجموع الوقت كان بيعدّي 300 ثانية والـ route بيتقتل
 // من المنصة قبل ما يحفظ الرد، فالمستخدم يشوف الرد بيقطع ومفيش حاجة بتتحفظ.
-// 200 ثانية بتسيب حوالي 100 ثانية لنداء الموديل الأخير (الخلاصة) والحفظ.
-export const SESSION_BUDGET_MS = 200_000;
+// 600 ثانية (10 دقايق) بتملا نافذة Vercel القصوى (maxDuration=800) وتسيب ~200 ثانية
+// لنداء الموديل الأخير (الخلاصة) والحفظ. المهمة اللي أطول من كده بتكمل تلقائيًا
+// عبر التكملة التلقائية في الواجهة (كل تكملة نافذة جديدة).
+// قابلة للرفع عبر E2B_SESSION_BUDGET_MS للاستضافة الذاتية (VPS) مع maxDuration أكبر.
+export const SESSION_BUDGET_MS =
+  Number(process.env.E2B_SESSION_BUDGET_MS) > 0
+    ? Math.floor(Number(process.env.E2B_SESSION_BUDGET_MS))
+    : 600_000;
 // سقف حجم كل ملف بيتكتب في الـ sandbox — حماية من مشروع ضخم غير واقعي.
 const MAX_FILE_BYTES = 400_000;
 // كان 60 وده كان بيسيب ملفات ناقصة بصمت في أي مشروع أكبر من كده.
@@ -191,7 +205,7 @@ export class SandboxSession {
     if (elapsed > SESSION_BUDGET_MS) {
       return {
         ok: false, stdout: "", stderr: "", exitCode: null, timedOut: true,
-        error: "خلصت المهلة الإجمالية للأوامر في الرد ده (حوالي 3 دقايق) — الأمر مانفذش. لخّص للمستخدم اللي اتعمل واللي لسه ناقص.",
+        error: "خلصت المهلة الإجمالية للأوامر في الرد ده (حوالي 10 دقايق) — الأمر مانفذش. لخّص للمستخدم اللي اتعمل واللي لسه ناقص.",
       };
     }
 

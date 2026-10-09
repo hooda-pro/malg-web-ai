@@ -17,8 +17,8 @@ import { checkRateLimitShared } from "./rateLimit";
 
 export const MESSAGE_LIMIT_PER_MINUTE = 5;
 export const MESSAGE_LIMIT_PER_HOUR = 50;
-/** أطول مدة ممكن رد واحد ياخدها (maxDuration = 300 ثانية) + هامش صغير. بعدها الحجز بيفك لوحده لو السيرفر اتقتل. */
-const LEASE_SECONDS = 305;
+/** أطول مدة ممكن رد واحد ياخدها (maxDuration = 800 ثانية) + هامش صغير. بعدها الحجز بيفك لوحده لو السيرفر اتقتل. */
+const LEASE_SECONDS = 820;
 
 export interface UserFlags {
   isAdmin: boolean;
@@ -98,7 +98,9 @@ export async function checkMessageRate(userId: string): Promise<RateCheck> {
  * عشان كده بنعدّه لوحده بعدّاد مشترك في الداتابيز (شغال صح على serverless).
  */
 export const CONTINUE_LIMIT_PER_MINUTE = 5;
-export const CONTINUE_LIMIT_PER_HOUR = 30;
+// 100 تكملة/ساعة = يسمح بسلسلة مهمة طويلة (~6 تكملات) لعدة مهام ورا بعض،
+// مع منع الضغط المفرط على المزوّد. المهمة الواحدة الطويلة تستهلك ~5-7 فقط.
+export const CONTINUE_LIMIT_PER_HOUR = 100;
 
 export async function checkContinueRate(userId: string): Promise<RateCheck> {
   const perMinute = await checkRateLimitShared(`continue:min:${userId}`, {

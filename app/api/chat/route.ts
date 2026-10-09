@@ -11,6 +11,7 @@ import {
   type GenerationLease,
 } from "@/lib/usageGuard";
 import { checkAndMaybeRenewQuota, deductTokens } from "@/lib/quota";
+import { getModelProvider } from "@/lib/provider";
 import {
   negotiateUpstream,
   estimateTokens,
@@ -71,10 +72,11 @@ import {
 // لو مش متظبط، الموديل عمره ما يشوف الأداة دي أصلاً (مفيش استدعاء وهمي ممكن يحصل).
 const SANDBOX_ON = isSandboxConfigured();
 // أقصى عدد "جولات" استدعاء أدوات جوه رد واحد — حماية من حلقة لا نهائية لو
-// الموديل فضل يطلب أدوات من غير ما يوصل لإجابة نهائية. كان 3 وده كان بيخلّي
-// الرد يفصل في النص (قراءة ملفين + أمر = خلصت الجولات). لو الجولات خلصت،
-// بنعمل نداء أخير من غير أدوات عشان الموديل يكتب خلاصة (شوف تحت).
-const MAX_TOOL_ROUNDS = 8;
+// الموديل فضل يطلب أدوات من غير ما يوصل لإجابة نهائية. الرقم كبير (30) عشان
+// يملا نافذة الرد الواحد (~13 دقيقة) بدل ما يقف بدري؛ الحد الزمني (HARD_STOP_MS)
+// هو اللي بيوقف فعليًا. لو الجولات خلصت، بنعمل نداء أخير من غير أدوات
+// عشان الموديل يكتب خلاصة (شوف تحت).
+const MAX_TOOL_ROUNDS = 30;
 
 /** بتتضاف لآخر الرد لو رصيد التوكنز خلص وانت لسه بتكتب. */
 const QUOTA_CUTOFF_NOTE =
@@ -82,8 +84,9 @@ const QUOTA_CUTOFF_NOTE =
 // أقصى عدد استدعاءات أدوات في الجولة الواحدة.
 const MAX_CALLS_PER_ROUND = 6;
 // أقصى عدد جولات تكملة تلقائية داخلية عند الانقطاع بطول المخرجات — بعدها
-// فقط يظهر زرار «كمّل» اليدوي (لو لسه مقطوعًا).
-const MAX_AUTO_CONTINUES = 3;
+// الواجهة بتكمّل تلقائيًا عبر /api/chat/continue (سلسلة نوافذ لحد ~ساعة)،
+// وزرار «كمّل» اليدوي للاحتياط فقط (لو لسه مقطوعًا).
+const MAX_AUTO_CONTINUES = 10;
 // تعليمات التكملة الداخلية: مختصرة عمدًا (السياق الكامل موجود أصلًا في الرسائل).
 const AUTO_CONTINUE_INSTRUCTION =
   "أكمل ردك السابق مباشرة من حيث توقفت — بدون إعادة أو مقدمات، تابع النص/الكود فورًا.";
@@ -109,7 +112,7 @@ const KEEPALIVE_INTERVAL_MS = 10_000;
 
 /** بتتضاف لآخر الرد لو وصلنا للحد الزمني وانت لسه بتكتب. */
 const TIME_CUTOFF_NOTE =
-  "\n\n⏱️ وصلت للحد الزمني للرد الواحد فوقفت هنا وحفظت اللي اتعمل. ابعت «كمّل» وأكمل من نفس النقطة.";
+  "\n\n⏱️ وصلت للحد الزمني للرد الواحد فوقفت هنا وحفظت اللي اتعمل. هكمّل تلقائيًا من نفس النقطة، ولو وقفت لأي سبب ابعت «كمّل» وأكمل.";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 800;
@@ -274,9 +277,13 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   // هل نديه أدوات list_files/read_file ونقوله عنها في الـ system prompt.
   const initialProjectFiles = collectSessionProjectFiles(existing, "");
 
+  // اسم الموديل المعروض للهوية ("ما هو الموديل؟") — من إعداد الموديل نفسه
+  const modelDisplayName = (await getModelProvider(model).catch(() => null))?.displayName ?? "Malg-A3";
+
   const systemPromptContent =
     buildSystemPrompt({
       userName: user.displayName,
+      modelName: modelDisplayName,
       totalTokens: totalAllocated,
       remainingTokens: Math.max(totalAllocated - usedTokensCount, 0),
       uiLanguage,

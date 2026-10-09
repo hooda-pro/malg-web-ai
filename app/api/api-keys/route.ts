@@ -3,14 +3,13 @@ import { randomUUID, randomBytes, createHash } from "crypto";
 import { sql, ensureSchema } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
 import { ensureUserApiQuota } from "@/lib/apiQuota";
+import { listModels, sanitizeModelId } from "@/lib/provider";
 
 export const dynamic = "force-dynamic";
 
-/** لازم تتطابق مع الموديلات المتاحة في components/SettingsContext.tsx و lib/ai.ts.
- * بعد الدمج بقى فيه موديل واحد بس (Malg-A3)، بس بنسيب القيم القديمة هنا كمان
- * عشان مفاتيح API القديمة اللي متسجلة عليها ما تبقاش "غير صالحة" فجأة —
- * lib/ai.ts بيحول أي قيمة منهم تلقائيًا لـ Malg-A3 وقت التنفيذ الفعلي. */
-const VALID_MODEL_IDS = new Set(["malg-a3", "malg-2", "malg-2.1", "malg-2.2"]);
+/** الموديلات المقبولة = أي موديل مسجل في ai_models + القيم القديمة للتوافق الخلفي
+ * (مفاتيح API قديمة متسجلة عليها — وقت التنفيذ بتقع على الموديل الافتراضي). */
+const LEGACY_MODEL_IDS = new Set(["malg-a3", "malg-2", "malg-2.1", "malg-2.2"]);
 const MAX_LABEL_LENGTH = 60;
 /** حد أقصى معقول لعدد المفاتيح النشطة لكل مستخدم — يمنع إنشاء مفاتيح بلا داعي */
 const MAX_ACTIVE_KEYS_PER_USER = 20;
@@ -83,10 +82,16 @@ export async function POST(req: NextRequest) {
   await ensureSchema();
 
   const body = await req.json().catch(() => null);
-  const modelId = String(body?.model_id || "");
+  const modelId = sanitizeModelId(body?.model_id) || "malg-a3";
   const rawLabel = typeof body?.label === "string" ? body.label.trim() : "";
 
-  if (!VALID_MODEL_IDS.has(modelId)) {
+  const knownIds = new Set<string>(LEGACY_MODEL_IDS);
+  try {
+    for (const m of await listModels(false)) knownIds.add(m.id);
+  } catch {
+    // تجاهل — القيم القديمة كافية كـ fallback
+  }
+  if (!knownIds.has(modelId)) {
     return NextResponse.json({ error: "الموديل غير معروف" }, { status: 400 });
   }
 

@@ -10,6 +10,7 @@ import {
   type GenerationLease,
 } from "@/lib/usageGuard";
 import { checkAndMaybeRenewQuota, deductTokens } from "@/lib/quota";
+import { getModelProvider } from "@/lib/provider";
 import {
   negotiateUpstream,
   estimateTokens,
@@ -30,8 +31,9 @@ const CONTINUE_INSTRUCTION =
   "تابع من حيث توقفت بالضبط في ردك السابق. اكمل مباشرة بدون إعادة أو تلخيص أي جزء " +
   "سبق كتابته، وبدون أي مقدمة أو تعليق إضافي — فقط استكمل النص/الكود من آخر نقطة وصلت لها.";
 
-// أقصى عدد جولات تكملة تلقائية داخلية (نفس منطق /api/chat).
-const MAX_AUTO_CONTINUES = 3;
+// أقصى عدد جولات تكملة تلقائية داخلية (نفس منطق /api/chat) — كبير عشان
+// يملا النافذة، والواجهة بتسلسل التكملات لحد ~ساعة.
+const MAX_AUTO_CONTINUES = 10;
 
 // لو الرد السابق اتقطع في نص كتلة كود مفتوحة ( بلا إغلاق)، التكملة العامة
 // بتخلي الموديل يعيد الملف من الأول أو يفتح كتلة جديدة مكررة — فبنبعت تعليمات
@@ -147,11 +149,14 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
     SELECT role, content FROM chat_messages WHERE session_id = ${sessionId} ORDER BY created_at ASC
   `) as { role: string; content: string }[];
 
+  // اسم الموديل المعروض للهوية — من إعداد الموديل نفسه
+  const modelDisplayName = (await getModelProvider(model).catch(() => null))?.displayName ?? "Malg-A3";
+
   const apiMessages: ApiMessage[] = [
     {
       role: "system",
       content:
-        buildSystemPrompt({ userName: user.displayName, uiLanguage }) +
+        buildSystemPrompt({ userName: user.displayName, uiLanguage, modelName: modelDisplayName }) +
         (personalization ? `\n\n${personalization}` : ""),
     },
     // نفس تخفيف /api/chat: المرفقات قايمة أسماء (+ ملفات صغيرة inline في آخر رسالة)
