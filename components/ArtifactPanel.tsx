@@ -194,7 +194,7 @@ export default function ArtifactPanel({
     <section
       aria-label={title}
       className={cn(
-        "animate-fade flex flex-col bg-surface",
+        "m-panel animate-fade flex flex-col bg-surface",
         fullscreen
           ? "fixed inset-0 z-modal"
           : "fixed inset-0 z-overlay lg:static lg:z-auto lg:w-[46%] lg:min-w-[440px] lg:border-s lg:border-hair"

@@ -1,0 +1,174 @@
+/* ============================================================================
+   MALG AI — Mobile-only refinements (< 640px).
+   Everything in this file lives inside ONE media query, so tablet (>=640px)
+   and desktop are byte-for-byte untouched by design. No JS, pure CSS.
+   Breakpoint mirrors Tailwind's `sm:` (640px): utilities with `sm:` take over
+   at >=640px, this file owns everything below it.
+   ========================================================================= */
+
+@media (max-width: 639.98px) {
+  /* ---- Sunlight legibility: slightly stronger hairlines and dim text ---- */
+  :root {
+    --hairline: rgba(31, 30, 29, 0.14);
+    --hairline-2: rgba(31, 30, 29, 0.22);
+    --ink-3: #8b8883;
+  }
+  html[data-theme="dark"] {
+    --hairline: rgba(255, 255, 255, 0.12);
+    --hairline-2: rgba(255, 255, 255, 0.18);
+    --ink-3: #86868b;
+  }
+
+  /* ---- Cheaper glass + no film grain on weak mobile GPUs ---- */
+  .glass {
+    -webkit-backdrop-filter: saturate(140%) blur(12px);
+    backdrop-filter: saturate(140%) blur(12px);
+  }
+  .grain {
+    display: none;
+  }
+  .aurora-blob {
+    animation: none;
+    opacity: 0.6;
+  }
+
+  /* ---- Snappier entrances on touch (less motion, same language) ---- */
+  .msg-in {
+    animation-duration: 300ms;
+  }
+  .animate-sheet-in {
+    animation-duration: 300ms;
+  }
+
+  /* ================= Composer ================= */
+  /* Action row (attach / send / stop) grows to thumb size */
+  .m-composer .composer-glow > div:last-child > button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  /* Any other composer button (attachment chips, etc.) */
+  .m-composer .composer-glow button {
+    min-height: 40px;
+    min-width: 40px;
+  }
+  /* Composer never eats the whole screen when the keyboard is open */
+  .m-composer [class*="max-h-"] {
+    max-height: 34dvh;
+  }
+
+  /* ================= Top bar ================= */
+  .m-topbar {
+    gap: 0.25rem;
+  }
+  .m-topbar button {
+    min-height: 40px;
+    min-width: 40px;
+  }
+  /* Long model names must not push actions off a 320px header */
+  .m-topbar button > span[dir="ltr"] {
+    display: inline-block;
+    min-width: 0;
+    max-width: 24vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* Model dropdown can never be wider than the viewport */
+  .m-topbar div[role="listbox"] {
+    width: min(300px, calc(100vw - 2rem));
+  }
+
+  /* ================= Drawer (history) ================= */
+  .m-drawer nav {
+    overscroll-behavior-y: contain;
+  }
+  /* Session rows become thumb-tall */
+  .m-drawer nav li > button {
+    min-height: 44px;
+  }
+  .m-drawer button {
+    min-height: 40px;
+  }
+  /* iOS zooms inputs under 16px on focus — keep search at 16px */
+  .m-drawer input {
+    font-size: 16px;
+  }
+
+  /* ================= Messages ================= */
+  /* Tighter gutters reclaim ~8px on 320px screens */
+  .m-msg {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+  /* Long URLs / tokens / hashes wrap instead of overflowing */
+  .m-msg .measure {
+    overflow-wrap: anywhere;
+  }
+  /* Markdown tables scroll sideways inside the bubble instead of breaking layout */
+  .m-msg table {
+    display: block;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  /* Every message action (copy / edit / feedback / continue / preview) thumb-tall */
+  .m-msg button {
+    min-height: 40px;
+  }
+
+  /* ================= Code blocks ================= */
+  .m-code pre {
+    font-size: 12px;
+    line-height: 1.65;
+  }
+  .m-code button {
+    min-height: 36px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  /* ================= Activity block ================= */
+  /* Smaller indent keeps code visible on narrow screens */
+  .m-activity div[class*="ps-9"] {
+    padding-inline-start: 1rem;
+  }
+  /* Long paths / queries wrap anywhere instead of overflowing */
+  .m-activity div,
+  .m-activity span,
+  .m-activity p {
+    overflow-wrap: anywhere;
+  }
+  /* External-link affordance must not be hover-only on touch */
+  .m-activity a {
+    opacity: 1;
+  }
+
+  /* ================= Preview panel (fullscreen sheet on mobile) ================= */
+  .m-panel button {
+    min-height: 40px;
+    min-width: 40px;
+  }
+
+  /* ================= Dialogs (bottom sheets on mobile) ================= */
+  /* Narrower gutters, but never override an explicit p-0 body */
+  [role="dialog"] > div:not([class*="p-0"]) {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  /* Switches keep their pill geometry */
+  [role="dialog"] button:not([role="switch"]) {
+    min-height: 44px;
+  }
+  /* iOS zoom guard for every field inside dialogs (settings / auth / admin) */
+  [role="dialog"] input,
+  [role="dialog"] textarea,
+  [role="dialog"] select {
+    font-size: 16px;
+  }
+}
+
+/* Very small phones: hide the composer hint so buttons always fit */
+@media (max-width: 379.98px) {
+  .m-composer p.truncate {
+    display: none;
+  }
+}

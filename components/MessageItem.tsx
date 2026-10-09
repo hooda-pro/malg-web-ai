@@ -267,7 +267,7 @@ function MessageItem({
 
   return (
     <article
-      className={cn("group msg-in w-full px-4 py-4 sm:px-6", animateIn && "animate-rise")}
+      className={cn("m-msg group msg-in w-full px-4 py-4 sm:px-6", animateIn && "animate-rise")}
       aria-busy={isLive || undefined}
       aria-live={isLive ? "polite" : undefined}
     >
@@ -281,7 +281,7 @@ function MessageItem({
           </div>
 
           {(thinking || activitySteps.length > 0) && (
-            <div className="mb-2.5">
+            <div className="m-activity mb-2.5">
               <ActivityBlock steps={activitySteps} isActive={isLive} thinking={thinking} />
             </div>
           )}

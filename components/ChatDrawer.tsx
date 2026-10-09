@@ -213,7 +213,7 @@ export default function ChatDrawer({
       <aside
         aria-label={t("chatHistory")}
         className={cn(
-          "fixed inset-y-0 start-0 z-sheet flex w-[86%] max-w-[320px] shrink-0 flex-col",
+          "m-drawer fixed inset-y-0 start-0 z-sheet flex w-[86%] max-w-[320px] shrink-0 flex-col",
           "border-e border-hair bg-surface-2 transition-transform duration-3 ease-soft",
           "lg:static lg:z-auto lg:w-[280px] lg:max-w-none lg:translate-x-0 rtl:lg:translate-x-0",
           open ? "translate-x-0 shadow-3 lg:shadow-none" : "-translate-x-full rtl:translate-x-full",

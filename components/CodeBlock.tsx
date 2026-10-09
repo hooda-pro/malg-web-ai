@@ -29,7 +29,7 @@ export default function CodeBlock({
   return (
     <div
       dir="ltr"
-      className="code-surface lift my-1 overflow-hidden rounded-xl border border-hair text-start shadow-2"
+      className="m-code code-surface lift my-1 overflow-hidden rounded-xl border border-hair text-start shadow-2"
     >
       <div className="flex items-center justify-between gap-2 border-b border-hair px-3 py-2">
         <span className="truncate font-mono text-[11.5px] uppercase tracking-micro text-ink-3">
