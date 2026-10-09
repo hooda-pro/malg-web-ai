@@ -77,6 +77,15 @@
   .m-topbar div[role="listbox"] {
     width: min(300px, calc(100vw - 2rem));
   }
+  /* Tokens popover: docked full-width bar under the header instead of a
+     240px bubble anchored to the tiny ring (which overflowed the viewport) */
+  .m-topbar div[role="dialog"] {
+    position: fixed;
+    top: calc(3.75rem + env(safe-area-inset-top));
+    inset-inline-start: 0.75rem;
+    inset-inline-end: 0.75rem;
+    width: auto;
+  }
 
   /* ================= Drawer (history) ================= */
   .m-drawer nav {
