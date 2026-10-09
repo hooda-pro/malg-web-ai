@@ -143,6 +143,24 @@ async function seedDefaultModel() {
 }
 
 /**
+ * يزرع موديل Claude Sonnet 5.5 (عبر Token Harbor — نفس baseURL ومفاتيح malg-a3):
+ * - مدفوع (Pro فقط) + معامل تكلفة ×4.
+ * - ON CONFLICT DO NOTHING: آمن على القواعد الموجودة، والأدمن يفعّله من اللوحة.
+ * ملحوظة: لو غيّرت مفاتيح malg-a3 بعد البذر، انسخها لصف كلود يدويًا من اللوحة.
+ */
+async function seedClaudeModel() {
+  try {
+    await sql`
+      INSERT INTO ai_models (id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, tier, cost_multiplier, is_active, is_default)
+      SELECT 'claude-sonnet-5-5', 'Claude Sonnet 5.5', 'الأحدث من Anthropic — برمجة ووكلاء (يتطلب Pro).', COALESCE((SELECT base_url FROM ai_models WHERE id = 'malg-a3' LIMIT 1), 'https://tokenharbor.ai/v1/chat/completions'), 'chat_completions', 'claude-sonnet-5.5', COALESCE((SELECT api_keys FROM ai_models WHERE id = 'malg-a3' LIMIT 1), '{}'::text[]), 0.4, 128000, 'paid', 4, FALSE, FALSE
+      WHERE NOT EXISTS (SELECT 1 FROM ai_models WHERE id = 'claude-sonnet-5-5')
+    `;
+  } catch (e) {
+    console.error("seedClaudeModel error", e);
+  }
+}
+
+/**
  * ينشئ الجداول لو مش موجودة (idempotent). بتتكرر النتيجة بأمان.
  * بتتنفذ مرة واحدة لكل نسخة سيرفر شغالة (cold start) بفضل الـ promise cache.
  */
@@ -337,7 +355,18 @@ export function ensureSchema(): Promise<void> {
       `;
       await sql`CREATE INDEX IF NOT EXISTS idx_subs_user ON user_subscriptions(user_id)`;
 
+      // --- Memory: one small row per user ---
+      await sql`
+        CREATE TABLE IF NOT EXISTS user_memory (
+          user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          summary TEXT NOT NULL DEFAULT '',
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `;
+      await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS cost_multiplier DOUBLE PRECISION NOT NULL DEFAULT 1`;
+
       await seedDefaultModel();
+      await seedClaudeModel();
 
       // ——— تثبيت المحادثات + المؤقتة + المشاركة برابط (تفاعلات المستخدم) ———
       await sql`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN NOT NULL DEFAULT FALSE`;

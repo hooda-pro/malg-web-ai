@@ -483,6 +483,14 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
                           مجاني
                         </span>
                       )}
+                      {(m.costMultiplier ?? 1) > 1 && (
+                        <span
+                          className="shrink-0 rounded-full bg-surface-3 px-1.5 py-px text-[10.5px] font-medium text-ink-2"
+                          title="معامل تكلفة الخصم (هامش الربح)"
+                        >
+                          ×{m.costMultiplier}
+                        </span>
+                      )}
                     </span>
                     <span className="tnum mt-0.5 block truncate text-[11.5px] text-ink-3" dir="ltr">
                       {m.id} · {m.keysCount} {m.keysCount === 1 ? "مفتاح" : "مفاتيح"}

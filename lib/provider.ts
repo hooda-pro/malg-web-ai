@@ -54,6 +54,7 @@ export interface ProviderConfig {
   temperature: number;
   maxTokens: number;
   tier: ModelTier;
+  costMultiplier: number;
   isActive: boolean;
   updatedAt: string | null;
 }
@@ -78,6 +79,7 @@ export interface ModelSummary {
   keysCount: number;
   updatedAt: string | null;
   tier: ModelTier;
+  costMultiplier: number;
 }
 
 /** إعداد مزوّد مربوط بموديل معين — اللي بيستخدمه التفاوض الفعلي */
@@ -101,6 +103,7 @@ export interface ModelRow {
   temperature: unknown;
   max_tokens: unknown;
   tier: unknown;
+  cost_multiplier: unknown;
   is_active: boolean;
   is_default: unknown;
   updated_at: string | null;
@@ -154,6 +157,7 @@ function modelRowToConfig(r: ModelRow): ModelProviderConfig {
     updated_at: r.updated_at,
     protocol: r.protocol,
     tier: r.tier,
+    cost_multiplier: r.cost_multiplier,
   });
   return {
     ...base,
@@ -174,6 +178,7 @@ function modelRowToSummary(r: ModelRow): ModelSummary {
     keysCount: keys.length,
     updatedAt: r.updated_at ?? null,
     tier: (r as { tier?: unknown }).tier === "paid" ? "paid" : "free",
+    costMultiplier: clampCostMultiplier((r as { cost_multiplier?: unknown }).cost_multiplier),
   };
 }
 
@@ -188,14 +193,14 @@ export function invalidateModelCache(modelId?: string) {
 async function selectModelRows(whereActive: boolean): Promise<ModelRow[]> {
   if (whereActive) {
     return (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier
       FROM ai_models
       WHERE is_active = TRUE
       ORDER BY is_default DESC, sort_order ASC, created_at ASC
     `) as ModelRow[];
   }
   return (await sql`
-    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier
+    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier
     FROM ai_models
     ORDER BY is_default DESC, sort_order ASC, created_at ASC
   `) as ModelRow[];
@@ -247,7 +252,7 @@ export async function getModelProvider(modelId: string): Promise<ModelProviderCo
 
   try {
     const rows = (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier
       FROM ai_models
       WHERE id = ${id} AND is_active = TRUE
       LIMIT 1
@@ -259,7 +264,7 @@ export async function getModelProvider(modelId: string): Promise<ModelProviderCo
     }
     // fallback: الموديل الافتراضي النشط
     const defs = (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier
       FROM ai_models
       WHERE is_active = TRUE
       ORDER BY is_default DESC, sort_order ASC, created_at ASC
@@ -284,7 +289,7 @@ export async function getSavedModelProvider(modelId: string): Promise<ModelProvi
   const id = sanitizeModelId(modelId) || "malg-a3";
   try {
     const rows = (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier
       FROM ai_models
       WHERE id = ${id}
       LIMIT 1
@@ -343,6 +348,7 @@ function envFallback(): ProviderConfig {
     temperature: 0.4,
     maxTokens: 128000,
     tier: "free",
+    costMultiplier: 1,
     isActive: true,
     updatedAt: null,
   };
@@ -380,6 +386,13 @@ export interface ProviderRow {
   updated_at: string | null;
   protocol?: unknown;
   tier?: unknown;
+  cost_multiplier?: unknown;
+}
+
+function clampCostMultiplier(v: unknown): number {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(Math.max(n, 1), 50);
 }
 
 export function rowToConfig(r: ProviderRow): ProviderConfig {
@@ -393,6 +406,7 @@ export function rowToConfig(r: ProviderRow): ProviderConfig {
     baseUrl: String(r.base_url ?? ""),
     protocol,
     tier: r.tier === "paid" ? "paid" : "free",
+    costMultiplier: clampCostMultiplier(r.cost_multiplier),
     model: r.model,
     apiKeys: Array.isArray(r.api_keys) ? r.api_keys.filter((k) => typeof k === "string" && k.trim()) : [],
     temperature: Number(r.temperature ?? 0.4),

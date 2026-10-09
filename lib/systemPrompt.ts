@@ -6,13 +6,13 @@ export const GUEST_TOKEN_QUOTA = 1_000;
  * ممكن تغيّره من غير تعديل كود: ضيف FREE_TOKEN_QUOTA في متغيرات البيئة على السيرفر.
  * الوحدة هنا «توكنز المحادثة» (حرف÷3 لرسالتك + الرد + مخرجات الأدوات) — مش توكنز الموديل الخام،
  * والـsystem prompt وتاريخ المحادثة مش بيتحسبوا. فالرد العادي ≈ 600–1,500 توكن، وبناء موقع كامل ≈ 8–15 ألف.
- * 100 ألف = حوالي 70–150 رد، أو 7–12 مشروع — كفاية تجرّب المنتج، وأقل من أصغر باقة مدفوعة (250 ألف).
+ * 25 ألف = حوالي 15–35 رد، أو مشروعين — كفاية تجرّب المنتج، وأقل بكتير من أصغر باقة مدفوعة (250 ألف).
  */
 function envTokens(name: string, fallback: number): number {
   const n = Number(process.env[name]);
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback;
 }
-export const REGISTERED_TOKEN_QUOTA = envTokens("FREE_TOKEN_QUOTA", 100_000);
+export const REGISTERED_TOKEN_QUOTA = envTokens("FREE_TOKEN_QUOTA", 25_000);
 export const DEFAULT_TOKEN_QUOTA = REGISTERED_TOKEN_QUOTA;
 export const QUOTA_RENEWAL_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000; // شهر كامل (30 يوم)
 
@@ -38,12 +38,14 @@ export interface SystemPromptOptions {
   fileToolsAvailable?: boolean;
   /** رام الـ sandbox بالميجابايت (الافتراضي 512 في E2B) — عشان الموديل يعرف حدوده ومايخمّنش. */
   sandboxMemoryMb?: number;
+  mcpAvailable?: boolean;
   /** لو true، أدوات warn_user / end_conversation متاحة — بنضيف قسم سياسة إنهاء المحادثة. */
   conversationEndAvailable?: boolean;
   /** عدد التحذيرات اللي اتوجهت للمستخدم قبل كده في المحادثة دي (من الداتابيز). */
   warningsIssued?: number;
   /** true لو انت سألت المستخدم في ردك السابق عن تأكيد قفل الشات ورسالته الحالية هي ردّه. */
   closeConfirmationPending?: boolean;
+  memory?: string | null;
 }
 
 /**
@@ -142,6 +144,15 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
    - ما تهددش بالقفل كتهديد فارغ. التحذير بيبقى صادق وواضح، والقفل بيتم فعلًا لو السلوك استمر.`
     : "";
 
+  const memorySection =
+    opts.memory && opts.memory.trim()
+      ? `\n10b. MEMORY about this user (auto-built — treat as things you remember):\n    ${opts.memory.trim().slice(0, 800)}`
+      : "";
+
+  const mcpSection = opts.mcpAvailable
+    ? `\n12b. External tools (mcp__server__tool: real servers added by the admin):\n    - Names starting with mcp__ are REAL tools on external servers (like web_search and run_command). Call them when you need a capability you lack (video, images, specialized data).\n    - Read the tool description and parameters carefully before calling; fill only required fields.\n    - Results come back as tool messages. On failure, say so honestly and try an alternative or continue without it.`
+    : "";
+
   const userSection = userName
     ? `8. USER IDENTITY:
    - The person you are talking to is called "${userName}" — his name is saved on his account and you already know it automatically, without him having to tell you.
@@ -223,7 +234,7 @@ ${userSection}
    - اللوحة بتتفتح لحظة ما تبدأ تكتب أول ملف (مش بعد ما تخلص) — انت بتبني في الخلفية والمستخدم بيشوف التقدم قدامه، ونص رسالتك يفضل مختصر.
    - أول ما تخلص كتابة كود صفحة أو موقع، التطبيق بيفتح اللوحة لوحده على الشاشات الكبيرة — اختم ردك بجملة قصي��ة ودودة توضح إن المعاينة ظاهرة جنبه، مثلاً: «خلصت الكود ✅ المعاينة ظاهرة على جنبه دلوقتي — جرّبها ولو عايز أي تعديل قولي.»
    - ما تكررش الجملة دي في كل رد — قولها بس لما تنتج ملفات ويب جد��دة أو تعدل كود الصفحة بشكل كبير.
-   - لو المستخدم كتب «معاينة» (أو حاجة شبهها)، التطبيق نفسه هيفتح/يهيّئ اللوحة بأحدث ملفاتك تلقائياً — انت ما تعيدش كتابة الكود، بس رد عليه طبيعي إن المعاينة قدامه وإنك جاهز لأي تعديل.${fileToolsSection}${webSearchSection}${sandboxSection}${endSection}`;
+   - لو المستخدم كتب «معاينة» (أو حاجة شبهها)، التطبيق نفسه هيفتح/يهيّئ اللوحة بأحدث ملفاتك تلقائياً — انت ما تعيدش كتابة الكود، بس رد عليه طبيعي إن المعاينة قدامه وإنك جاهز لأي تعديل.${fileToolsSection}${webSearchSection}${sandboxSection}${endSection}${memorySection}${mcpSection}`;
 }
 
 const PERSONALIZATION_MAX = 1500;

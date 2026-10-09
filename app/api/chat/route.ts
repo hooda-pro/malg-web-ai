@@ -11,7 +11,9 @@ import {
   type GenerationLease,
 } from "@/lib/usageGuard";
 import { checkAndMaybeRenewQuota, deductTokens } from "@/lib/quota";
-import { hasPaidSubscription, isModelPaid } from "@/lib/subscription";
+import { getCostMultiplier, hasPaidSubscription, isModelPaid } from "@/lib/subscription";
+import { getMemory, maybeRefreshMemory } from "@/lib/memory";
+import { callMcpTool, getMcpTools } from "@/lib/mcp";
 import { getModelProvider } from "@/lib/provider";
 import {
   negotiateUpstream,
@@ -262,6 +264,8 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   const existing = (await sql`
     SELECT role, content FROM chat_messages WHERE session_id = ${sessionId} ORDER BY created_at ASC
   `) as { role: string; content: string }[];
+  void maybeRefreshMemory(user.id, existing).catch(() => {});
+  const userMemory = await getMemory(user.id).catch(() => null);
 
   // النص اللي كتبه المستخدم فعلًا (من غير بيانات الصور Base64 ولا محتوى الملفات المرفقة)
   const typedPrompt = extractAttachmentsPromptSection(extractAttachmentsMeta(userPrompt).visibleText).mainText;
@@ -290,13 +294,16 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   // وفي قايمة الأدوات بعد كده (كانت متعرفة تحت فـ TypeScript كان بيرفض).
   const SEARCH_ON = await isDeepSearchEnabled();
   const deepSearch = await runDeepSearch(typedPrompt);
+  const mcpTools = await getMcpTools().catch(() => ({ defs: [] as unknown[], byName: new Map() }));
 
   // ملفات المشروع الموجودة في المحادثة (مرفوعة أو كتبها الموديل قبل كده) — بتحدد
   // هل نديه أدوات list_files/read_file ونقوله عنها في الـ system prompt.
   const initialProjectFiles = collectSessionProjectFiles(existing, "");
 
   // اسم الموديل المعروض للهوية ("ما هو الموديل؟") — من إعداد الموديل نفسه
-  const modelDisplayName = (await getModelProvider(model).catch(() => null))?.displayName ?? "Malg-A3";
+  const modelCfg = await getModelProvider(model).catch(() => null);
+  const modelDisplayName = modelCfg?.displayName ?? "Malg-A3";
+  const costMult = modelCfg && Number.isFinite(modelCfg.costMultiplier) && modelCfg.costMultiplier > 0 ? modelCfg.costMultiplier : 1;
 
   const systemPromptContent =
     buildSystemPrompt({
@@ -307,6 +314,8 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
       uiLanguage,
       webSearchAvailable: SEARCH_ON,
       sandboxAvailable: SANDBOX_ON,
+      memory: userMemory,
+      mcpAvailable: mcpTools.defs.length > 0,
       fileToolsAvailable: initialProjectFiles.length > 0,
       sandboxMemoryMb: getSandboxMemoryMb(),
       conversationEndAvailable: true,
@@ -363,6 +372,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
     ...(SEARCH_ON ? [WEB_SEARCH_TOOL] : []),
     ...(initialProjectFiles.length > 0 ? [LIST_FILES_TOOL, READ_FILE_TOOL, EDIT_FILE_TOOL] : []),
     ...(SANDBOX_ON ? [RUN_COMMAND_TOOL] : []),
+    ...(mcpTools.defs),
     // أدوات الإشراف: تحذير محترم أولًا، وبعدين إنهاء المحادثة لو السلوك استمر
     ASK_CLOSE_CONFIRMATION_TOOL,
     WARN_USER_TOOL,
@@ -851,6 +861,42 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
               continue;
             }
 
+            // External MCP tools (admin-configured servers, real HTTP execution)
+            if (callName.startsWith("mcp__")) {
+              const entry = mcpTools.byName.get(callName) as
+                | { serverId: string; serverName: string; tool: string }
+                | undefined;
+              if (!entry) {
+                const unknownMsg = `Unknown tool: ${callName}`;
+                sendAgentEvent({ type: "tool_error", tool: "mcp", id: call.id, message: unknownMsg });
+                sandboxSteps.push({ id: call.id, tool: "mcp", status: "error", message: unknownMsg });
+                pushToolMessage({ ok: false, error: unknownMsg });
+                continue;
+              }
+              const toolLabel = `${entry.serverName} / ${entry.tool}`;
+              sendAgentEvent({ type: "tool_start", tool: "mcp", id: call.id, path: toolLabel });
+              const startedAt = Date.now();
+              const mcpOut = await callMcpTool(entry.serverId, entry.tool, argsValid ? args : {});
+              const mcpDetail: AgentStepDetail = {
+                stdout: clipOutput(mcpOut.text, 4000),
+                durationMs: Date.now() - startedAt,
+              };
+              const mcpStored: AgentStepDetail = {
+                stdout: clipOutput(mcpOut.text, 1500),
+                durationMs: mcpDetail.durationMs,
+              };
+              if (mcpOut.ok) {
+                sendAgentEvent({ type: "tool_result", tool: "mcp", id: call.id, path: toolLabel, message: "done", detail: mcpDetail });
+                sandboxSteps.push({ id: call.id, tool: "mcp", path: toolLabel, status: "done", message: "done", detail: mcpStored });
+              } else {
+                const mcpMsg = mcpOut.text || "MCP tool failed";
+                sendAgentEvent({ type: "tool_error", tool: "mcp", id: call.id, path: toolLabel, message: mcpMsg, detail: mcpDetail });
+                sandboxSteps.push({ id: call.id, tool: "mcp", path: toolLabel, status: "error", message: mcpMsg, detail: mcpStored });
+              }
+              pushToolMessage(mcpOut.ok ? { ok: true, result: mcpOut.text } : { ok: false, error: mcpOut.text });
+              continue;
+            }
+
             // --- run_command ---
             if (callName !== "run_command") {
               const msg = `أداة غير معروفة: ${callName}`;
@@ -1142,7 +1188,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
         // مبيتحسبش لأنه مبيتبعتش.
         const totalTokens = usedFallback
           ? 0
-          : promptTokens + estimateTokens(finalContent, finalReasoning ?? "") + extraTokens;
+          : Math.max(1, Math.round((promptTokens + estimateTokens(finalContent, finalReasoning ?? "") + extraTokens) * costMult));
         const assistantId = randomUUID();
 
         // بناء خطوات الـAgent الحقيقية اللي حصلت في الرد ده (بحث فعلي تم +

@@ -10,7 +10,8 @@ import {
   type GenerationLease,
 } from "@/lib/usageGuard";
 import { checkAndMaybeRenewQuota, deductTokens } from "@/lib/quota";
-import { hasPaidSubscription, isModelPaid } from "@/lib/subscription";
+import { getCostMultiplier, hasPaidSubscription, isModelPaid } from "@/lib/subscription";
+import { getMemory } from "@/lib/memory";
 import { getModelProvider } from "@/lib/provider";
 import {
   negotiateUpstream,
@@ -158,15 +159,17 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
   const history = (await sql`
     SELECT role, content FROM chat_messages WHERE session_id = ${sessionId} ORDER BY created_at ASC
   `) as { role: string; content: string }[];
+  const userMemory = await getMemory(user.id).catch(() => null);
 
   // اسم الموديل المعروض للهوية — من إعداد الموديل نفسه
+  const costMult = await getCostMultiplier(model).catch(() => 1);
   const modelDisplayName = (await getModelProvider(model).catch(() => null))?.displayName ?? "Malg-A3";
 
   const apiMessages: ApiMessage[] = [
     {
       role: "system",
       content:
-        buildSystemPrompt({ userName: user.displayName, uiLanguage, modelName: modelDisplayName }) +
+        buildSystemPrompt({ userName: user.displayName, uiLanguage, modelName: modelDisplayName, memory: userMemory }) +
         (personalization ? `\n\n${personalization}` : ""),
     },
     // نفس تخفيف /api/chat: المرفقات قايمة أسماء (+ ملفات صغيرة inline في آخر رسالة)
@@ -351,7 +354,7 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
             ? existing.reasoning + "\n\n" + result.reasoning
             : existing.reasoning
           : result.reasoning || null;
-        const addedTokens = usedFallback ? 0 : estimateTokens(result.content, result.reasoning);
+        const addedTokens = usedFallback ? 0 : Math.max(1, Math.round(estimateTokens(result.content, result.reasoning) * costMult));
         const newTokensUsed = existing.tokens_used + addedTokens;
         const isTruncated = !usedFallback && !result.stoppedByUser && (result.finishReason === "length" || quotaCutOff);
 

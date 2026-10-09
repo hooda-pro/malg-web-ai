@@ -11,6 +11,7 @@ import {
   Search,
   ShieldCheck,
   Users,
+  Wrench,
   XCircle,
 } from "lucide-react";
 import type { SessionUser } from "@/lib/types";
@@ -21,9 +22,10 @@ import AdminLogs from "./AdminLogs";
 import AdminSecurity from "./AdminSecurity";
 import AdminProvider from "./AdminProvider";
 import AdminSearch from "./AdminSearch";
+import AdminMcp from "./AdminMcp";
 import Logo from "../Logo";
 
-type Section = "overview" | "users" | "provider" | "search" | "logs" | "security";
+type Section = "overview" | "users" | "provider" | "search" | "logs" | "security" | "mcp";
 
 const SECTIONS: { id: Section; label: string; icon: typeof Users }[] = [
   { id: "overview", label: "نظرة عامة", icon: LayoutDashboard },
@@ -32,6 +34,7 @@ const SECTIONS: { id: Section; label: string; icon: typeof Users }[] = [
   { id: "search", label: "البحث", icon: Search },
   { id: "logs", label: "سجل الإجراءات", icon: ScrollText },
   { id: "security", label: "الأمان", icon: ShieldCheck },
+  { id: "mcp", label: "أدوات MCP", icon: Wrench },
 ];
 
 const SECTION_TITLES: Record<Section, string> = {
@@ -41,6 +44,7 @@ const SECTION_TITLES: Record<Section, string> = {
   search: "البحث الحقيقي",
   logs: "سجل إجراءات الأدمن",
   security: "أمان الحساب",
+  mcp: "أدوات MCP الخارجية",
 };
 
 /** الهيكل الرئيسي للوحة: قايمة جانبية + محتوى متغير حسب القسم المختار */
@@ -159,6 +163,7 @@ export default function AdminPanel({
           {section === "provider" && <AdminProvider notify={notify} />}
           {section === "search" && <AdminSearch notify={notify} />}
           {section === "security" && <AdminSecurity admin={admin} notify={notify} />}
+          {section === "mcp" && <AdminMcp notify={notify} />}
         </div>
       </main>
 

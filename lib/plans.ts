@@ -32,11 +32,19 @@ export const FREE_PLAN: SubscriptionPlan = {
   badge: null,
 };
 
+/**
+ * اقتصاديات الهامش (claude-sonnet-5.5 عبر Token Harbor: $2 دخول / $10 خروج):
+ * استهلاك الشات input-heavy (سياق + هيستوري) فالمتوسط المرجح ≈ $4 لكل مليون حقيقي.
+ * معامل التكلفة ×4 على موديل كلود يعني: 20M رصيد Pro ≈ 5M حقيقي ≈ $20 تكلفة
+ * مقابل $25 سعر → ≈ $5 ربح لكل مشترك نشط، قبل الشحن الإضافي.
+ * الشحن الإضافي المحروق على الموديل الرخيص تكلفته ≈ صفر (تهجين متقاطع يغطي
+ * حرق كلود). لو تغيّرت أسعار المزوّد، عدّل cost_multiplier من عمود ai_models.
+ */
 export const PRO_PLAN: SubscriptionPlan = {
   id: "pro",
   name: "Pro",
   tagline: "كل الموديلات + رصيد شهري ضخم + شحن إضافي براحتك",
-  monthlyTokens: 10_000_000,
+  monthlyTokens: 20_000_000,
   paidModels: true,
   topUpAllowed: true,
   monthlyUSD: 25,

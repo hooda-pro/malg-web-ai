@@ -103,3 +103,16 @@ export async function cancelSubscription(userId: string): Promise<void> {
   await sql`UPDATE user_subscriptions SET status = 'cancelled', updated_at = now()
     WHERE user_id = ${userId} AND status = 'active'`;
 }
+
+/**
+ * معامل تكلفة الموديل (1 = عادي): تُضرب فيه التوكنز المحسوبة قبل الخصم،
+ * عشان الموديلات الغالية (كلود ×4) تستهلك الرصيد أسرع ويتحقق هامش الربح.
+ */
+export async function getCostMultiplier(modelId: string): Promise<number> {
+  try {
+    const m = (await getModelProvider(modelId)).costMultiplier;
+    return Number.isFinite(m) && (m as number) > 0 ? (m as number) : 1;
+  } catch {
+    return 1;
+  }
+}

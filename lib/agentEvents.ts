@@ -29,7 +29,8 @@ export type AgentToolName =
   | "list_files"
   | "search_files"
   | "run_command"
-  | "run_tests";
+  | "run_tests"
+  | "mcp";
 
 export type AgentEventType =
   | "tool_start"
@@ -132,6 +133,7 @@ const TOOL_LABELS: Record<AgentToolName, { verbDoing: string; verbDone: string }
   search_files: { verbDoing: "بيدور جوه الملفات", verbDone: "دوّر جوه الملفات" },
   run_command: { verbDoing: "بيشغّل أمر", verbDone: "شغّل أمر" },
   run_tests: { verbDoing: "بيشغّل الاختبارات", verbDone: "شغّل الاختبارات" },
+  mcp: { verbDoing: "بيستخدم أداة خارجية", verbDone: "استخدم أداة خارجية" },
 };
 
 export function agentStepLabel(step: AgentStep): string {

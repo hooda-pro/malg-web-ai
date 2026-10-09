@@ -12,6 +12,7 @@ import {
   type UpstreamToolCall,
 } from "@/lib/ai";
 import { API_IDENTITY_SYSTEM_PROMPT } from "@/lib/systemPrompt";
+import { getCostMultiplier } from "@/lib/subscription";
 
 export const dynamic = "force-dynamic";
 // سقف Hobby = 300 (قيمة أكبر بتكسر الـ Deploy على Hobby). على Pro ارفعها لـ 800.
@@ -134,6 +135,7 @@ export async function POST(req: NextRequest) {
   }
 
   const modelId = normalizeModelId(keyRow.model_id);
+  const costMult = await getCostMultiplier(modelId).catch(() => 1);
 
   const body = await req.json().catch(() => null);
   const rawMessages = Array.isArray(body?.messages) ? body.messages : null;
@@ -327,7 +329,7 @@ export async function POST(req: NextRequest) {
 
         const billableCompletionText = finalContent + toolCallsBillableText(toolCalls);
         const promptText = messagesForUpstream.map((m) => m.content).join("\n");
-        const totalTokens = estimateTokens(promptText, billableCompletionText);
+        const totalTokens = Math.max(1, Math.round(estimateTokens(promptText, billableCompletionText) * costMult));
         await recordUsage({ keyId: keyRow.id, userId: keyRow.user_id, modelId, totalTokens });
 
         send({
@@ -388,7 +390,7 @@ export async function POST(req: NextRequest) {
   const billableCompletionText = finalContent + toolCallsBillableText(toolCalls);
   const promptText = messagesForUpstream.map((m) => m.content).join("\n");
   const promptTokens = estimateTokens(promptText);
-  const totalTokens = estimateTokens(promptText, billableCompletionText);
+  const totalTokens = Math.max(1, Math.round(estimateTokens(promptText, billableCompletionText) * costMult));
   const completionTokens = Math.max(totalTokens - promptTokens, 0);
 
   await recordUsage({ keyId: keyRow.id, userId: keyRow.user_id, modelId, totalTokens });

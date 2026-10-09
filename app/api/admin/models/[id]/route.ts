@@ -26,6 +26,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     is_default?: unknown;
     is_active?: unknown;
     tier?: unknown;
+    cost_multiplier?: unknown;
   };
 
   const sets: string[] = [];
@@ -54,6 +55,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await sql`UPDATE ai_models SET is_default = FALSE WHERE is_default = TRUE`;
     await sql`UPDATE ai_models SET is_default = TRUE, is_active = TRUE, updated_at = now() WHERE id = ${id}`;
     sets.push("افتراضي");
+  }
+  if (typeof body.cost_multiplier === "number" && Number.isFinite(body.cost_multiplier)) {
+    const mult = Math.min(Math.max(body.cost_multiplier, 1), 50);
+    sets.push(`معامل التكلفة ×${mult}`);
+    await sql`UPDATE ai_models SET cost_multiplier = ${mult}, updated_at = now() WHERE id = ${id}`;
   }
   if (sets.length === 0) {
     return NextResponse.json({ error: "لا يوجد ما يُحدّث" }, { status: 400 });
