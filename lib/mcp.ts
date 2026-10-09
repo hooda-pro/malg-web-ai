@@ -92,6 +92,17 @@ export async function listMcpServers(): Promise<McpServerConfig[]> {
         auto: true,
       });
     }
+    // DeepWiki auto-wire: free, no key, no account — Q&A over any public repo.
+    if (!servers.some((s) => s.url.includes("mcp.deepwiki.com"))) {
+      servers.push({
+        id: "auto-deepwiki",
+        name: "DeepWiki",
+        url: "https://mcp.deepwiki.com/mcp",
+        headers: {},
+        enabled: true,
+        auto: true,
+      });
+    }
     return servers;
   } catch {
     return [];
@@ -102,7 +113,7 @@ export async function saveMcpServers(input: unknown): Promise<McpServerConfig[]>
   const arr = Array.isArray(input) ? input : [];
   const cleaned = arr
     .filter((s) => s && typeof s === "object")
-    .filter((s) => (s as Record<string, unknown>).id !== "auto-tavily")
+    .filter((s) => !String((s as Record<string, unknown>).id ?? "").startsWith("auto-"))
     .slice(0, MAX_SERVERS)
     .map((s) => {
       const r = s as Record<string, unknown>;
