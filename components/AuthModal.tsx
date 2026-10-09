@@ -4,7 +4,14 @@ import { useEffect, useState } from "react";
 import { User } from "lucide-react";
 import Logo from "./Logo";
 import type { SessionUser } from "@/lib/types";
-import { authErrorCode, isInAppBrowser, signInWithGoogle } from "@/lib/firebaseClient";
+import {
+  authErrorCode,
+  getGoogleRedirectToken,
+  isInAppBrowser,
+  isIOS,
+  signInWithGoogle,
+  signInWithGoogleRedirect,
+} from "@/lib/firebaseClient";
 import { Button, Dialog, Field } from "./ui/Controls";
 import { useSettings } from "./SettingsContext";
 
@@ -54,27 +61,75 @@ export default function AuthModal({
     setInApp(isInAppBrowser());
   }, []);
 
+  const [checkingRedirect, setCheckingRedirect] = useState(false);
+
+  // Shared Google-token finish step (popup path and redirect path)
+  const completeGoogleLogin = async (idToken: string) => {
+    const res = await fetch("/api/auth/google", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error || t("errGeneric"));
+      return;
+    }
+    if (data.needsProfile) {
+      setName(data.user.displayName || "");
+      setStep("profile");
+    } else {
+      onAuthenticated(data.user);
+    }
+  };
+
+  const reportGoogleError = (e: unknown) => {
+    const code = authErrorCode(e);
+    console.error("google sign-in failed", code || e);
+    if (code === "auth/popup-blocked") setError(t("errGooglePopup"));
+    else if (code === "auth/unauthorized-domain") setError(t("errGoogleDomain"));
+    else if (code === "auth/network-request-failed") setError(t("errGoogleNetwork"));
+    else if (isInAppBrowser()) setError(t("errGoogleInApp"));
+    else setError(code ? `${t("errGoogle")} (${t("errGoogleCode")}: ${code})` : t("errGoogle"));
+  };
+
+  useEffect(() => {
+    // Back from a Google redirect (iOS path)? Finish the login automatically.
+    let cancelled = false;
+    (async () => {
+      try {
+        const idToken = await getGoogleRedirectToken();
+        if (!idToken || cancelled) return;
+        setCheckingRedirect(true);
+        await completeGoogleLogin(idToken);
+      } catch (e) {
+        if (!cancelled) reportGoogleError(e);
+      } finally {
+        if (!cancelled) setCheckingRedirect(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleGoogle = async () => {
     setError(null);
+    if (isIOS()) {
+      setLoading(true);
+      try {
+        await signInWithGoogleRedirect();
+      } catch (e) {
+        reportGoogleError(e);
+        setLoading(false);
+      }
+      return;
+    }
     setLoading(true);
     try {
       const idToken = await signInWithGoogle();
-      const res = await fetch("/api/auth/google", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || t("errGeneric"));
-        return;
-      }
-      if (data.needsProfile) {
-        setName(data.user.displayName || "");
-        setStep("profile");
-      } else {
-        onAuthenticated(data.user);
-      }
+      await completeGoogleLogin(idToken);
     } catch (e) {
       const code = authErrorCode(e);
       // المستخدم قفل النافذة بنفسه أو ضغط مرتين: مش خطأ نعرضه
@@ -143,7 +198,7 @@ export default function AuthModal({
             variant="secondary"
             size="lg"
             onClick={handleGoogle}
-            disabled={loading}
+            disabled={loading || checkingRedirect}
             className="w-full gap-2.5"
           >
             <GoogleIcon />
