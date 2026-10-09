@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, MessageCircle, Zap } from "lucide-react";
+import { Check, Copy, Crown, Lock, MessageCircle, Zap } from "lucide-react";
 import { formatTokens } from "@/lib/ai";
 import type { SessionUser } from "@/lib/types";
+import type { SubscriptionInfo } from "@/lib/plans";
 import {
   WHATSAPP_USERNAME,
   buildRechargeMessage,
@@ -32,10 +33,14 @@ function perMillion(pkg: RechargePackage): number {
 export default function RechargeModal({
   user,
   quota,
+  subscription,
+  onOpenPlans,
   onClose,
 }: {
   user: SessionUser | null;
   quota: { total: number; used: number } | null;
+  subscription: SubscriptionInfo | null;
+  onOpenPlans: () => void;
   onClose: () => void;
 }) {
   const defaultPkg = RECHARGE_PACKAGES.find((p) => p.badge) ?? RECHARGE_PACKAGES[0];
@@ -60,6 +65,7 @@ export default function RechargeModal({
   };
 
   const remaining = quota ? Math.max(quota.total - quota.used, 0) : null;
+  const locked = !!user && !user.isAdmin && !subscription?.canTopUp;
 
   return (
     <Dialog
@@ -70,6 +76,12 @@ export default function RechargeModal({
       title="شحن الرصيد"
       subtitle="زوّد رصيد التوكنز بتاعك وكمّل شغلك من غير ما تستنى التجديد."
       footer={
+        locked ? (
+          <Button variant="primary" onClick={onOpenPlans} className="w-full">
+            <Crown size={15} />
+            اشترك في Pro عشان تشحن
+          </Button>
+        ) : (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="tnum text-[12.5px] text-ink-3">
             {remaining !== null ? (
@@ -90,9 +102,30 @@ export default function RechargeModal({
             {`ادفع ${selected.price} جنيه عبر واتساب`}
           </Button>
         </div>
+        )
       }
     >
-      <div role="radiogroup" aria-label="الباقات" className="grid grid-cols-1 gap-2.5 pb-4 xs:grid-cols-2">
+      {locked && (
+        <div className="mb-3 rounded-lg border border-hair bg-surface-2 p-4 text-center">
+          <p className="flex items-center justify-center gap-1.5 text-[14px] font-semibold text-ink">
+            <Lock size={15} className="text-warn" />
+            الشحن للمشتركين فقط
+          </p>
+          <p className="mt-1 text-[12.5px] leading-6 text-ink-2">اشترك في باقة Pro الأول، وبعدها اشحن توكنز براحتك.</p>
+          <Button variant="primary" size="sm" onClick={onOpenPlans} className="mt-3">
+            <Crown size={14} />
+            اشترك في Pro
+          </Button>
+        </div>
+      )}
+      <div
+        role="radiogroup"
+        aria-label="الباقات"
+        className={cn(
+          "grid grid-cols-1 gap-2.5 pb-4 xs:grid-cols-2",
+          locked && "pointer-events-none select-none opacity-40"
+        )}
+      >
         {RECHARGE_PACKAGES.map((pkg) => {
           const active = pkg.id === selectedId;
           const pm = perMillion(pkg);

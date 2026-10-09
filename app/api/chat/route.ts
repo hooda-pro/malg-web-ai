@@ -11,6 +11,7 @@ import {
   type GenerationLease,
 } from "@/lib/usageGuard";
 import { checkAndMaybeRenewQuota, deductTokens } from "@/lib/quota";
+import { hasPaidSubscription, isModelPaid } from "@/lib/subscription";
 import { getModelProvider } from "@/lib/provider";
 import {
   negotiateUpstream,
@@ -206,6 +207,14 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   }
   // التوكنز المتبقية للمستخدم قبل الرد ده (null = أدمن، مفيش حد) — بنقطع الرد في نصه لو خلصت.
   const quotaRemaining = quotaCheck.remaining;
+
+  // موديلات الباقات المدفوعة: محجوبة عن الخطة المجانية (الأدمن والمشتركون فقط)
+  if (!isAdmin && (await isModelPaid(model).catch(() => false)) && !(await hasPaidSubscription(user.id).catch(() => false))) {
+    return NextResponse.json(
+      { error: "الموديل ده متاح لمشتركي باقة Pro فقط — اشترك من حسابك عشان تستخدمه.", subscriptionRequired: true },
+      { status: 403 }
+    );
+  }
 
   // حدود الاستهلاك والتكلفة: (1) رسايل في الدقيقة/الساعة، (2) رد واحد شغال في نفس الوقت لكل مستخدم.
   // الأدمن مستثنى. شوف lib/usageGuard.ts لسبب الحدود دي.

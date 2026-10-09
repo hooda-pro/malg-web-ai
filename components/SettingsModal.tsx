@@ -21,6 +21,7 @@ import {
 import type { ChatMessage, ChatSession, SessionUser } from "@/lib/types";
 import { LANGUAGES, type Lang } from "@/lib/i18n";
 import { formatTokens } from "@/lib/ai";
+import type { SubscriptionInfo } from "@/lib/plans";
 import { Button, Dialog, Panel, Switch } from "./ui/Controls";
 import { Avatar, ThemeSwitch, type SettingsTab } from "./AccountMenu";
 import {
@@ -46,6 +47,7 @@ const selectClass = cn(
 export default function SettingsModal({
   user,
   quota,
+  subscription,
   initialTab = "general",
   sessionsCount,
   onClose,
@@ -57,12 +59,14 @@ export default function SettingsModal({
 }: {
   user: SessionUser | null;
   quota: { total: number; used: number } | null;
+  subscription: SubscriptionInfo | null;
   initialTab?: SettingsTab;
   sessionsCount: number;
   onClose: () => void;
   onNameUpdated: (newName: string) => void;
   onLogout: () => void;
   onOpenRecharge: () => void;
+  onOpenPlans: () => void;
   onClearAll: () => Promise<void>;
   onToast: (msg: string) => void;
 }) {
@@ -113,9 +117,14 @@ export default function SettingsModal({
               <BillingTab
                 user={user}
                 quota={quota}
+                subscription={subscription}
                 onOpenRecharge={() => {
                   onClose();
                   onOpenRecharge();
+                }}
+                onOpenPlans={() => {
+                  onClose();
+                  onOpenPlans();
                 }}
               />
             )}
@@ -308,18 +317,70 @@ function PersonalizationTab() {
 function BillingTab({
   user,
   quota,
+  subscription,
   onOpenRecharge,
+  onOpenPlans,
 }: {
   user: SessionUser;
   quota: { total: number; used: number } | null;
+  subscription: SubscriptionInfo | null;
   onOpenRecharge: () => void;
+  onOpenPlans: () => void;
 }) {
-  const { t } = useSettings();
+  const { t, lang } = useSettings();
+  const isPro = !!subscription?.isPaid;
+  const endsAt = subscription?.endsAt ?? null;
+  const endsLabel = endsAt
+    ? (() => {
+        try {
+          return new Date(endsAt).toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US", {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          });
+        } catch {
+          return endsAt.slice(0, 10);
+        }
+      })()
+    : null;
   const remaining = quota ? Math.max(quota.total - quota.used, 0) : 0;
   const pct = quota && quota.total > 0 ? Math.min(100, (quota.used / quota.total) * 100) : 0;
 
   return (
     <>
+      <SectionTitle>{t("planTitle")}</SectionTitle>
+      <Panel className="p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span
+              className={cn(
+                "grid h-10 w-10 shrink-0 place-items-center rounded-md text-[16px] font-bold",
+                isPro ? "bg-warn-soft text-warn" : "bg-surface-3 text-ink-2"
+              )}
+            >
+              {isPro ? "\u2605" : "\u25CB"}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-[14px] font-semibold text-ink">
+                {user.isAdmin ? t("planAdmin") : isPro ? `${subscription?.planName ?? "Pro"} \u2605` : t("planFree")}
+              </p>
+              <p className="tnum truncate text-[12px] text-ink-3">
+                {user.isAdmin
+                  ? t("usageUnlimited")
+                  : isPro && endsLabel
+                    ? t("planActiveUntil", { date: endsLabel })
+                    : t("planFreeDesc")}
+              </p>
+            </div>
+          </div>
+          {!user.isAdmin && (
+            <Button variant="primary" size="sm" onClick={onOpenPlans} className="shrink-0">
+              {isPro ? t("planManage") : t("planSubscribe")}
+            </Button>
+          )}
+        </div>
+      </Panel>
+
       <SectionTitle>{t("usageTitle")}</SectionTitle>
       <Panel className="p-5">
         {user.isAdmin ? (

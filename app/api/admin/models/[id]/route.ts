@@ -25,6 +25,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     description?: unknown;
     is_default?: unknown;
     is_active?: unknown;
+    tier?: unknown;
   };
 
   const sets: string[] = [];
@@ -44,6 +45,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
     sets.push(body.is_active ? "تفعيل" : "تعطيل");
     await sql`UPDATE ai_models SET is_active = ${body.is_active}, updated_at = now() WHERE id = ${id}`;
+  }
+  if (body.tier === "free" || body.tier === "paid") {
+    sets.push(body.tier === "paid" ? "مدفوعة (Pro فقط)" : "مجانية (للكل)");
+    await sql`UPDATE ai_models SET tier = ${body.tier}, updated_at = now() WHERE id = ${id}`;
   }
   if (body.is_default === true) {
     await sql`UPDATE ai_models SET is_default = FALSE WHERE is_default = TRUE`;

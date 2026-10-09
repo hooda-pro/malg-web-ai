@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, LogIn, PanelLeftClose, Pin, Search, Sparkles, SquarePen, Timer, Trash2, X } from "lucide-react";
 import type { ChatSession, SessionUser } from "@/lib/types";
+import type { SubscriptionInfo } from "@/lib/plans";
 import { Button, IconButton, Kbd, modKeyLabel } from "./ui/Controls";
 import AccountMenu, { type SettingsTab } from "./AccountMenu";
 import Logo from "./Logo";
@@ -124,10 +125,12 @@ export default function ChatDrawer({
   inTempMode,
   user,
   quota,
+  subscription,
   onOpenAuth,
   onLogout,
   onOpenSettings,
   onOpenRecharge,
+  onOpenPlans,
   onOpenShortcuts,
 }: {
   open: boolean;
@@ -145,10 +148,12 @@ export default function ChatDrawer({
   inTempMode: boolean;
   user: SessionUser | null;
   quota: { total: number; used: number } | null;
+  subscription: SubscriptionInfo | null;
   onOpenAuth: () => void;
   onLogout: () => void;
   onOpenSettings: (tab?: SettingsTab) => void;
   onOpenRecharge: () => void;
+  onOpenPlans: () => void;
   onOpenShortcuts: () => void;
 }) {
   const { t } = useSettings();
@@ -337,8 +342,10 @@ export default function ChatDrawer({
             <AccountMenu
               user={user}
               quota={quota}
+              subscription={subscription}
               onOpenSettings={onOpenSettings}
               onOpenRecharge={onOpenRecharge}
+              onOpenPlans={onOpenPlans}
               onOpenShortcuts={onOpenShortcuts}
               onLogout={onLogout}
             />

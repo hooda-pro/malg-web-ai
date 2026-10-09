@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FlaskConical, KeyRound, Layers, Loader2, PlugZap, Plus, RefreshCw, Save, Star, Trash2 } from "lucide-react";
+import { Crown, FlaskConical, KeyRound, Layers, Loader2, PlugZap, Plus, RefreshCw, Save, Star, Trash2 } from "lucide-react";
 import type { ModelSummary, ProviderConfigPublic, ProviderProtocol } from "@/lib/provider";
 
 interface Loaded {
@@ -343,6 +343,25 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
     }
   };
 
+  const setTier = async (id: string, tier: "free" | "paid") => {
+    setActingId(id);
+    try {
+      const res = await fetch(`/api/admin/models/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "فشل التحديث");
+      setModels(data.models ?? []);
+      notify("ok", tier === "paid" ? `الموديل ${id} بقى مدفوع (مشتركو Pro فقط)` : `الموديل ${id} بقى مجاني للكل`);
+    } catch (e) {
+      notify("err", e instanceof Error ? e.message : "فشل التحديث");
+    } finally {
+      setActingId(null);
+    }
+  };
+
   const deleteModel = async (id: string) => {
     if (confirmDeleteModel !== id) {
       setConfirmDeleteModel(id);
@@ -455,6 +474,15 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
                           موقوف
                         </span>
                       )}
+                      {((m as { tier?: string }).tier ?? "free") === "paid" ? (
+                        <span className="shrink-0 rounded-full bg-warn-soft px-1.5 py-px text-[10.5px] font-bold text-warn">
+                          ★ Pro
+                        </span>
+                      ) : (
+                        <span className="shrink-0 rounded-full bg-live-soft px-1.5 py-px text-[10.5px] font-medium text-live">
+                          مجاني
+                        </span>
+                      )}
                     </span>
                     <span className="tnum mt-0.5 block truncate text-[11.5px] text-ink-3" dir="ltr">
                       {m.id} · {m.keysCount} {m.keysCount === 1 ? "مفتاح" : "مفاتيح"}
@@ -471,6 +499,19 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
                       {acting ? <Loader2 size={13} className="animate-spin" /> : <Star size={13} />}
                     </button>
                   )}
+                  <button
+                    onClick={() => setTier(m.id, ((m as { tier?: string }).tier ?? "free") === "paid" ? "free" : "paid")}
+                    disabled={busy}
+                    title={((m as { tier?: string }).tier ?? "free") === "paid" ? "اجعله مجانيًا للكل" : "اجعله مدفوعًا (Pro فقط)"}
+                    aria-label="تبديل مجاني/مدفوع"
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-full transition-colors duration-1 hover:bg-surface-3 disabled:opacity-40"
+                  >
+                    {acting ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <Crown size={13} className={((m as { tier?: string }).tier ?? "free") === "paid" ? "text-warn" : "text-ink-3"} />
+                    )}
+                  </button>
                   <button
                     onClick={() => deleteModel(m.id)}
                     disabled={busy}

@@ -319,6 +319,24 @@ export function ensureSchema(): Promise<void> {
           updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )
       `;
+      await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS tier TEXT NOT NULL DEFAULT 'free'`;
+
+      // ——— اشتراكات الباقات (شهري/سنوي): تفعيل يدوي بواسطة الأدمن بعد تأكيد الدفع ———
+      await sql`
+        CREATE TABLE IF NOT EXISTS user_subscriptions (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          plan_id TEXT NOT NULL,
+          period TEXT NOT NULL DEFAULT 'monthly',
+          status TEXT NOT NULL DEFAULT 'active',
+          started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          ends_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS idx_subs_user ON user_subscriptions(user_id)`;
+
       await seedDefaultModel();
 
       // ——— تثبيت المحادثات + المؤقتة + المشاركة برابط (تفاعلات المستخدم) ———

@@ -17,6 +17,9 @@ export type ProviderProtocol = "chat_completions" | "responses";
 
 export const PROVIDER_PROTOCOLS: ProviderProtocol[] = ["chat_completions", "responses"];
 
+/** طبقة الموديل: مجاني للكل، أم مدفوع (مشتركو Pro فقط) — يحددها الأدمن */
+export type ModelTier = "free" | "paid";
+
 export const PROTOCOL_LABELS: Record<ProviderProtocol, string> = {
   chat_completions: "Chat Completions",
   responses: "Responses API",
@@ -50,6 +53,7 @@ export interface ProviderConfig {
   apiKeys: string[];
   temperature: number;
   maxTokens: number;
+  tier: ModelTier;
   isActive: boolean;
   updatedAt: string | null;
 }
@@ -73,6 +77,7 @@ export interface ModelSummary {
   isActive: boolean;
   keysCount: number;
   updatedAt: string | null;
+  tier: ModelTier;
 }
 
 /** إعداد مزوّد مربوط بموديل معين — اللي بيستخدمه التفاوض الفعلي */
@@ -95,6 +100,7 @@ export interface ModelRow {
   api_keys: string[];
   temperature: unknown;
   max_tokens: unknown;
+  tier: unknown;
   is_active: boolean;
   is_default: unknown;
   updated_at: string | null;
@@ -147,6 +153,7 @@ function modelRowToConfig(r: ModelRow): ModelProviderConfig {
     is_active: r.is_active,
     updated_at: r.updated_at,
     protocol: r.protocol,
+    tier: r.tier,
   });
   return {
     ...base,
@@ -166,6 +173,7 @@ function modelRowToSummary(r: ModelRow): ModelSummary {
     isActive: !!r.is_active,
     keysCount: keys.length,
     updatedAt: r.updated_at ?? null,
+    tier: (r as { tier?: unknown }).tier === "paid" ? "paid" : "free",
   };
 }
 
@@ -180,14 +188,14 @@ export function invalidateModelCache(modelId?: string) {
 async function selectModelRows(whereActive: boolean): Promise<ModelRow[]> {
   if (whereActive) {
     return (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier
       FROM ai_models
       WHERE is_active = TRUE
       ORDER BY is_default DESC, sort_order ASC, created_at ASC
     `) as ModelRow[];
   }
   return (await sql`
-    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at
+    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier
     FROM ai_models
     ORDER BY is_default DESC, sort_order ASC, created_at ASC
   `) as ModelRow[];
@@ -239,7 +247,7 @@ export async function getModelProvider(modelId: string): Promise<ModelProviderCo
 
   try {
     const rows = (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier
       FROM ai_models
       WHERE id = ${id} AND is_active = TRUE
       LIMIT 1
@@ -251,7 +259,7 @@ export async function getModelProvider(modelId: string): Promise<ModelProviderCo
     }
     // fallback: الموديل الافتراضي النشط
     const defs = (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier
       FROM ai_models
       WHERE is_active = TRUE
       ORDER BY is_default DESC, sort_order ASC, created_at ASC
@@ -276,7 +284,7 @@ export async function getSavedModelProvider(modelId: string): Promise<ModelProvi
   const id = sanitizeModelId(modelId) || "malg-a3";
   try {
     const rows = (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier
       FROM ai_models
       WHERE id = ${id}
       LIMIT 1
@@ -334,6 +342,7 @@ function envFallback(): ProviderConfig {
     apiKeys: envKeys(),
     temperature: 0.4,
     maxTokens: 128000,
+    tier: "free",
     isActive: true,
     updatedAt: null,
   };
@@ -370,6 +379,7 @@ export interface ProviderRow {
   is_active: boolean;
   updated_at: string | null;
   protocol?: unknown;
+  tier?: unknown;
 }
 
 export function rowToConfig(r: ProviderRow): ProviderConfig {
@@ -382,6 +392,7 @@ export function rowToConfig(r: ProviderRow): ProviderConfig {
     name: r.name,
     baseUrl: String(r.base_url ?? ""),
     protocol,
+    tier: r.tier === "paid" ? "paid" : "free",
     model: r.model,
     apiKeys: Array.isArray(r.api_keys) ? r.api_keys.filter((k) => typeof k === "string" && k.trim()) : [],
     temperature: Number(r.temperature ?? 0.4),

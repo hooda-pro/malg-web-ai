@@ -6,6 +6,7 @@ import {
   ArrowUpRight,
   ChevronsUpDown,
   Coins,
+  Crown,
   KeyRound,
   Keyboard,
   LayoutDashboard,
@@ -18,6 +19,7 @@ import {
   Wand2,
 } from "lucide-react";
 import type { SessionUser } from "@/lib/types";
+import type { SubscriptionInfo } from "@/lib/plans";
 import { formatTokens } from "@/lib/ai";
 import { Kbd, modKeyLabel } from "./ui/Controls";
 import { useSettings, type Theme } from "./SettingsContext";
@@ -51,15 +53,19 @@ export function Avatar({ user, size = 32 }: { user: SessionUser; size?: number }
 export default function AccountMenu({
   user,
   quota,
+  subscription,
   onOpenSettings,
   onOpenRecharge,
+  onOpenPlans,
   onOpenShortcuts,
   onLogout,
 }: {
   user: SessionUser;
   quota: { total: number; used: number } | null;
+  subscription: SubscriptionInfo | null;
   onOpenSettings: (tab?: SettingsTab) => void;
   onOpenRecharge: () => void;
+  onOpenPlans: () => void;
   onOpenShortcuts: () => void;
   onLogout: () => void;
 }) {
@@ -173,6 +179,14 @@ export default function AccountMenu({
               onSelect={() => setOpen(false)}
               trailing={<ArrowUpRight size={14} className="flip-rtl text-ink-3" />}
             />
+            {!user.isAdmin && (
+              <MenuItem
+                icon={<Crown size={16} />}
+                label={subscription?.isPaid ? t("planManage") : t("planSubscribe")}
+                onSelect={run(onOpenPlans)}
+                trailing={<span className="text-[14px] font-bold leading-none text-warn">★</span>}
+              />
+            )}
             <MenuItem
               icon={<Wand2 size={16} />}
               label={t("menuPersonalize")}
@@ -242,9 +256,11 @@ export default function AccountMenu({
           <span className="tnum block truncate text-[11.5px] text-ink-3">
             {user.isAdmin
               ? t("planAdmin")
-              : remaining !== null
-                ? `${t("planFree")} · ${t("tokensLeft", { n: formatTokens(remaining) })}`
-                : t("planFree")}
+              : subscription?.isPaid
+                ? `${subscription.planName} ★${remaining !== null ? ` · ${t("tokensLeft", { n: formatTokens(remaining) })}` : ""}`
+                : remaining !== null
+                  ? `${t("planFree")} · ${t("tokensLeft", { n: formatTokens(remaining) })}`
+                  : t("planFree")}
           </span>
         </span>
         <ChevronsUpDown size={15} className="shrink-0 text-ink-3" />

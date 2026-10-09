@@ -28,6 +28,7 @@ import { formatDateTime, initialOf, timeAgo, truncate, usagePercent } from "./he
 import ConfirmModal from "./ConfirmModal";
 import TokenRechargeModal from "./TokenRechargeModal";
 import ApiTokenRechargeModal from "./ApiTokenRechargeModal";
+import SubscriptionCard from "./SubscriptionCard";
 
 type NotifyFn = (type: "ok" | "err", text: string) => void;
 
@@ -324,6 +325,9 @@ export default function UserDetail({
           </div>
         </div>
       </div>
+
+      {/* اشتراك الباقة (Pro شهرية/سنوية) — يُفعّل يدويًا بعد تأكيد الدفع */}
+      <SubscriptionCard userId={user.id} userName={user.display_name} />
 
       {/* أزرار الإجراءات */}
       <div className="flex flex-wrap gap-2">

@@ -4,6 +4,8 @@ import { sql, ensureSchema } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
 import { ensureUserApiQuota } from "@/lib/apiQuota";
 import { listModels, sanitizeModelId } from "@/lib/provider";
+import { getUserFlags } from "@/lib/usageGuard";
+import { hasPaidSubscription, isModelPaid } from "@/lib/subscription";
 
 export const dynamic = "force-dynamic";
 
@@ -93,6 +95,15 @@ export async function POST(req: NextRequest) {
   }
   if (!knownIds.has(modelId)) {
     return NextResponse.json({ error: "الموديل غير معروف" }, { status: 400 });
+  }
+
+  // مفاتيح API على موديلات مدفوعة: للمشتركين والأدمن فقط (نفس قاعدة الشات)
+  const flags = await getUserFlags(user.id).catch(() => null);
+  if (!flags?.isAdmin && (await isModelPaid(modelId).catch(() => false)) && !(await hasPaidSubscription(user.id).catch(() => false))) {
+    return NextResponse.json(
+      { error: "الموديل ده متاح لمشتركي باقة Pro فقط — اشترك من حسابك عشان تستخدمه.", subscriptionRequired: true },
+      { status: 403 }
+    );
   }
 
   const label = rawLabel ? rawLabel.slice(0, MAX_LABEL_LENGTH) : "مفتاح API";

@@ -14,6 +14,8 @@ import ChatEndedNotice from "./ChatEndedNotice";
 import QuotaExhaustedNotice from "./QuotaExhaustedNotice";
 import AuthModal from "./AuthModal";
 import RechargeModal from "./RechargeModal";
+import PlansModal from "./PlansModal";
+import type { SubscriptionInfo } from "@/lib/plans";
 import ArtifactPanel from "./ArtifactPanel";
 import SettingsModal from "./SettingsModal";
 import ShortcutsDialog from "./ShortcutsDialog";
@@ -108,6 +110,7 @@ export default function ChatShell() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [quota, setQuota] = useState<{ total: number; used: number } | null>(null);
+  const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
   /** إمتى الرصيد هيتجدد تلقائيًا (لو خلص) — جاي من /api/quota */
   const [quotaRenewsAt, setQuotaRenewsAt] = useState<string | null>(null);
 
@@ -134,6 +137,7 @@ export default function ChatShell() {
 
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [showRecharge, setShowRecharge] = useState(false);
+  const [showPlans, setShowPlans] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
 
   // الرد الحيّ بيتربط بالشات اللي اتبعت منه (لو المستخدم فتح شات تاني ما يظهرش فيه)
@@ -252,9 +256,11 @@ export default function ChatShell() {
       if (data.quota) {
         setQuota({ total: data.quota.totalAllocatedTokens, used: data.quota.usedTokens });
         setQuotaRenewsAt(data.quota.renewsAt ?? null);
+        setSubscription((data.quota.subscription ?? null) as SubscriptionInfo | null);
       } else {
         setQuota(null);
         setQuotaRenewsAt(null);
+        setSubscription(null);
       }
     } catch {
       // تجاهل
@@ -1137,6 +1143,11 @@ export default function ChatShell() {
     setShowRecharge(true);
   }, []);
 
+  const openPlans = useCallback(() => {
+    setDrawerOpen(false);
+    setShowPlans(true);
+  }, []);
+
   // اختصارات الكيبورد العامة
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1203,6 +1214,7 @@ export default function ChatShell() {
         inTempMode={inTempMode}
         user={user}
         quota={quota}
+        subscription={subscription}
         onOpenAuth={() => {
           setDrawerOpen(false);
           setShowAuthModal(true);
@@ -1210,6 +1222,7 @@ export default function ChatShell() {
         onLogout={handleLogout}
         onOpenSettings={openSettings}
         onOpenRecharge={openRecharge}
+        onOpenPlans={openPlans}
         onOpenShortcuts={() => {
           setDrawerOpen(false);
           setShowShortcuts(true);
@@ -1226,6 +1239,10 @@ export default function ChatShell() {
           onNewChat={handleNewChat}
           lockedModel={lockedModel}
           onPickModel={handlePickModel}
+          onLockedModel={() => {
+            showToast(t("modelLockedToast"));
+            setShowPlans(true);
+          }}
           onShare={currentSessionId && !inTempMode ? () => setShareOpen(true) : undefined}
         />
 
@@ -1304,12 +1321,14 @@ export default function ChatShell() {
         <SettingsModal
           user={user}
           quota={quota}
+          subscription={subscription}
           initialTab={settingsTab}
           sessionsCount={sessions.length}
           onClose={() => setSettingsTab(null)}
           onNameUpdated={handleNameUpdated}
           onLogout={handleLogout}
           onOpenRecharge={openRecharge}
+          onOpenPlans={openPlans}
           onClearAll={handleClearAll}
           onToast={showToast}
         />
@@ -1318,7 +1337,20 @@ export default function ChatShell() {
       {showShortcuts && <ShortcutsDialog onClose={() => setShowShortcuts(false)} />}
 
       {showRecharge && (
-        <RechargeModal user={user} quota={quota} onClose={() => setShowRecharge(false)} />
+        <RechargeModal
+          user={user}
+          quota={quota}
+          subscription={subscription}
+          onOpenPlans={() => {
+            setShowRecharge(false);
+            setShowPlans(true);
+          }}
+          onClose={() => setShowRecharge(false)}
+        />
+      )}
+
+      {showPlans && (
+        <PlansModal user={user} subscription={subscription} onClose={() => setShowPlans(false)} />
       )}
 
       {toast && <Toast key={toastSeq} message={toast} onClose={() => setToast(null)} />}

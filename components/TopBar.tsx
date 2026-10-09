@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, Coins, Lock, PanelLeft, Share2, SquarePen } from "lucide-react";
+import { Check, ChevronDown, Coins, Crown, Lock, PanelLeft, Share2, SquarePen } from "lucide-react";
 import { formatTokens } from "@/lib/ai";
 import { IconButton } from "./ui/Controls";
 import { useSettings, type ModelId, type ModelOption } from "./SettingsContext";
@@ -16,6 +16,7 @@ export default function TopBar({
   onNewChat,
   lockedModel,
   onPickModel,
+  onLockedModel,
   onShare,
 }: {
   onToggleDrawer: () => void;
@@ -27,6 +28,8 @@ export default function TopBar({
   /** الموديل اللي الشات الحالي متثبت عليه (لو اتبعت فيه رسايل بالفعل) */
   lockedModel?: ModelId | null;
   onPickModel: (id: ModelId) => void;
+  /** ضغطة على موديل مقفول (اشتراك) — تفتح الباقات بدل الاختيار */
+  onLockedModel?: (id: ModelId) => void;
   /** مشاركة المحادثة الحالية برابط — null = الزرار مخفي (مؤقت/لا جلسة) */
   onShare?: (() => void) | null;
 }) {
@@ -42,7 +45,7 @@ export default function TopBar({
         <PanelLeft size={18} className="flip-rtl" />
       </IconButton>
 
-      <ModelPicker lockedModel={lockedModel} onPickModel={onPickModel} />
+      <ModelPicker lockedModel={lockedModel} onPickModel={onPickModel} onLockedModel={onLockedModel} />
 
       {remainingTokens !== null && (
         <TokensBadge
@@ -223,9 +226,11 @@ function TokensBadge({
 function ModelPicker({
   lockedModel,
   onPickModel,
+  onLockedModel,
 }: {
   lockedModel?: ModelId | null;
   onPickModel: (id: ModelId) => void;
+  onLockedModel?: (id: ModelId) => void;
 }) {
   const { t, model, models } = useSettings();
   const [open, setOpen] = useState(false);
@@ -287,6 +292,11 @@ function ModelPicker({
                 role="option"
                 aria-selected={selected}
                 onClick={() => {
+                  if (m.locked) {
+                    setOpen(false);
+                    onLockedModel?.(m.id);
+                    return;
+                  }
                   onPickModel(m.id);
                   setOpen(false);
                 }}
@@ -303,6 +313,18 @@ function ModelPicker({
                     {m.recommended && (
                       <span className="rounded-full bg-accent-soft px-1.5 py-px text-[10.5px] font-medium text-accent">
                         {t("modelRecommended")}
+                      </span>
+                    )}
+                    {m.tier === "paid" && (
+                      <span
+                        className={cn(
+                          "flex items-center gap-1 rounded-full px-1.5 py-px text-[10.5px] font-medium",
+                          m.locked ? "bg-surface-3 text-ink-3" : "bg-warn-soft text-warn"
+                        )}
+                        title={m.locked ? t("modelLockedHint") : undefined}
+                      >
+                        {m.locked ? <Lock size={10} /> : <Crown size={10} />}
+                        {t("modelProBadge")}
                       </span>
                     )}
                   </span>
