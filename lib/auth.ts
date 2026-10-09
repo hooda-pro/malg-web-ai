@@ -10,26 +10,32 @@ export const COOKIE_NAME = "mlag_session";
 // يقدر يوقّع توكن جلسة مزور لأي يوزر (حتى أدمن) ويدخل بيه. دلوقتي: في
 // production لازم JWT_SECRET يكون متظبط، وإلا السيرفر يرفض يوقّع/يتحقق من
 // أي جلسة بدل ما يشتغل بمفتاح ضعيف معروف.
-const SECRET = (() => {
+// القراءة lazy (وقت الطلب مش وقت الاستيراد): Next.js بيستورد الملف ده وقت الـ build
+// (خطوة "Collecting page data") — ومتغيرات البيئة مش متاحة هناك في Docker/Render،
+// فالرمي وقت البناء كان بيوقع الـ build كله. التحقق بيحصل مع أول توقيع/تحقق فعلي.
+function getSecret(): string {
   const fromEnv = process.env.JWT_SECRET;
   if (fromEnv && fromEnv.length >= 16) return fromEnv;
-  if (process.env.NODE_ENV === "production") {
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.NEXT_PHASE !== "phase-production-build"
+  ) {
     throw new Error(
       "JWT_SECRET مش متظبط (أو قصير جدًا) في متغيرات البيئة — ده مطلوب في الإنتاج. " +
-        "ضيف قيمة عشوائية طويلة (32+ حرف) في Vercel Project Settings > Environment Variables."
+        "ضيف قيمة عشوائية طويلة (32+ حرف) في Environment Variables."
     );
   }
   return "dev-only-insecure-secret-do-not-use-in-production";
-})();
+}
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 يوم
 
 export function signSession(user: SessionUser): string {
-  return jwt.sign(user, SECRET, { expiresIn: MAX_AGE_SECONDS });
+  return jwt.sign(user, getSecret(), { expiresIn: MAX_AGE_SECONDS });
 }
 
 export function verifySession(token: string): SessionUser | null {
   try {
-    const decoded = jwt.verify(token, SECRET);
+    const decoded = jwt.verify(token, getSecret());
     if (
       typeof decoded === "object" &&
       decoded &&
