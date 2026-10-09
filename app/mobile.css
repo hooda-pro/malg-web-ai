@@ -73,9 +73,23 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* Model dropdown can never be wider than the viewport */
+  /* Model dropdown can never be wider than the viewport.
+     Opaque on mobile: glass translucency lets hero text bleed through. */
   .m-topbar div[role="listbox"] {
     width: min(300px, calc(100vw - 2rem));
+    background-color: var(--surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  /* Truncation chain so long labels/badges never overlap inside rows */
+  .m-topbar div[role="listbox"] button > span,
+  .m-topbar div[role="listbox"] button > span > span {
+    min-width: 0;
+  }
+  .m-topbar div[role="listbox"] span[dir="ltr"] {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   /* Tokens popover: docked full-width bar under the header instead of a
      240px bubble anchored to the tiny ring (which overflowed the viewport) */
