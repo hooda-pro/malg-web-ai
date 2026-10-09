@@ -48,6 +48,7 @@ export default function SettingsModal({
   user,
   quota,
   subscription,
+  onOpenPlans,
   initialTab = "general",
   sessionsCount,
   onClose,

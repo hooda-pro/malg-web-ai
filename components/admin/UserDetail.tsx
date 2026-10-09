@@ -327,7 +327,7 @@ export default function UserDetail({
       </div>
 
       {/* اشتراك الباقة (Pro شهرية/سنوية) — يُفعّل يدويًا بعد تأكيد الدفع */}
-      <SubscriptionCard userId={user.id} userName={user.display_name} />
+      <SubscriptionCard userId={user.id} userName={user.displayName} />
 
       {/* أزرار الإجراءات */}
       <div className="flex flex-wrap gap-2">

@@ -321,7 +321,7 @@ function ModelPicker({
                           "flex items-center gap-1 rounded-full px-1.5 py-px text-[10.5px] font-medium",
                           m.locked ? "bg-surface-3 text-ink-3" : "bg-warn-soft text-warn"
                         )}
-                        title={m.locked ? t("modelLockedHint") : undefined}
+                        title={m.locked ? t("modelProLockedHint") : undefined}
                       >
                         {m.locked ? <Lock size={10} /> : <Crown size={10} />}
                         {t("modelProBadge")}

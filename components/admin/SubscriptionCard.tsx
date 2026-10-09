@@ -12,6 +12,7 @@ interface SubRow {
   startedAt: string;
   endsAt: string | null;
   isPaid: boolean;
+  status: string;
 }
 
 function fmtDT(iso: string | null): string {

@@ -5,9 +5,8 @@ import {
   activateSubscription,
   cancelSubscription,
   getActiveSubscription,
-  type BillingPeriod,
 } from "@/lib/subscription";
-import { getPlan, planPrice, formatUSD } from "@/lib/plans";
+import { getPlan, planPrice, formatUSD, type BillingPeriod } from "@/lib/plans";
 
 export const dynamic = "force-dynamic";
 
@@ -27,13 +26,33 @@ export async function GET(
   if (!targetRows[0]) return NextResponse.json({ error: "المستخدم غير موجود" }, { status: 404 });
 
   const current = await getActiveSubscription(params.id).catch(() => null);
-  const history = (await sql`
-    SELECT id, plan_id, period, status, started_at, ends_at
-    FROM user_subscriptions WHERE user_id = ${params.id}
-    ORDER BY started_at DESC LIMIT 10
-  `).catch(() => []);
+  let history: Record<string, unknown>[] = [];
+  try {
+    history = (await sql`
+      SELECT id, plan_id, period, status, started_at, ends_at
+      FROM user_subscriptions WHERE user_id = ${params.id}
+      ORDER BY started_at DESC LIMIT 10
+    `) as Record<string, unknown>[];
+  } catch {
+    history = [];
+  }
 
-  return NextResponse.json({ current, history });
+  return NextResponse.json({
+    current,
+    history: (history as Record<string, unknown>[]).map((h) => {
+      const pid = String(h.plan_id ?? "");
+      return {
+        id: String(h.id ?? ""),
+        planId: pid,
+        planName: getPlan(pid)?.name ?? pid,
+        period: h.period,
+        status: String(h.status ?? ""),
+        startedAt: h.started_at ? String(h.started_at) : "",
+        endsAt: h.ends_at ? String(h.ends_at) : null,
+        isPaid: pid !== "free",
+      };
+    }),
+  });
 }
 
 export async function POST(
@@ -58,7 +77,7 @@ export async function POST(
 
   if (action === "cancel") {
     await cancelSubscription(target.id);
-    await logAdminAction(guard.admin, "cancel_subscription", target.id, target.email, `إلغاء اشتراك ${target.displayName}`);
+    await logAdminAction(guard.admin, "cancel_subscription", target.id, target.email, `إلغاء اشتراك ${target.display_name}`);
     return NextResponse.json({ ok: true, current: null });
   }
 
@@ -73,7 +92,7 @@ export async function POST(
   const sub = await activateSubscription(target.id, plan.id, period);
   await logAdminAction(
     guard.admin, "activate_subscription", target.id, target.email,
-    `تفعيل ${plan.name} (${period === "yearly" ? "سنوي" : "شهري"} — ${formatUSD(planPrice(plan, period))}) لـ ${target.displayName} + ${plan.monthlyTokens.toLocaleString("en-US")} توكنز`
+    `تفعيل ${plan.name} (${period === "yearly" ? "سنوي" : "شهري"} — ${formatUSD(planPrice(plan, period))}) لـ ${target.display_name} + ${plan.monthlyTokens.toLocaleString("en-US")} توكنز`
   );
   return NextResponse.json({ ok: true, current: sub });
 }
