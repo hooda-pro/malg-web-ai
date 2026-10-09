@@ -34,4 +34,6 @@ COPY --from=builder /app/.next ./.next
 RUN pnpm install --no-frozen-lockfile --prod
 USER nextjs
 EXPOSE 3000
-CMD ["sh", "-c", "pnpm start -- -p ${PORT:-3000} -H 0.0.0.0"]
+# Direct node (not `pnpm start`): pnpm verifies deps before running scripts and
+# aborts the container when the lockfile state disagrees (Render CI behavior).
+CMD ["sh", "-c", "node ./node_modules/next/dist/bin/next start -p ${PORT:-3000} -H 0.0.0.0"]
