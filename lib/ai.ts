@@ -398,12 +398,12 @@ export function logUpstreamError(ctx: UpstreamLogContext, httpCode: number, rawT
  * المتعمد وبين استجابة فاضية فعلاً محتاجة إعادة محاولة.
  */
 // لو المزوّد فتح الاتصال وبعدين سكت تمامًا (مفيش ولا بايت، حتى تعليقات keep-alive) المدة دي،
-// بنقفل القراءة ونكمّل باللي وصل — بدل ما الطلب يتعلّق لحد ما المنصة تقتل الدالة (800 ثانية)
+// بنقفل القراءة ونكمّل باللي وصل — بدل ما الطلب يتعلّق لحد ما المنصة تقتل الدالة (300 ثانية على Hobby)
 // قبل ما الرد يتحفظ، والمستخدم يشوف الرد واقف وبعدين يختفي. الـ reasoning بيوصل كـ chunks
 // باستمرار، فمهلة طويلة زي دي مابتقطعش موديل بيفكر فعلًا.
-// 5 دقايق افتراضي: الـ reasoning بيوصل كـ chunks باستمرار فمابتقطعش موديل بيفكر
-// فعلًا، وبتحمي بس من التعليق الحقيقي. قابلة للتغيير عبر UPSTREAM_IDLE_TIMEOUT_MS.
-export const UPSTREAM_IDLE_TIMEOUT_MS = Number(process.env.UPSTREAM_IDLE_TIMEOUT_MS) > 0 ? Number(process.env.UPSTREAM_IDLE_TIMEOUT_MS) : 300_000;
+// دقيقتين افتراضي (تناسب نافذة 300 ثانية): الـ reasoning بيوصل كـ chunks باستمرار
+// فمابتقطعش موديل بيفكر فعلًا، وبتحمي بس من التعليق الحقيقي. قابلة للتغيير عبر UPSTREAM_IDLE_TIMEOUT_MS.
+export const UPSTREAM_IDLE_TIMEOUT_MS = Number(process.env.UPSTREAM_IDLE_TIMEOUT_MS) > 0 ? Number(process.env.UPSTREAM_IDLE_TIMEOUT_MS) : 120_000;
 
 export async function readUpstreamStream(
   response: Response,

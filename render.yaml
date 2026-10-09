@@ -1,0 +1,62 @@
+# MALG AI — one-click deploy on Render free tier (no credit card required).
+# Dashboard path if you prefer manual setup:
+#   New -> Web Service -> connect repo -> Runtime: Node
+#   Build: npm i -g pnpm@12.3.4 && pnpm install --frozen-lockfile && pnpm build
+#   Start: pnpm start   (plan: Free)
+services:
+  - type: web
+    name: malg-web-ai
+    runtime: node
+    plan: free
+    buildCommand: "npm i -g pnpm@12.3.4 && pnpm install --frozen-lockfile && pnpm build"
+    startCommand: "pnpm start"
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      # Cap the JS heap so build+runtime fit the free 512MB instance:
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=450
+      # ---- ~1h non-stop single request (Render has no fixed per-request kill) ----
+      - key: CHAT_NO_NEW_ROUND_MS
+        value: 3000000
+      - key: CHAT_HARD_STOP_MS
+        value: 3480000
+      - key: E2B_COMMAND_TIMEOUT_MS
+        value: 1800000
+      - key: E2B_SESSION_BUDGET_MS
+        value: 3000000
+      - key: UPSTREAM_IDLE_TIMEOUT_MS
+        value: 300000
+      # ---- fill in the dashboard (kept empty here so secrets never touch git) ----
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: TOKENHARBOR_API_KEY
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: NEXT_PUBLIC_FIREBASE_API_KEY
+        sync: false
+      - key: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+        sync: false
+      - key: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+        sync: false
+      - key: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+        sync: false
+      - key: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+        sync: false
+      - key: NEXT_PUBLIC_FIREBASE_APP_ID
+        sync: false
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+      - key: E2B_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false

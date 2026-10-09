@@ -171,15 +171,6 @@ export default function ChatShell() {
   const clientKeysRef = useRef<Map<string, string>>(new Map());
   const sendCounterRef = useRef(0);
   const toastSeqRef = useRef(0);
-  // ===== سلسلة التكملة التلقائية (مهمة طويلة حتى ~ساعة) =====
-  // طلب واحد على Vercel أقصاه 800 ثانية، فالمهمة الطويلة بتتنفذ كسلسلة نوافذ:
-  // كل رد/تكملة بيملا نافذته، ولو الرد المحفوظ لسه مقطوعًا (is_truncated) الواجهة
-  // بتنادي «كمّل» تلقائيًا ورا بعض لحد ما الموديل يخلّص أو التوكنز تخلص أو نعدّي الميزانية.
-  const chainAbortRef = useRef(false);
-  const autoChainRef = useRef<{ messageId: string; count: number; startedAt: number } | null>(null);
-  const CHAIN_MAX_CONTINUES = 6;
-  const CHAIN_TOTAL_BUDGET_MS = 55 * 60_000;
-  const CHAIN_GAP_MS = 2000;
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -698,8 +689,6 @@ export default function ChatShell() {
       setLiveKey(replyKey);
       setStreamSessionId(sessionId);
       setMessages((prev) => [...prev, optimisticUser]);
-      chainAbortRef.current = false;
-      autoChainRef.current = null;
       setIsGenerating(true);
       setStreamingContent("");
       setStreamingReasoning("");
@@ -820,16 +809,6 @@ export default function ChatShell() {
       void refreshSessions();
       if (!fresh || (applied && applied.some((m) => isLocalMessageId(m.id)))) scheduleTailSync(sessionId);
 
-      // تسليح التكملة التلقائية: لو الرد المحفوظ لسه مقطوعًا (is_truncated) من غير
-      // نفاد رصيد/إيقاف، الـ effect تحت هيكمّل لوحده لحد ~ساعة.
-      if (accepted && applied) {
-        const lastAssistant = [...applied].reverse().find((m) => m.role === "assistant");
-        if (lastAssistant?.isTruncated) {
-          chainAbortRef.current = false;
-          autoChainRef.current = { messageId: lastAssistant.id, count: 0, startedAt: Date.now() };
-        }
-      }
-
       if (rejected) return false;
       return accepted || persisted;
     },
@@ -942,19 +921,6 @@ export default function ChatShell() {
         applyMessages(sessionId, list);
         if (!grown && accContent) scheduleTailSync(sessionId);
       }
-      // تسليح/إبقاء التكملة التلقائية بعد كل «كمّل» (يدوي أو تلقائي): لو الرسالة
-      // لسه مقطوعة هنكمّل تاني تلقائيًا، ولو خلصت بنفك التسليح.
-      if (accContent && fresh) {
-        const saved = fresh.find((m) => m.id === messageId);
-        if (saved?.isTruncated) {
-          if (!autoChainRef.current || autoChainRef.current.messageId !== messageId) {
-            chainAbortRef.current = false;
-            autoChainRef.current = { messageId, count: autoChainRef.current?.count ?? 0, startedAt: autoChainRef.current?.startedAt ?? Date.now() };
-          }
-        } else if (autoChainRef.current?.messageId === messageId) {
-          autoChainRef.current = null;
-        }
-      }
       setContinuingMessageId(null);
       setContinuationStreamingContent("");
       void refreshQuota();
@@ -980,43 +946,8 @@ export default function ChatShell() {
   );
 
   const stopGeneration = () => {
-    // إيقاف المستخدم بيقطع السلسلة كلها مش الطلب الحالي بس
-    chainAbortRef.current = true;
-    autoChainRef.current = null;
     abortRef.current?.abort();
   };
-
-  // ===== effect التكملة التلقائية (Long-run حتى ~ساعة) =====
-  // كل نافذة (~13 دقيقة) بتخلّص ويتحفظ ردها، ولو مقطوعًا وفاضل ميزانية بنكمّل
-  // تلقائيًا بعد فاصل قصير — من غير ما المستخدم يدوس «كمّل». بتقف لو:
-  // الموديل خلّص (مش مقطوع)، التوكنز خلصت، المستخدم ضغط إيقاف، أو عدّت ~55 دقيقة.
-  useEffect(() => {
-    if (isGenerating || continuingMessageId !== null) return;
-    const chain = autoChainRef.current;
-    if (!chain || chainAbortRef.current) {
-      if (chain) autoChainRef.current = null;
-      return;
-    }
-    if (quotaExhausted) {
-      autoChainRef.current = null;
-      return;
-    }
-    const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
-    if (!lastAssistant || lastAssistant.id !== chain.messageId || !lastAssistant.isTruncated) {
-      autoChainRef.current = null;
-      return;
-    }
-    if (chain.count >= CHAIN_MAX_CONTINUES || Date.now() - chain.startedAt > CHAIN_TOTAL_BUDGET_MS) {
-      autoChainRef.current = null;
-      showToast("وصلت للحد الأقصى للتكملة التلقائية (حوالي ساعة) — دوس «كمّل» لو لسه ناقص حاجة.");
-      return;
-    }
-    chain.count += 1;
-    const timer = setTimeout(() => {
-      if (!chainAbortRef.current && !abortRef.current) void continueMessage(chain.messageId);
-    }, CHAIN_GAP_MS);
-    return () => clearTimeout(timer);
-  }, [messages, isGenerating, continuingMessageId, quotaExhausted, continueMessage, showToast]);
 
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
   const [regeneratingMessageId, setRegeneratingMessageId] = useState<string | null>(null);

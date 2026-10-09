@@ -29,13 +29,13 @@ export interface RunCommandResult {
   hint?: string;
 }
 
-// حد أقصى لكل أمر واحد — افتراضي 10 دقايق (قابل للرفع عبر E2B_COMMAND_TIMEOUT_MS)
-// عشان مهام البناء/التثبيت الطويلة تكمل بدل ما تتقطع. السقف الفعلي لكل رد
-// بيتحكّم فيه SESSION_BUDGET_MS + maxDuration بتاع الـ route.
+// حد أقصى لكل أمر واحد — افتراضي ~3 دقايق عشان يناسب نافذة Hobby (300 ثانية).
+// (قابل للرفع عبر E2B_COMMAND_TIMEOUT_MS على خطة مدفوعة/VPS مع maxDuration أكبر).
+// السقف الفعلي لكل رد بيتحكّم فيه SESSION_BUDGET_MS + maxDuration بتاع الـ route.
 const COMMAND_TIMEOUT_MS =
   Number(process.env.E2B_COMMAND_TIMEOUT_MS) > 0
     ? Math.floor(Number(process.env.E2B_COMMAND_TIMEOUT_MS))
-    : 600_000;
+    : 170_000;
 // عمر الـ sandbox نفسه (بيتقفل تلقائيًا بعده لو نسينا نقفله يدويًا لأي سبب).
 // ساعة كاملة عشان يغطي مهمة طويلة (كل رد بيفتح جلسة خاصة بيه وبيقفلها في الآخر).
 const SANDBOX_LIFETIME_MS =
@@ -47,14 +47,14 @@ const SANDBOX_LIFETIME_MS =
 // مهم: العدّ بيبدأ من لحظة وصول الطلب (مش من لحظة فتح الـ sandbox) — قبل كده كان بيبدأ بعد أول
 // نداء للموديل (ممكن ياخد دقيقة+)، فمجموع الوقت كان بيعدّي 300 ثانية والـ route بيتقتل
 // من المنصة قبل ما يحفظ الرد، فالمستخدم يشوف الرد بيقطع ومفيش حاجة بتتحفظ.
-// 600 ثانية (10 دقايق) بتملا نافذة Vercel القصوى (maxDuration=800) وتسيب ~200 ثانية
+// 180 ثانية بتملا نافذة Hobby (maxDuration=300) وتسيب ~100 ثانية
 // لنداء الموديل الأخير (الخلاصة) والحفظ. المهمة اللي أطول من كده بتكمل تلقائيًا
 // عبر التكملة التلقائية في الواجهة (كل تكملة نافذة جديدة).
-// قابلة للرفع عبر E2B_SESSION_BUDGET_MS للاستضافة الذاتية (VPS) مع maxDuration أكبر.
+// قابلة للرفع عبر E2B_SESSION_BUDGET_MS لخطة مدفوعة/VPS مع maxDuration أكبر.
 export const SESSION_BUDGET_MS =
   Number(process.env.E2B_SESSION_BUDGET_MS) > 0
     ? Math.floor(Number(process.env.E2B_SESSION_BUDGET_MS))
-    : 600_000;
+    : 180_000;
 // سقف حجم كل ملف بيتكتب في الـ sandbox — حماية من مشروع ضخم غير واقعي.
 const MAX_FILE_BYTES = 400_000;
 // كان 60 وده كان بيسيب ملفات ناقصة بصمت في أي مشروع أكبر من كده.
@@ -205,7 +205,7 @@ export class SandboxSession {
     if (elapsed > SESSION_BUDGET_MS) {
       return {
         ok: false, stdout: "", stderr: "", exitCode: null, timedOut: true,
-        error: "خلصت المهلة الإجمالية للأوامر في الرد ده (حوالي 10 دقايق) — الأمر مانفذش. لخّص للمستخدم اللي اتعمل واللي لسه ناقص.",
+        error: "خلصت المهلة الإجمالية للأوامر في الرد ده (حوالي 3 دقايق) — الأمر مانفذش. لخّص للمستخدم اللي اتعمل واللي لسه ناقص.",
       };
     }
 

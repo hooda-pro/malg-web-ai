@@ -14,7 +14,8 @@ import {
 import { API_IDENTITY_SYSTEM_PROMPT } from "@/lib/systemPrompt";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 800;
+// سقف Hobby = 300 (قيمة أكبر بتكسر الـ Deploy على Hobby). على Pro ارفعها لـ 800.
+export const maxDuration = 300;
 
 // حد أقصى لعدد الرسائل ولطول كل رسالة في الطلب الواحد — يحمي من استهلاك
 // رصيد ضخم بغلطة أو ضغط زائد على المزوّدين المجانيين (malg-2.1 / malg-2.2)

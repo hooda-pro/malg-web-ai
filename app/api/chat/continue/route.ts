@@ -25,7 +25,8 @@ import { findUnclosedFence } from "@/lib/parseContent";
 import { API_INLINE_TOTAL_MAX_CHARS, extractAttachmentsMeta, toApiUserContent } from "@/lib/attachments";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 800;
+// سقف Hobby = 300 (قيمة أكبر بتكسر الـ Deploy على Hobby). على Pro ارفعها لـ 800.
+export const maxDuration = 300;
 
 const CONTINUE_INSTRUCTION =
   "تابع من حيث توقفت بالضبط في ردك السابق. اكمل مباشرة بدون إعادة أو تلخيص أي جزء " +

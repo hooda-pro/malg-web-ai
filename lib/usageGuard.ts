@@ -17,8 +17,8 @@ import { checkRateLimitShared } from "./rateLimit";
 
 export const MESSAGE_LIMIT_PER_MINUTE = 5;
 export const MESSAGE_LIMIT_PER_HOUR = 50;
-/** أطول مدة ممكن رد واحد ياخدها (maxDuration = 800 ثانية) + هامش صغير. بعدها الحجز بيفك لوحده لو السيرفر اتقتل. */
-const LEASE_SECONDS = 820;
+/** أطول مدة ممكن رد واحد ياخدها (maxDuration = 300 ثانية على Hobby) + هامش صغير. بعدها الحجز بيفك لوحده لو السيرفر اتقتل. */
+const LEASE_SECONDS = 320;
 
 export interface UserFlags {
   isAdmin: boolean;
