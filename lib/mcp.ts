@@ -11,6 +11,8 @@ export interface McpServerConfig {
   url: string;
   headers?: Record<string, string>;
   enabled: boolean;
+  /** auto-wired from env (not stored, not deletable from the panel) */
+  auto?: boolean;
 }
 
 export interface McpToolEntry {
@@ -58,7 +60,7 @@ export async function listMcpServers(): Promise<McpServerConfig[]> {
     }[];
     const v = rows[0]?.value as { servers?: unknown } | null;
     if (!v || !Array.isArray(v.servers)) return [];
-    return (v.servers as Record<string, unknown>[])
+    const servers: McpServerConfig[] = (v.servers as Record<string, unknown>[])
       .filter((s) => s && typeof s === "object")
       .map((s) => ({
         id: slug(String(s.id ?? s.name ?? ""), 24),
@@ -77,6 +79,20 @@ export async function listMcpServers(): Promise<McpServerConfig[]> {
       }))
       .filter((s) => /^https?:\/\//i.test(s.url))
       .slice(0, MAX_SERVERS);
+    // Tavily auto-wire: reuses the existing TAVILY_API_KEY env - zero admin setup.
+    // (GitHub/Neon need personal tokens, so the admin adds those by hand.)
+    const tavilyKey = (process.env.TAVILY_API_KEY || "").trim();
+    if (tavilyKey && !servers.some((s) => s.url.includes("mcp.tavily.com"))) {
+      servers.push({
+        id: "auto-tavily",
+        name: "Tavily",
+        url: "https://mcp.tavily.com/mcp/",
+        headers: { Authorization: `Bearer ${tavilyKey}` },
+        enabled: true,
+        auto: true,
+      });
+    }
+    return servers;
   } catch {
     return [];
   }
@@ -86,6 +102,7 @@ export async function saveMcpServers(input: unknown): Promise<McpServerConfig[]>
   const arr = Array.isArray(input) ? input : [];
   const cleaned = arr
     .filter((s) => s && typeof s === "object")
+    .filter((s) => (s as Record<string, unknown>).id !== "auto-tavily")
     .slice(0, MAX_SERVERS)
     .map((s) => {
       const r = s as Record<string, unknown>;
