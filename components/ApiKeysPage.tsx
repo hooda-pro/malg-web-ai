@@ -30,9 +30,15 @@ import { useSettings } from "./SettingsContext";
 import { formatDateTime, timeAgo } from "./admin/helpers";
 import { cn } from "@/lib/utils";
 
-type ModelId = "malg-a3";
+type ModelId = string;
 
-const API_MODELS: { id: ModelId; hint: string; recommended?: boolean }[] = [
+interface ApiModelOption {
+  id: string;
+  hint: string;
+  recommended?: boolean;
+}
+
+const FALLBACK_API_MODELS: ApiModelOption[] = [
   { id: "malg-a3", hint: "الموديل الأساسي — أداء قوي وثابت في الفهم والبرمجة", recommended: true },
 ];
 
@@ -173,6 +179,7 @@ export default function ApiKeysPage() {
   const [snippetCopied, setSnippetCopied] = useState(false);
   const [amount, setAmount] = useState<number>(QUICK_AMOUNTS[0]);
 
+  const [apiModels, setApiModels] = useState<ApiModelOption[]>(FALLBACK_API_MODELS);
   const [showCreate, setShowCreate] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newModelId, setNewModelId] = useState<ModelId>("malg-a3");
@@ -193,6 +200,23 @@ export default function ApiKeysPage() {
 
   useEffect(() => {
     setOrigin(window.location.origin);
+    // موديلات API المتاحة من السيرفر (اللي الأدمن ضافها) — مع fallback محلي
+    fetch("/api/models")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("bad status"))))
+      .then((data) => {
+        const list = Array.isArray(data?.models) ? data.models : [];
+        if (list.length === 0) return;
+        const mapped: ApiModelOption[] = list.map(
+          (m: { id: string; description?: string; isDefault?: boolean }) => ({
+            id: String(m.id),
+            hint: typeof m.description === "string" && m.description ? m.description : "",
+            recommended: !!m.isDefault,
+          })
+        );
+        setApiModels(mapped);
+        setNewModelId((prev) => (mapped.some((m) => m.id === prev) ? prev : (mapped.find((m) => m.recommended)?.id ?? mapped[0].id)));
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -300,7 +324,8 @@ export default function ApiKeysPage() {
   const openCreate = () => {
     setCreateError(null);
     setNewLabel("");
-    setNewModelId("malg-a3");
+    const def = apiModels.find((m) => m.recommended) ?? apiModels[0];
+    if (def && !apiModels.some((m) => m.id === newModelId)) setNewModelId(def.id);
     setShowCreate(true);
   };
 
@@ -651,7 +676,7 @@ export default function ApiKeysPage() {
           <fieldset>
             <legend className="mb-1.5 block text-[12.5px] font-medium tracking-label text-ink-2">الموديل</legend>
             <Panel>
-              {API_MODELS.map((m) => (
+              {apiModels.map((m) => (
                 <label
                   key={m.id}
                   className="flex cursor-pointer items-center gap-3 border-t border-hair px-4 py-3 transition-colors first:border-t-0 hover:bg-surface-3"

@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FlaskConical, KeyRound, Loader2, PlugZap, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
-import type { ProviderConfigPublic, ProviderProtocol } from "@/lib/provider";
+import { FlaskConical, KeyRound, Layers, Loader2, PlugZap, Plus, RefreshCw, Save, Star, Trash2 } from "lucide-react";
+import type { ModelSummary, ProviderConfigPublic, ProviderProtocol } from "@/lib/provider";
 
 interface Loaded {
   active: ProviderConfigPublic;
   fromEnv: boolean;
+  model: { id: string; name: string; isDefault: boolean } | null;
 }
 
 const PRESETS: { label: string; name: string; baseUrl: string; model: string; protocol: ProviderProtocol }[] = [
@@ -24,12 +25,14 @@ const PROTOCOL_OPTIONS: { value: ProviderProtocol; label: string; hint: string }
 ];
 
 /**
- * قسم مزوّد الموديل — الإعدادات (بروتوكول/رابط/موديل) في كارت، وإدارة
- * المفاتيح في كارت مستقل: عرض متخفي + إضافة + مسح + اختبار كل مفتاح لوحده.
- * السيرفر أصلًا بيوزّع الحمل على المفاتيح وبيقلب تلقائيًا على اللي بعده لو
- * واحد خلص أو اترفض — فكل مفتاح تضيفه هنا معناه استمرارية فورية.
+ * إدارة الموديلات والمزوّدين — كل موديل في قايمته الخاصة بإعداد مزوّد كامل
+ * (رابط/بروتوكول/موديل upstream/مفاتيح/حرارة/توكنز):
+ * - كارت الموديلات: عرض + إضافة + حذف + تعيين افتراضي
+ * - كارت المزوّد النشط + كارت المفاتيح + نموذج التعديل: كلها للموديل المحدد
  */
 export default function AdminProvider({ notify }: { notify: (type: "ok" | "err", text: string) => void }) {
+  const [models, setModels] = useState<ModelSummary[] | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
@@ -51,13 +54,37 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
   const [testingIdx, setTestingIdx] = useState<number | null>(null);
   const [rowTest, setRowTest] = useState<Record<number, { ok: boolean; text: string }>>({});
 
-  const load = async () => {
+  // إضافة موديل جديد
+  const [showAdd, setShowAdd] = useState(false);
+  const [addName, setAddName] = useState("");
+  const [addId, setAddId] = useState("");
+  const [adding, setAdding] = useState(false);
+
+  // إجراءات على صف موديل (حذف/افتراضي)
+  const [actingId, setActingId] = useState<string | null>(null);
+  const [confirmDeleteModel, setConfirmDeleteModel] = useState<string | null>(null);
+
+  const loadModels = async (keepId?: string | null): Promise<ModelSummary[]> => {
+    const res = await fetch("/api/admin/models");
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "فشل تحميل الموديلات");
+    const list = (data.models ?? []) as ModelSummary[];
+    setModels(list);
+    return list;
+  };
+
+  const pickSelection = (list: ModelSummary[], keepId?: string | null): string | null => {
+    if (keepId && list.some((m) => m.id === keepId)) return keepId;
+    return list.find((m) => m.isDefault)?.id ?? list[0]?.id ?? null;
+  };
+
+  const loadProvider = async (modelId: string) => {
     setLoading(true);
     try {
-      const res = await fetch("/api/admin/provider");
+      const res = await fetch(`/api/admin/provider?modelId=${encodeURIComponent(modelId)}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "فشل التحميل");
-      setLoaded({ active: data.active, fromEnv: data.fromEnv });
+      setLoaded({ active: data.active, fromEnv: data.fromEnv, model: data.model ?? null });
       const a = data.active as ProviderConfigPublic;
       setName(a.name || "");
       setBaseUrl(a.baseUrl || "");
@@ -69,6 +96,7 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
       setNewKey("");
       setRowTest({});
       setConfirmRemove(null);
+      setTestResult(null);
     } catch (e) {
       notify("err", e instanceof Error ? e.message : "فشل تحميل الإعداد");
     } finally {
@@ -76,26 +104,60 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
     }
   };
 
+  const init = async () => {
+    setLoading(true);
+    try {
+      const list = await loadModels();
+      const sel = pickSelection(list);
+      setSelectedId(sel);
+      if (sel) await loadProvider(sel);
+      else setLoading(false);
+    } catch (e) {
+      notify("err", e instanceof Error ? e.message : "فشل تحميل الموديلات");
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    load();
+    void init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const onSelectModel = async (id: string) => {
+    if (id === selectedId || saving || testing || addingKey) return;
+    setSelectedId(id);
+    setTestResult(null);
+    await loadProvider(id);
+  };
+
+  const refreshModelsKeepSelection = async () => {
+    try {
+      const list = await loadModels(selectedId);
+      setSelectedId(pickSelection(list, selectedId));
+    } catch (e) {
+      notify("err", e instanceof Error ? e.message : "فشل تحديث القائمة");
+    }
+  };
 
   const savedExists = !!loaded && !loaded.fromEnv;
 
   const settingsPayload = () => ({
+    modelId: selectedId,
     name, baseUrl, protocol, model,
     temperature: Number(temperature),
     maxTokens: Number(maxTokens),
   });
 
   const test = async () => {
+    if (!selectedId) return;
     setTesting(true);
     setTestResult(null);
     try {
       // قبل أول حفظ: الاختبار بقيم الفورم والمفتاح المكتوب. بعد الحفظ: الاختبار
       // بقيم الفورم المعدلة مع أول مفتاح محفوظ (المفاتيح لا تخرج من السيرفر).
-      const body = savedExists ? { ...settingsPayload(), savedKeyIndex: 0 } : { ...settingsPayload(), apiKeys: firstKey };
+      const body = savedExists
+        ? { ...settingsPayload(), savedKeyIndex: 0 }
+        : { ...settingsPayload(), apiKeys: firstKey };
       const res = await fetch("/api/admin/provider/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -116,7 +178,7 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
 
   /** اختبار مفتاح محفوظ محدد — بالإعدادات المحفوظة (مش قيم الفورم المعدلة) */
   const testKey = async (idx: number) => {
-    if (!loaded || testingIdx !== null) return;
+    if (!loaded || !selectedId || testingIdx !== null) return;
     setTestingIdx(idx);
     setRowTest((m) => {
       const next = { ...m };
@@ -129,6 +191,7 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          modelId: selectedId,
           name: a.name,
           baseUrl: a.baseUrl,
           protocol: (a as { protocol?: ProviderProtocol }).protocol ?? "chat_completions",
@@ -153,6 +216,7 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
   };
 
   const addKey = async () => {
+    if (!selectedId) return;
     const key = newKey.trim();
     if (!key || addingKey) return;
     setAddingKey(true);
@@ -160,11 +224,11 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
       const res = await fetch("/api/admin/provider/keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "add", key }),
+        body: JSON.stringify({ action: "add", key, modelId: selectedId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "فشل الإضافة");
-      setLoaded({ active: data.active, fromEnv: false });
+      setLoaded((prev) => (prev ? { ...prev, active: data.active } : prev));
       setNewKey("");
       notify("ok", `تمت إضافة المفتاح — بقوا ${data.active.keysCount} مفاتيح`);
     } catch (e) {
@@ -175,6 +239,7 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
   };
 
   const removeKey = async (idx: number) => {
+    if (!selectedId) return;
     if (confirmRemove !== idx) {
       setConfirmRemove(idx);
       setTimeout(() => setConfirmRemove((c) => (c === idx ? null : c)), 4000);
@@ -186,11 +251,11 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
       const res = await fetch("/api/admin/provider/keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "remove", index: idx }),
+        body: JSON.stringify({ action: "remove", index: idx, modelId: selectedId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "فشل المسح");
-      setLoaded({ active: data.active, fromEnv: false });
+      setLoaded((prev) => (prev ? { ...prev, active: data.active } : prev));
       setRowTest((m) => {
         const next = { ...m };
         delete next[idx];
@@ -205,6 +270,7 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
   };
 
   const save = async () => {
+    if (!selectedId) return;
     setSaving(true);
     try {
       // بعد أول حفظ: المفاتيح تُدار من كارتها المستقل، والحفظ هنا للإعدادات فقط
@@ -217,13 +283,91 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "فشل الحفظ");
-      setLoaded({ active: data.active, fromEnv: false });
+      setLoaded((prev) => (prev ? { ...prev, active: data.active, fromEnv: false, model: data.model ?? prev.model } : prev));
       setFirstKey("");
-      notify("ok", `تم تفعيل المزوّد: ${data.active.name} — ${data.active.model} [${data.active.protocol ?? protocol}]`);
+      await refreshModelsKeepSelection();
+      notify("ok", `تم تفعيل مزوّد الموديل ${selectedId}: ${data.active.name} — ${data.active.model} [${data.active.protocol ?? protocol}]`);
     } catch (e) {
       notify("err", e instanceof Error ? e.message : "فشل الحفظ");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const addModel = async () => {
+    const nm = addName.trim();
+    if (!nm || adding) return;
+    setAdding(true);
+    try {
+      const res = await fetch("/api/admin/models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: nm, id: addId.trim() || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "فشل إنشاء الموديل");
+      const list = (data.models ?? []) as ModelSummary[];
+      setModels(list);
+      const created = list.find((m) => m.id === data.createdId) ?? list.find((m) => m.name === nm) ?? list[list.length - 1];
+      setAddName("");
+      setAddId("");
+      setShowAdd(false);
+      notify("ok", `تم إنشاء الموديل ${nm} — عدّل إعدادات مزوّده واحفظها`);
+      if (created) {
+        setSelectedId(created.id);
+        await loadProvider(created.id);
+      }
+    } catch (e) {
+      notify("err", e instanceof Error ? e.message : "فشل إنشاء الموديل");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const setDefault = async (id: string) => {
+    setActingId(id);
+    try {
+      const res = await fetch(`/api/admin/models/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_default: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "فشل التعيين");
+      setModels(data.models ?? []);
+      notify("ok", `بقى الموديل الافتراضي: ${id}`);
+    } catch (e) {
+      notify("err", e instanceof Error ? e.message : "فشل التعيين");
+    } finally {
+      setActingId(null);
+    }
+  };
+
+  const deleteModel = async (id: string) => {
+    if (confirmDeleteModel !== id) {
+      setConfirmDeleteModel(id);
+      setTimeout(() => setConfirmDeleteModel((c) => (c === id ? null : c)), 4000);
+      return;
+    }
+    setConfirmDeleteModel(null);
+    setActingId(id);
+    try {
+      const res = await fetch(`/api/admin/models/${encodeURIComponent(id)}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "فشل الحذف");
+      const list = (data.models ?? []) as ModelSummary[];
+      setModels(list);
+      notify("ok", `تم حذف الموديل ${id}`);
+      if (selectedId === id) {
+        const sel = pickSelection(list);
+        setSelectedId(sel);
+        if (sel) await loadProvider(sel);
+        else setLoaded(null);
+      }
+    } catch (e) {
+      notify("err", e instanceof Error ? e.message : "فشل الحذف");
+    } finally {
+      setActingId(null);
     }
   };
 
@@ -238,16 +382,130 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
 
   const inputCls = "w-full rounded-md border border-hair bg-surface-2 px-3 py-2 text-[13px] text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent";
   const masked = loaded.active.maskedKeys ?? [];
+  const busy = saving || testing || addingKey || adding || actingId !== null;
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       <div className="rounded-lg border border-hair bg-surface p-4 shadow-1">
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <PlugZap size={15} className="text-accent" />
-            <h2 className="text-[13px] font-semibold text-ink">المزوّد النشط حاليا</h2>
+            <Layers size={15} className="text-accent" />
+            <h2 className="text-[13px] font-semibold text-ink">الموديلات</h2>
           </div>
-          <button onClick={load} title="تحديث" className="rounded-md border border-hair bg-surface p-2 text-ink-2 hover:text-accent">
+          <button
+            onClick={() => setShowAdd((s) => !s)}
+            className="flex items-center gap-1.5 rounded-md border border-hair bg-surface-2 px-2.5 py-1.5 text-[12.5px] font-medium text-ink-2 hover:border-accent-line hover:text-accent"
+          >
+            <Plus size={13} />
+            موديل جديد
+          </button>
+        </div>
+        <p className="mb-3 text-[12px] leading-5 text-ink-3">
+          كل موديل ليه قايمة مزوّد خاصة بيه (رابط + بروتوكول + مفاتيح) — اختار موديل من القايمة عشان تعدّل إعداداته تحت.
+        </p>
+
+        {showAdd && (
+          <div className="mb-3 space-y-2 rounded-md border border-hair bg-surface-2 p-3">
+            <div className="flex gap-2">
+              <input
+                value={addName}
+                onChange={(e) => setAddName(e.target.value)}
+                placeholder="اسم الموديل (مثال: DeepSeek V3)"
+                className={inputCls}
+              />
+              <input
+                value={addId}
+                onChange={(e) => setAddId(e.target.value)}
+                placeholder="id اختياري (إنجليزي)"
+                dir="ltr"
+                className={`${inputCls} tnum max-w-[180px]`}
+              />
+            </div>
+            <button
+              onClick={addModel}
+              disabled={adding || !addName.trim()}
+              className="flex items-center gap-1.5 rounded-md bg-accent px-3.5 py-2 text-[13px] font-semibold text-accent-ink hover:bg-accent-hover disabled:opacity-40"
+            >
+              {adding ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+              إنشاء الموديل
+            </button>
+          </div>
+        )}
+
+        <div className="space-y-2">
+          {(models ?? []).map((m) => {
+            const selected = m.id === selectedId;
+            const acting = actingId === m.id;
+            return (
+              <div
+                key={m.id}
+                className={`rounded-md border px-3 py-2 transition-colors ${selected ? "border-accent-line bg-accent-soft/40" : "border-hair bg-surface-2"}`}
+              >
+                <div className="flex items-center gap-2">
+                  <button onClick={() => onSelectModel(m.id)} disabled={busy} title={`إدارة ${m.name}`} className="min-w-0 flex-1 text-start disabled:opacity-40">
+                    <span className="flex items-center gap-2">
+                      <span className="truncate text-[13px] font-semibold text-ink">{m.name}</span>
+                      {m.isDefault && (
+                        <span className="shrink-0 rounded-full bg-accent-soft px-1.5 py-px text-[10.5px] font-medium text-accent">
+                          افتراضي
+                        </span>
+                      )}
+                      {!m.isActive && (
+                        <span className="shrink-0 rounded-full bg-surface-3 px-1.5 py-px text-[10.5px] font-medium text-ink-3">
+                          موقوف
+                        </span>
+                      )}
+                    </span>
+                    <span className="tnum mt-0.5 block truncate text-[11.5px] text-ink-3" dir="ltr">
+                      {m.id} · {m.keysCount} {m.keysCount === 1 ? "مفتاح" : "مفاتيح"}
+                    </span>
+                  </button>
+                  {!m.isDefault && (
+                    <button
+                      onClick={() => setDefault(m.id)}
+                      disabled={busy}
+                      title="تعيين كافتراضي"
+                      aria-label={`تعيين ${m.name} افتراضيًا`}
+                      className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-ink-3 transition-colors duration-1 hover:bg-surface-3 hover:text-accent disabled:opacity-40"
+                    >
+                      {acting ? <Loader2 size={13} className="animate-spin" /> : <Star size={13} />}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => deleteModel(m.id)}
+                    disabled={busy}
+                    title={confirmDeleteModel === m.id ? "اضغط تاني للتأكيد" : "حذف الموديل"}
+                    aria-label={confirmDeleteModel === m.id ? `تأكيد حذف ${m.name}` : `حذف ${m.name}`}
+                    className={`flex h-7 shrink-0 items-center gap-1 rounded-full px-2 text-[12px] font-medium transition-colors duration-1 disabled:opacity-40 ${confirmDeleteModel === m.id ? "bg-danger-soft text-danger" : "text-ink-3 hover:bg-danger-soft hover:text-danger"}`}
+                  >
+                    {acting ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <>
+                        <Trash2 size={13} />
+                        {confirmDeleteModel === m.id && <span>تأكيد؟</span>}
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+          {(models ?? []).length === 0 && (
+            <p className="rounded-md bg-warn-soft px-3 py-2 text-[12px] text-warn">لا توجد موديلات — أنشئ واحدًا من الزرار فوق.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-hair bg-surface p-4 shadow-1">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <PlugZap size={15} className="text-accent" />
+            <h2 className="text-[13px] font-semibold text-ink">
+              مزوّد الموديل: {loaded.model?.name ?? selectedId ?? ""}
+            </h2>
+          </div>
+          <button onClick={() => selectedId && loadProvider(selectedId)} title="تحديث" className="rounded-md border border-hair bg-surface p-2 text-ink-2 hover:text-accent">
             <RefreshCw size={14} />
           </button>
         </div>
@@ -362,7 +620,7 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
       )}
 
       <div className="rounded-lg border border-hair bg-surface p-4 shadow-1">
-        <h2 className="mb-1 text-[13px] font-semibold text-ink">تغيير المزوّد</h2>
+        <h2 className="mb-1 text-[13px] font-semibold text-ink">تغيير مزوّد الموديل المحدد</h2>
         <p className="mb-3 text-[12px] leading-5 text-ink-3">
           التعليمات وشخصية MALG والبحث والتخزين ثابتين — اللي بيتغيّر بس البروتوكول والرابط والموديل.
         </p>

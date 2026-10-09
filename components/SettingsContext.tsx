@@ -5,13 +5,25 @@ import type { ReactNode } from "react";
 import { translate, type Lang } from "@/lib/i18n";
 
 export type Theme = "system" | "light" | "dark";
-/** بعد الدمج، الموديلات القديمة (malg-2 / malg-2.1 / malg-2.2) بقت موديل واحد
- * اسمه Malg-A3 — بيجرب كل المزوّدين القدامى تلقائيًا من وراء الكواليس (شوف
- * negotiateUpstream في lib/ai.ts) من غير ما المستخدم يختار بينهم يدويًا. */
-export type ModelId = "malg-a3";
+/** معرف الموديل = slug من لوحة الأدمن (مثال: malg-a3). أي قيمة غير معروفة
+ * السيرفر بيقع بها على الموديل الافتراضي تلقائيًا. */
+export type ModelId = string;
 
+/** موديل واحد في قوائم الاختيار — الاسم والوصف من الأدمن (أي لغة يكتبها). */
+export interface ModelOption {
+  id: string;
+  label: string;
+  hint: string;
+  recommended: boolean;
+}
+
+export const FALLBACK_MODELS: ModelOption[] = [
+  { id: "malg-a3", label: "Malg-A3", hint: "", recommended: true },
+];
+
+/** @deprecated استخدم models من useSettings() — باقٍ كـ fallback للتحميل الأول فقط */
 export const AVAILABLE_MODELS: {
-  id: ModelId;
+  id: string;
   label: string;
   hintKey: string;
   badgeKey?: string;
@@ -46,6 +58,10 @@ const DEFAULTS: Settings = {
 const STORAGE_KEY = "mlag-settings";
 
 interface SettingsValue extends Settings {
+  /** قائمة الموديلات المتاحة من السيرفر (أو fallback محلي قبل التحميل) */
+  models: ModelOption[];
+  /** id الموديل الافتراضي من السيرفر */
+  defaultModelId: string;
   /** الثيم الفعلي بعد حل "system" */
   resolvedTheme: "light" | "dark";
   dir: "rtl" | "ltr";
@@ -69,16 +85,18 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings>(DEFAULTS);
   const [loaded, setLoaded] = useState(false);
   const [systemDark, setSystemDark] = useState(false);
+  const [models, setModels] = useState<ModelOption[] | null>(null);
+  const [defaultModelId, setDefaultModelId] = useState<string>("malg-a3");
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<Settings>;
-        // ترحيل: أي إعداد قديم متخزّن (من قبل دمج الموديلات) بقيمة موديل غير
-        // "malg-a3" (زي malg-2 / malg-2.1 / malg-2.2) بيتحول تلقائيًا للموديل
-        // الموحّد الجديد، عشان القايمة في الإعدادات ما تفضلش فاضية.
-        if (parsed.model && parsed.model !== "malg-a3") {
+        // ترحيل القيم القديمة (malg-2 / malg-2.1 / malg-2.2) للموديل الافتراضي،
+        // وأي slug آخر يُقبل كما هو — السيرفر يقع بغير المعروف على الافتراضي،
+        // والتحقق النهائي ضد قائمة السيرفر يتم بعد تحميل الموديلات.
+        if (parsed.model === "malg-2" || parsed.model === "malg-2.1" || parsed.model === "malg-2.2") {
           parsed.model = "malg-a3";
         }
         setSettings((prev) => ({ ...prev, ...parsed }));
@@ -86,6 +104,27 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     } catch {
       // تجاهل
     }
+    // قائمة الموديلات من السيرفر (اللي الأدمن ضافها) — مع fallback محلي آمن
+    fetch("/api/models")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("bad status"))))
+      .then((data) => {
+        const list = Array.isArray(data?.models) ? data.models : [];
+        if (list.length === 0) throw new Error("empty");
+        const mapped: ModelOption[] = list.map((m: { id: string; name: string; description?: string; isDefault?: boolean }) => ({
+          id: String(m.id),
+          label: String(m.name || m.id),
+          hint: typeof m.description === "string" ? m.description : "",
+          recommended: !!m.isDefault,
+        }));
+        setModels(mapped);
+        const def = (typeof data?.defaultId === "string" && data.defaultId) || mapped.find((m) => m.recommended)?.id || mapped[0].id;
+        setDefaultModelId(def);
+        // لو الإعداد المحفوظ يشير لموديل اتمسح → ارجع للافتراضي
+        setSettings((prev) => (mapped.some((m) => m.id === prev.model) ? prev : { ...prev, model: def }));
+      })
+      .catch(() => {
+        setModels(FALLBACK_MODELS);
+      });
     setSystemDark(systemPrefersDark());
     setLoaded(true);
 
@@ -127,9 +166,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [settings.lang]
   );
 
+  const resolvedModels = models ?? FALLBACK_MODELS;
   const value = useMemo<SettingsValue>(
     () => ({
       ...settings,
+      models: resolvedModels,
+      defaultModelId,
       resolvedTheme,
       dir: settings.lang === "ar" ? "rtl" : "ltr",
       update,
@@ -140,7 +182,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setModel,
       t,
     }),
-    [settings, resolvedTheme, update, setLang, setTheme, setAnimations, setShowTime, setModel, t]
+    [settings, resolvedModels, defaultModelId, resolvedTheme, update, setLang, setTheme, setAnimations, setShowTime, setModel, t]
   );
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
@@ -151,6 +193,8 @@ export function useSettings(): SettingsValue {
   if (!ctx) {
     return {
       ...DEFAULTS,
+      models: FALLBACK_MODELS,
+      defaultModelId: "malg-a3",
       resolvedTheme: "light",
       dir: "rtl",
       update: () => {},

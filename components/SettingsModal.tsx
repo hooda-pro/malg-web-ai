@@ -24,7 +24,6 @@ import { formatTokens } from "@/lib/ai";
 import { Button, Dialog, Panel, Switch } from "./ui/Controls";
 import { Avatar, ThemeSwitch, type SettingsTab } from "./AccountMenu";
 import {
-  AVAILABLE_MODELS,
   CUSTOM_INSTRUCTIONS_MAX,
   useSettings,
   type ModelId,
@@ -186,7 +185,7 @@ function SettingRow({
 }
 
 function GeneralTab() {
-  const { t, lang, theme, model, animations, showTime, enterToSend, setLang, setTheme, setModel, setAnimations, setShowTime, update } =
+  const { t, lang, theme, model, models, animations, showTime, enterToSend, setLang, setTheme, setModel, setAnimations, setShowTime, update } =
     useSettings();
 
   return (
@@ -227,7 +226,7 @@ function GeneralTab() {
             onChange={(e) => setModel(e.target.value as ModelId)}
             className={selectClass}
           >
-            {AVAILABLE_MODELS.map((m) => (
+            {models.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.label}
               </option>

@@ -28,7 +28,7 @@ type Section = "overview" | "users" | "provider" | "search" | "logs" | "security
 const SECTIONS: { id: Section; label: string; icon: typeof Users }[] = [
   { id: "overview", label: "نظرة عامة", icon: LayoutDashboard },
   { id: "users", label: "المستخدمين", icon: Users },
-  { id: "provider", label: "مزوّد الموديل", icon: PlugZap },
+  { id: "provider", label: "الموديلات والمزوّدون", icon: PlugZap },
   { id: "search", label: "البحث", icon: Search },
   { id: "logs", label: "سجل الإجراءات", icon: ScrollText },
   { id: "security", label: "الأمان", icon: ShieldCheck },
@@ -37,7 +37,7 @@ const SECTIONS: { id: Section; label: string; icon: typeof Users }[] = [
 const SECTION_TITLES: Record<Section, string> = {
   overview: "نظرة عامة",
   users: "المستخدمين",
-  provider: "مزوّد الموديل (API)",
+  provider: "الموديلات والمزوّدون (API)",
   search: "البحث الحقيقي",
   logs: "سجل إجراءات الأدمن",
   security: "أمان الحساب",

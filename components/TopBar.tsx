@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Coins, Lock, PanelLeft, Share2, SquarePen } from "lucide-react";
 import { formatTokens } from "@/lib/ai";
 import { IconButton } from "./ui/Controls";
-import { AVAILABLE_MODELS, useSettings, type ModelId } from "./SettingsContext";
+import { useSettings, type ModelId, type ModelOption } from "./SettingsContext";
 import { cn } from "@/lib/utils";
 
 export default function TopBar({
@@ -227,7 +227,7 @@ function ModelPicker({
   lockedModel?: ModelId | null;
   onPickModel: (id: ModelId) => void;
 }) {
-  const { t, model } = useSettings();
+  const { t, model, models } = useSettings();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -248,7 +248,8 @@ function ModelPicker({
   }, [open]);
 
   const displayId = lockedModel ?? model;
-  const current = AVAILABLE_MODELS.find((m) => m.id === displayId) ?? AVAILABLE_MODELS[0];
+  const fallback: ModelOption = { id: displayId, label: displayId, hint: "", recommended: false };
+  const current = models.find((m) => m.id === displayId) ?? models[0] ?? fallback;
 
   return (
     <div className="relative" ref={ref}>
@@ -278,7 +279,7 @@ function ModelPicker({
           <p className="px-2.5 pb-1.5 pt-1 text-[11.5px] font-medium text-ink-3">
             {t("modelSwitcherTitle")}
           </p>
-          {AVAILABLE_MODELS.map((m) => {
+          {models.map((m) => {
             const selected = m.id === displayId;
             return (
               <button
@@ -299,13 +300,15 @@ function ModelPicker({
                     <span dir="ltr" className="text-[13.5px] font-medium text-ink">
                       {m.label}
                     </span>
-                    {m.badgeKey && (
+                    {m.recommended && (
                       <span className="rounded-full bg-accent-soft px-1.5 py-px text-[10.5px] font-medium text-accent">
-                        {t(m.badgeKey)}
+                        {t("modelRecommended")}
                       </span>
                     )}
                   </span>
-                  <span className="mt-0.5 block text-[12px] leading-5 text-ink-3">{t(m.hintKey)}</span>
+                  {m.hint ? (
+                    <span className="mt-0.5 block text-[12px] leading-5 text-ink-3">{m.hint}</span>
+                  ) : null}
                 </span>
                 <span className="grid h-5 w-5 shrink-0 place-items-center">
                   {selected && <Check size={15} className="text-accent" />}

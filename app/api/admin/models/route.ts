@@ -44,5 +44,5 @@ export async function POST(req: NextRequest) {
 
   await logAdminAction(guard.admin, "create_model", null, null, `إنشاء موديل جديد: ${v.name} (${v.id})`);
 
-  return NextResponse.json({ ok: true, models: await listModels(false) });
+  return NextResponse.json({ ok: true, createdId: v.id, models: await listModels(false) });
 }
