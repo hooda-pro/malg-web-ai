@@ -76,6 +76,73 @@ async function seedDefaultAdmin() {
 }
 
 /**
+ * يضمن وجود موديل افتراضي واحد على الأقل في ai_models.
+ * - لو الجدول فاضي وفيه إعداد قديم في provider_settings → يرحّله كموديل 'malg-a3' افتراضي.
+ * - لو مفيش حاجة خالص → يزرع موديل افتراضي من متغيرات البيئة (نفس قيم الـ fallback).
+ * Idempotent: لا يفعل شيئًا لو الجدول فيه صفوف.
+ */
+async function seedDefaultModel() {
+  try {
+    const existing = await sql`SELECT id FROM ai_models LIMIT 1`;
+    if (existing.length > 0) return;
+
+    // ترحيل آخر إعداد نشط قديم (لو موجود) — بنفس المفاتيح والإعدادات
+    try {
+      const migrated = await sql`
+        INSERT INTO ai_models (id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default)
+        SELECT 'malg-a3', COALESCE(name, 'Malg-A3'), '', base_url, COALESCE(protocol, 'chat_completions'), model, api_keys, temperature, max_tokens, TRUE, TRUE
+        FROM provider_settings
+        WHERE is_active = TRUE
+        ORDER BY updated_at DESC
+        LIMIT 1
+        ON CONFLICT (id) DO NOTHING
+        RETURNING id
+      `;
+      if (migrated.length > 0) {
+        console.log("[seed] تم ترحيل إعداد المزوّد القديم إلى موديل malg-a3 الافتراضي");
+        return;
+      }
+    } catch (e) {
+      console.error("seedDefaultModel: تعذر الترحيل من provider_settings", e);
+    }
+
+    // لا يوجد أي إعداد قديم — ازرع موديل افتراضي من البيئة (نفس قيم الـ fallback)
+    const baseUrl = (process.env.PROVIDER_BASE_URL || "").trim() || "https://tokenharbor.ai/v1/chat/completions";
+    const model = (process.env.PROVIDER_MODEL || "").trim() || "deepseek-v4.1-flash:free";
+    const keys = [];
+    const numberedPattern = /^TOKENHARBOR_API_KEYS?_?(\d+)$/i;
+    const numbered = Object.keys(process.env)
+      .map((name) => {
+        const m = name.match(numberedPattern);
+        return m ? { name, index: parseInt(m[1], 10) } : null;
+      })
+      .filter((x) => x !== null)
+      .sort((a, b) => a.index - b.index);
+    for (const entry of numbered) {
+      const v = process.env[entry.name];
+      if (v && v.trim()) keys.push(v.trim());
+    }
+    for (const varName of ["TOKENHARBOR_API_KEYS", "TOKENHARBOR_API_KEY"]) {
+      const bulk = process.env[varName] || "";
+      for (const k of bulk.split(/[\n,;]+/)) {
+        const t = k.trim();
+        if (t) keys.push(t);
+      }
+    }
+    const cleanBase = baseUrl.replace(/\/+$/, "");
+    const fullBase = /^https?:\/\//i.test(cleanBase) ? cleanBase : `https://${cleanBase}`;
+    await sql`
+      INSERT INTO ai_models (id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default)
+      VALUES ('malg-a3', 'Malg-A3', '', ${fullBase}, 'chat_completions', ${model}, ${[...new Set(keys)]}, 0.4, 128000, TRUE, TRUE)
+      ON CONFLICT (id) DO NOTHING
+    `;
+    console.log("[seed] تم إنشاء الموديل الافتراضي malg-a3");
+  } catch (e) {
+    console.error("seedDefaultModel error", e);
+  }
+}
+
+/**
  * ينشئ الجداول لو مش موجودة (idempotent). بتتكرر النتيجة بأمان.
  * بتتنفذ مرة واحدة لكل نسخة سيرفر شغالة (cold start) بفضل الـ promise cache.
  */
@@ -232,6 +299,27 @@ export function ensureSchema(): Promise<void> {
       `;
       // بروتوكول المزوّد (chat_completions / responses) — يُضاف للقواعد القديمة بأمان
       await sql`ALTER TABLE provider_settings ADD COLUMN IF NOT EXISTS protocol TEXT NOT NULL DEFAULT 'chat_completions'`;
+
+      // ——— الموديلات المتعددة: كل موديل (يظهر للمستخدم) ليه إعداد مزوّد كامل خاص بيه ———
+      await sql`
+        CREATE TABLE IF NOT EXISTS ai_models (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          base_url TEXT NOT NULL,
+          protocol TEXT NOT NULL DEFAULT 'chat_completions',
+          model TEXT NOT NULL,
+          api_keys TEXT[] NOT NULL DEFAULT '{}',
+          temperature DOUBLE PRECISION NOT NULL DEFAULT 0.4,
+          max_tokens INTEGER NOT NULL DEFAULT 128000,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          is_default BOOLEAN NOT NULL DEFAULT FALSE,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `;
+      await seedDefaultModel();
 
       // ——— تثبيت المحادثات + المؤقتة + المشاركة برابط (تفاعلات المستخدم) ———
       await sql`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN NOT NULL DEFAULT FALSE`;
