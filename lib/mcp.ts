@@ -92,6 +92,29 @@ export async function listMcpServers(): Promise<McpServerConfig[]> {
         auto: true,
       });
     }
+    // Firecrawl auto-wire: keyless free tier (scrape/search/parse, rate-limited).
+    // Official: point any client at https://mcp.firecrawl.dev/v2/mcp with no key.
+    if (!servers.some((s) => s.url.includes("mcp.firecrawl.dev"))) {
+      servers.push({
+        id: "auto-firecrawl",
+        name: "Firecrawl",
+        url: "https://mcp.firecrawl.dev/v2/mcp",
+        headers: {},
+        enabled: true,
+        auto: true,
+      });
+    }
+    // MDN auto-wire: official Mozilla endpoint, no key (web docs + browser compat).
+    if (!servers.some((s) => s.url.includes("mcp.mdn.mozilla.net"))) {
+      servers.push({
+        id: "auto-mdn",
+        name: "MDN",
+        url: "https://mcp.mdn.mozilla.net/",
+        headers: {},
+        enabled: true,
+        auto: true,
+      });
+    }
     // DeepWiki auto-wire: free, no key, no account — Q&A over any public repo.
     if (!servers.some((s) => s.url.includes("mcp.deepwiki.com"))) {
       servers.push({
