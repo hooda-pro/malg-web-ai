@@ -125,7 +125,10 @@ function MessageItem({
     [userTextWithFiles]
   );
   const imageAttachments = userAttachments.filter((a) => a.kind === "image");
-  const fileAttachments = userAttachments.filter((a) => a.kind !== "image");
+  const videoAttachments = userAttachments.filter(
+    (a) => a.kind === "video" && ((a.frames?.length ?? 0) > 0 || !!a.previewUrl)
+  );
+  const fileAttachments = userAttachments.filter((a) => a.kind === "text");
 
   const thinkingLabel = useMemo(() => {
     const secs = (message.thinkingDurationMs ?? 0) / 1000;
@@ -158,6 +161,44 @@ function MessageItem({
                 />
               ) : null
             )}
+          </div>
+        )}
+
+        {videoAttachments.length > 0 && (
+          <div className="mb-1.5 flex max-w-[85%] flex-col items-end gap-1.5">
+            {videoAttachments.map((a, i) => (
+              <div
+                key={i}
+                className="w-64 max-w-full overflow-hidden rounded-xl border border-hair bg-surface-2 shadow-1"
+              >
+                <div className="relative">
+                  {a.previewUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={a.previewUrl}
+                      alt={a.name}
+                      className="aspect-video w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex aspect-video items-center justify-center text-[11px] text-ink-3">
+                      video
+                    </div>
+                  )}
+                  <span
+                    className="absolute bottom-1.5 end-1.5 rounded-md bg-black/60 px-1.5 py-0.5 font-mono text-[11px] text-white"
+                    dir="ltr"
+                  >
+                    {typeof a.durationSec === "number"
+                      ? `${Math.floor(a.durationSec / 60)}:${String(Math.floor(a.durationSec % 60)).padStart(2, "0")}`
+                      : ""}
+                    {(a.frames?.length ?? 0) > 0 ? ` - ${a.frames?.length}f` : ""}
+                  </span>
+                </div>
+                <div className="truncate px-2.5 py-1.5 text-[12px] text-ink-2" dir="ltr">
+                  {a.name}
+                </div>
+              </div>
+            ))}
           </div>
         )}
 

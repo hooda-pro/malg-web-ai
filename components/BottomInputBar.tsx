@@ -17,7 +17,9 @@ export interface ComposerAttachment {
   file: File;
   extractedText?: string;
   previewUrl?: string;
-  kind: "image" | "text";
+  kind: "image" | "text" | "video";
+  frames?: { dataUrl: string; atSec: number }[];
+  durationSec?: number;
 }
 
 /**
@@ -58,7 +60,7 @@ export default function BottomInputBar({
         const placeholder: PendingAttachment = {
           id: makeAttachmentId(),
           file,
-          kind: "image",
+          kind: "video",
           loading: true,
         };
         setAttachments((prev) => [...prev, placeholder]);
@@ -103,6 +105,8 @@ export default function BottomInputBar({
         extractedText: a.extractedText,
         previewUrl: a.previewUrl,
         kind: a.kind,
+        frames: a.frames,
+        durationSec: a.durationSec,
       }))
     );
     if (ok === false) {
@@ -304,7 +308,23 @@ function AttachmentChip({
       )}
       title={attachment.error || attachment.note || attachment.file.name}
     >
-      {attachment.kind === "image" && attachment.previewUrl ? (
+      {attachment.kind === "video" ? (
+        <span className="relative grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-md bg-surface-3 text-ink-3">
+          {attachment.previewUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={attachment.previewUrl}
+              alt={attachment.file.name}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          ) : (
+            <FileText size={15} />
+          )}
+          <span className="absolute grid h-5 w-5 place-items-center rounded-full bg-black/55 text-[10px] text-white">
+            &#9654;
+          </span>
+        </span>
+      ) : attachment.kind === "image" && attachment.previewUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={attachment.previewUrl}

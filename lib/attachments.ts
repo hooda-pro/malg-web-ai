@@ -15,7 +15,7 @@
 
 import type { ProjectFile } from "./parseContent";
 
-export type AttachmentKind = "image" | "text";
+export type AttachmentKind = "image" | "text" | "video";
 
 export interface PendingAttachment {
   id: string;
@@ -31,6 +31,8 @@ export interface PendingAttachment {
   error?: string;
   /** ملاحظة معلوماتية (مش خطأ): مثلًا "اتقرا 98 ملف — اتخطّينا node_modules" */
   note?: string;
+  frames?: { dataUrl: string; atSec: number }[];
+  durationSec?: number;
 }
 
 const TEXT_EXTENSIONS = new Set([
@@ -90,7 +92,7 @@ export function isVideoFile(file: File): boolean {
 
 // سقف اللقطات وحجمها: 6 لقطات × ~640px بجودة متوسطة ≈ نص ميجا إجمالي،
 // رقم معقول يتحفظ في الرسالة ويتبعت للموديل من غير ما ياكل التوكنز.
-const MAX_VIDEO_FRAMES = 12;
+const MAX_VIDEO_FRAMES = 24;
 const MAX_VIDEO_FRAME_WIDTH = 512;
 const VIDEO_FRAME_QUALITY = 0.65;
 const VIDEO_SEEK_TIMEOUT_MS = 8000;
@@ -163,7 +165,7 @@ export async function extractVideoFrames(
     const durationSec =
       Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 0;
     if (!durationSec) throw new Error("no-duration");
-    const n = Math.max(2, Math.floor(maxFrames));
+    const n = Math.max(6, Math.min(Math.floor(maxFrames), Math.floor(durationSec) || 6));
     const canvas = document.createElement("canvas");
     const frames: { dataUrl: string; atSec: number }[] = [];
     for (let i = 0; i < n; i++) {
@@ -192,14 +194,6 @@ export async function extractVideoFrames(
   }
 }
 
-function dataUrlToBytes(dataUrl: string): Uint8Array {
-  const base64 = dataUrl.split(",")[1] || "";
-  const bin = atob(base64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return bytes;
-}
-
 /**
  * فيديو -> لقطات صور (kind image) بأسماء مميزة، بتتبعت للموديل كصور حقيقية
  * بالترتيب عبر نفس مسار الصور (buildApiMessageContent) من غير أي تغيير تاني.
@@ -208,24 +202,19 @@ export async function processVideoFile(file: File): Promise<PendingAttachment[]>
   try {
     const { frames, durationSec } = await extractVideoFrames(file);
     if (frames.length === 0) throw new Error("no-frames");
-    const base = (file.name.replace(/\.[^.]+$/, "") || "video").slice(0, 60);
     const durLabel = fmtClock(durationSec);
-    return frames.map((f, i) => {
-      const frameFile = new File(
-        [dataUrlToBytes(f.dataUrl)],
-        `${base}_frame${i + 1}.jpg`,
-        { type: "image/jpeg" }
-      );
-      const att: PendingAttachment = {
-        id: makeAttachmentId(),
-        file: frameFile,
-        kind: "image",
-        previewUrl: f.dataUrl,
-        loading: false,
-        note: `Frame ${fmtClock(f.atSec)} of video (${durLabel})`,
-      };
-      return att;
-    });
+    const poster = frames[Math.floor(frames.length / 2)];
+    const att: PendingAttachment = {
+      id: makeAttachmentId(),
+      file,
+      kind: "video",
+      previewUrl: poster.dataUrl,
+      loading: false,
+      durationSec: Math.round(durationSec),
+      frames: frames.map((f) => ({ dataUrl: f.dataUrl, atSec: Math.round(f.atSec * 10) / 10 })),
+      note: `${frames.length} frames - ${durLabel}`,
+    };
+    return [att];
   } catch {
     return [
       {
@@ -501,12 +490,16 @@ export interface StoredAttachmentMeta {
   kind: AttachmentKind;
   /** data URI — للصور بس */
   previewUrl?: string;
+  frames?: { url: string; at: number }[];
+  durationSec?: number;
 }
 
 interface AttachmentLike {
   file: File;
   kind: AttachmentKind;
   previewUrl?: string;
+  frames?: { dataUrl: string; atSec: number }[];
+  durationSec?: number;
 }
 
 /**
@@ -520,7 +513,13 @@ export function buildAttachmentsMetaBlock(attachments: AttachmentLike[]): string
     name: a.file.name,
     size: a.file.size,
     kind: a.kind,
-    previewUrl: a.kind === "image" ? a.previewUrl : undefined,
+    previewUrl: a.kind === "image" || a.kind === "video" ? a.previewUrl : undefined,
+    frames:
+      a.kind === "video" && a.frames
+        ? a.frames.map((f) => ({ url: f.dataUrl, at: Math.round(f.atSec) }))
+        : undefined,
+    durationSec:
+      a.kind === "video" && typeof a.durationSec === "number" ? Math.round(a.durationSec) : undefined,
   }));
   return `\n${ATTACHMENTS_META_START}${JSON.stringify(meta)}${ATTACHMENTS_META_END}`;
 }
@@ -723,25 +722,23 @@ export function toApiUserContent(content: string, opts: ApiContentOptions = {}):
   }
 
   const images = attachments.filter((a) => a.kind === "image" && a.previewUrl);
-  if (images.length === 0) return text;
+  const videos = attachments.filter((a) => a.kind === "video" && a.frames && a.frames.length > 0);
+  if (images.length === 0 && videos.length === 0) return text;
 
   if (!includeImages) {
-    const names = images.map((a) => a.name).join("، ");
-    return `${text}\n\n[المستخدم كان بعت ${images.length} صورة (${names}) في رسالة قديمة — اتشالت من السياق لتوفير التوكنز]`.trim();
+    const bits = [
+      ...images.map((a) => a.name),
+      ...videos.map((v) => `${v.name} (video)`),
+    ];
+    const total = images.length + videos.reduce((n, v) => n + (v.frames?.length ?? 0), 0);
+    const names = bits.join(", ");
+    return `${text}\n\n[المستخدم كان بعت ${total} صورة/لقطة (${names}) في رسالة قديمة — اتشالت من السياق لتوفير التوكنز]`.trim();
   }
 
-  // Video frames travel as plain images, so label their groups in the text part
-  // (sent to the model only - stored content stays clean). Groups share the
-  // "<base>_frameN.jpg" naming from processVideoFile, in chronological order.
-  const videoGroups = new Map<string, number>();
-  for (const img of images) {
-    const m = img.name.match(/^(.*)_frame\d+\.jpg$/);
-    if (m) videoGroups.set(m[1], (videoGroups.get(m[1]) ?? 0) + 1);
-  }
   let labeledText = text;
-  if (videoGroups.size > 0) {
-    const lines = [...videoGroups.entries()].map(
-      ([base, n]) => `Attached video "${base}" as ${n} chronological frames - the following images are its frames in order. ` +
+  if (videos.length > 0) {
+    const lines = videos.map(
+      (v) => `Attached video "${v.name}" as ${(v.frames?.length ?? 0)} chronological frames - the following images are its frames in order. ` +
         `These frames are SILENT stills: there is NO audio. Never invent or quote spoken words, dialogue, lyrics, or sounds ` +
         `from them. If the user asks what was said/heard, say honestly you cannot hear audio from uploaded videos, ` +
         `and suggest alternatives: a YouTube/public link (transcribable via tools) or the user describing what was said.`
@@ -750,8 +747,12 @@ export function toApiUserContent(content: string, opts: ApiContentOptions = {}):
   }
 
   const parts: ApiContentPart[] = [{ type: "text", text: labeledText }];
-  for (const img of images) {
-    parts.push({ type: "image_url", image_url: { url: img.previewUrl! } });
+  for (const a of attachments) {
+    if (a.kind === "image" && a.previewUrl) {
+      parts.push({ type: "image_url", image_url: { url: a.previewUrl } });
+    } else if (a.kind === "video" && a.frames) {
+      for (const f of a.frames) parts.push({ type: "image_url", image_url: { url: f.url } });
+    }
   }
   return parts;
 }

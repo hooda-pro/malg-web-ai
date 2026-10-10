@@ -181,7 +181,7 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
       win.forEach((m, i) => {
         if (m.role !== "user") return;
         lastUser = i;
-        if (extractAttachmentsMeta(m.content).attachments.some((a) => a.kind === "image" && a.previewUrl)) lastImage = i;
+        if (extractAttachmentsMeta(m.content).attachments.some((a) => a.kind === "image" && a.previewUrl) || (a.kind === "video" && (a.frames?.length ?? 0) > 0)) lastImage = i;
       });
       return win.map((m, i) => ({
         role: m.role,
