@@ -4,7 +4,10 @@ import { useRef, useState } from "react";
 import { ArrowUp, FileArchive, FileText, Paperclip, Square, X } from "lucide-react";
 import {
   formatBytes,
+  isVideoFile,
+  makeAttachmentId,
   processFile,
+  processVideoFile,
   type PendingAttachment,
 } from "@/lib/attachments";
 import { useSettings } from "./SettingsContext";
@@ -49,16 +52,28 @@ export default function BottomInputBar({
   const addFiles = (files: FileList | File[]) => {
     const list = Array.from(files);
     if (list.length === 0) return;
-    const placeholders = list.map((file) => ({
-      id: `${Date.now()}-${Math.random()}`,
-      file,
-      kind: (file.type.startsWith("image/") ? "image" : "text") as PendingAttachment["kind"],
-      loading: true,
-    }));
-    setAttachments((prev) => [...prev, ...placeholders]);
-
-    placeholders.forEach(async (placeholder, idx) => {
-      const processed = await processFile(list[idx]);
+    list.forEach(async (file) => {
+      // Video becomes frame images (async extraction) with a temp placeholder
+      if (isVideoFile(file)) {
+        const placeholder: PendingAttachment = {
+          id: makeAttachmentId(),
+          file,
+          kind: "image",
+          loading: true,
+        };
+        setAttachments((prev) => [...prev, placeholder]);
+        const frames = await processVideoFile(file);
+        setAttachments((prev) => prev.flatMap((a) => (a.id === placeholder.id ? frames : [a])));
+        return;
+      }
+      const placeholder: PendingAttachment = {
+        id: makeAttachmentId(),
+        file,
+        kind: (file.type.startsWith("image/") ? "image" : "text") as PendingAttachment["kind"],
+        loading: true,
+      };
+      setAttachments((prev) => [...prev, placeholder]);
+      const processed = await processFile(file);
       setAttachments((prev) =>
         prev.map((a) => (a.id === placeholder.id ? { ...processed, id: placeholder.id } : a))
       );

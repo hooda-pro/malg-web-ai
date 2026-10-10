@@ -1,13 +1,16 @@
 /**
- * مرفقات الشات (صور + ملفات نصية/كود/PDF/مضغوطة):
+ * مرفقات الشات (صور + فيديو + ملفات نصية/كود/PDF/مضغوطة):
  * - الصور: بتترفع كـ data URI، وبتتعرض للمستخدم في فقاعته، وكمان بتتبعت فعليًا
  *   للموديل كصورة حقيقية (مش بس اسمها) — Token Harbor / DeepSeek V4.1 Flash
  *   بيدعم رؤية (vision) فعلاً، شوف buildApiMessageContent تحت وlib/ai.ts.
  * - الملفات النصية/الكود: بيتقرأ محتواها ويتحط في نص الرسالة قبل ما تتبعت.
  * - PDF: استخراج نص خفيف (بدون مكتبة خارجية) — بيشتغل مع أغلب الـ PDF البسيطة
  *   (نص غير مضغوط)، ومش مضمون 100% مع كل PDF (خصوصاً الممسوحة ضوئيًا/المصورة).
- * - ZIP: بيتفك في المتصفح ويتقرأ كل ملف نصي جواه؛ الملفات الثنائية (صور، فيديو...)
- *   بيتسرد اسمها بس من غير محتوى.
+ * - ZIP: بيتفك في المتصفح ويتقرأ كل ملف نصي جواه؛ الملفات الثنائية (صور...)
+ *   بيتسرد اسمها بس من غير محتوى (ماعدا الفيديو - شوف تحت).
+ * - الفيديو (MP4/WebM/MOV/...): بيتستخرج منه لقطات JPEG في المتصفح نفسه عبر
+ *   canvas وبتتبعت للموديل كصور حقيقية بالترتيب الزمني - من غير سيرفر ومن غير
+ *   مكتبات خارجية. الموديلات النصية البحتة هتشوف اللقطات كصور عادية.
  */
 
 import type { ProjectFile } from "./parseContent";
@@ -74,6 +77,166 @@ function isPdfFile(file: File): boolean {
 function isPlainTextFile(file: File): boolean {
   if (TEXT_EXTENSIONS.has(extOf(file.name))) return true;
   return file.type.startsWith("text/") || file.type === "application/json";
+}
+
+const VIDEO_EXTENSIONS = new Set([
+  "mp4", "webm", "mov", "mkv", "avi", "m4v", "3gp", "ogv", "mpg", "mpeg",
+]);
+
+export function isVideoFile(file: File): boolean {
+  if (file.type.startsWith("video/")) return true;
+  return VIDEO_EXTENSIONS.has(extOf(file.name));
+}
+
+// سقف اللقطات وحجمها: 6 لقطات × ~640px بجودة متوسطة ≈ نص ميجا إجمالي،
+// رقم معقول يتحفظ في الرسالة ويتبعت للموديل من غير ما ياكل التوكنز.
+const MAX_VIDEO_FRAMES = 6;
+const MAX_VIDEO_FRAME_WIDTH = 640;
+const VIDEO_FRAME_QUALITY = 0.65;
+const VIDEO_SEEK_TIMEOUT_MS = 8000;
+
+function fmtClock(sec: number): string {
+  const s = Math.max(0, Math.floor(sec));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function seekVideo(video: HTMLVideoElement, at: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error("seek-timeout"));
+    }, VIDEO_SEEK_TIMEOUT_MS);
+    const cleanup = () => {
+      clearTimeout(timer);
+      video.onseeked = null;
+      video.onerror = null;
+    };
+    video.onerror = () => {
+      cleanup();
+      reject(new Error("seek-error"));
+    };
+    video.onseeked = () => {
+      cleanup();
+      resolve();
+    };
+    try {
+      video.currentTime = at;
+    } catch (e) {
+      cleanup();
+      reject(e);
+    }
+  });
+}
+
+export interface VideoFramesResult {
+  frames: { dataUrl: string; atSec: number }[];
+  durationSec: number;
+}
+
+/** Frames spread across the video (5%-95%) via hidden video element + canvas. */
+export async function extractVideoFrames(
+  file: File,
+  maxFrames = MAX_VIDEO_FRAMES
+): Promise<VideoFramesResult> {
+  const url = URL.createObjectURL(file);
+  const video = document.createElement("video");
+  video.muted = true;
+  video.preload = "auto";
+  (video as HTMLVideoElement & { playsInline?: boolean }).playsInline = true;
+  // عنصر مخفي في الصفحة (بعض المتصفحات - خصوصا iOS - ترفض الالتقاط من عنصر منفصل)
+  video.style.cssText =
+    "position:fixed;left:-9999px;top:0;width:4px;height:4px;opacity:0;pointer-events:none;";
+  document.body.appendChild(video);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("meta-timeout")), VIDEO_SEEK_TIMEOUT_MS);
+      video.onloadedmetadata = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      video.onerror = () => {
+        clearTimeout(timer);
+        reject(new Error("load-error"));
+      };
+      video.src = url;
+    });
+    const durationSec =
+      Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 0;
+    if (!durationSec) throw new Error("no-duration");
+    const n = Math.max(2, Math.floor(maxFrames));
+    const canvas = document.createElement("canvas");
+    const frames: { dataUrl: string; atSec: number }[] = [];
+    for (let i = 0; i < n; i++) {
+      const at = durationSec * (0.04 + (0.92 * i) / (n - 1));
+      await seekVideo(video, Math.min(at, Math.max(0, durationSec - 0.1)));
+      const vw = video.videoWidth || 640;
+      const vh = video.videoHeight || 360;
+      const scale = Math.min(1, MAX_VIDEO_FRAME_WIDTH / vw);
+      canvas.width = Math.max(2, Math.round(vw * scale));
+      canvas.height = Math.max(2, Math.round(vh * scale));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("no-canvas");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      frames.push({ dataUrl: canvas.toDataURL("image/jpeg", VIDEO_FRAME_QUALITY), atSec: at });
+    }
+    return { frames, durationSec };
+  } finally {
+    URL.revokeObjectURL(url);
+    try {
+      video.removeAttribute("src");
+      video.load();
+    } catch {
+      // ignore
+    }
+    video.remove();
+  }
+}
+
+function dataUrlToBytes(dataUrl: string): Uint8Array {
+  const base64 = dataUrl.split(",")[1] || "";
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+/**
+ * فيديو -> لقطات صور (kind image) بأسماء مميزة، بتتبعت للموديل كصور حقيقية
+ * بالترتيب عبر نفس مسار الصور (buildApiMessageContent) من غير أي تغيير تاني.
+ */
+export async function processVideoFile(file: File): Promise<PendingAttachment[]> {
+  try {
+    const { frames, durationSec } = await extractVideoFrames(file);
+    if (frames.length === 0) throw new Error("no-frames");
+    const base = (file.name.replace(/\.[^.]+$/, "") || "video").slice(0, 60);
+    const durLabel = fmtClock(durationSec);
+    return frames.map((f, i) => {
+      const frameFile = new File(
+        [dataUrlToBytes(f.dataUrl)],
+        `${base}_frame${i + 1}.jpg`,
+        { type: "image/jpeg" }
+      );
+      const att: PendingAttachment = {
+        id: makeAttachmentId(),
+        file: frameFile,
+        kind: "image",
+        previewUrl: f.dataUrl,
+        loading: false,
+        note: `Frame ${fmtClock(f.atSec)} of video (${durLabel})`,
+      };
+      return att;
+    });
+  } catch {
+    return [
+      {
+        id: makeAttachmentId(),
+        file,
+        kind: "text",
+        loading: false,
+        error: "Could not extract frames (unsupported codec). Try MP4.",
+      },
+    ];
+  }
 }
 
 function truncateNote(text: string, limit: number): string {
@@ -567,7 +730,23 @@ export function toApiUserContent(content: string, opts: ApiContentOptions = {}):
     return `${text}\n\n[المستخدم كان بعت ${images.length} صورة (${names}) في رسالة قديمة — اتشالت من السياق لتوفير التوكنز]`.trim();
   }
 
-  const parts: ApiContentPart[] = [{ type: "text", text }];
+  // Video frames travel as plain images, so label their groups in the text part
+  // (sent to the model only - stored content stays clean). Groups share the
+  // "<base>_frameN.jpg" naming from processVideoFile, in chronological order.
+  const videoGroups = new Map<string, number>();
+  for (const img of images) {
+    const m = img.name.match(/^(.*)_frame\d+\.jpg$/);
+    if (m) videoGroups.set(m[1], (videoGroups.get(m[1]) ?? 0) + 1);
+  }
+  let labeledText = text;
+  if (videoGroups.size > 0) {
+    const lines = [...videoGroups.entries()].map(
+      ([base, n]) => `Attached video "${base}" as ${n} chronological frames - the following images are its frames in order.`
+    );
+    labeledText = `${text}\n\n${lines.join("\n")}`.trim();
+  }
+
+  const parts: ApiContentPart[] = [{ type: "text", text: labeledText }];
   for (const img of images) {
     parts.push({ type: "image_url", image_url: { url: img.previewUrl! } });
   }
