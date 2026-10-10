@@ -32,6 +32,9 @@ export interface ComposerAttachment {
  */
 const FIELD_TEXT = "px-4 pb-1 pt-3.5 text-[16px] leading-7 sm:text-[15px]";
 
+// Above this length, a paste turns into a .txt attachment instead of composer text.
+const PASTE_AS_FILE_CHARS = 3000;
+
 export default function BottomInputBar({
   isGenerating,
   onSend,
@@ -133,6 +136,20 @@ export default function BottomInputBar({
     if (files.length > 0) {
       e.preventDefault();
       addFiles(files);
+      return;
+    }
+    // Long pasted text becomes a file attachment (Claude-style) instead of
+    // flooding the composer. Typed text is never converted, only pastes.
+    const pastedText = e.clipboardData?.getData("text") || "";
+    if (pastedText.length > PASTE_AS_FILE_CHARS) {
+      e.preventDefault();
+      const firstLine = (pastedText.split("\n").find((l) => l.trim()) || "pasted-text")
+        .trim()
+        .slice(0, 30)
+        .replace(/[^\w\u0600-\u06FF\-. ]+/g, "")
+        .trim();
+      const name = `${firstLine || "pasted-text"}-${Date.now().toString(36)}.txt`;
+      addFiles([new File([pastedText], name, { type: "text/plain" })]);
     }
   };
 
