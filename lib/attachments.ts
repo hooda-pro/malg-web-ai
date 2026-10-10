@@ -741,7 +741,10 @@ export function toApiUserContent(content: string, opts: ApiContentOptions = {}):
   let labeledText = text;
   if (videoGroups.size > 0) {
     const lines = [...videoGroups.entries()].map(
-      ([base, n]) => `Attached video "${base}" as ${n} chronological frames - the following images are its frames in order.`
+      ([base, n]) => `Attached video "${base}" as ${n} chronological frames - the following images are its frames in order. ` +
+        `These frames are SILENT stills: there is NO audio. Never invent or quote spoken words, dialogue, lyrics, or sounds ` +
+        `from them. If the user asks what was said/heard, say honestly you cannot hear audio from uploaded videos, ` +
+        `and suggest alternatives: a YouTube/public link (transcribable via tools) or the user describing what was said.`
     );
     labeledText = `${text}\n\n${lines.join("\n")}`.trim();
   }
