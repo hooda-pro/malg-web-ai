@@ -27,6 +27,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     is_active?: unknown;
     tier?: unknown;
     cost_multiplier?: unknown;
+    supports_video?: unknown;
   };
 
   const sets: string[] = [];
@@ -60,6 +61,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const mult = Math.min(Math.max(body.cost_multiplier, 1), 50);
     sets.push(`معامل التكلفة ×${mult}`);
     await sql`UPDATE ai_models SET cost_multiplier = ${mult}, updated_at = now() WHERE id = ${id}`;
+  }
+  if (body.supports_video === true || body.supports_video === false) {
+    sets.push("native video " + (body.supports_video ? "ON" : "OFF"));
+    await sql`UPDATE ai_models SET supports_video = ${body.supports_video}, updated_at = now() WHERE id = ${id}`;
   }
   if (sets.length === 0) {
     return NextResponse.json({ error: "لا يوجد ما يُحدّث" }, { status: 400 });

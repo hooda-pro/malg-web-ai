@@ -304,6 +304,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   const modelCfg = await getModelProvider(model).catch(() => null);
   const modelDisplayName = modelCfg?.displayName ?? "Malg-A3";
   const costMult = modelCfg && Number.isFinite(modelCfg.costMultiplier) && modelCfg.costMultiplier > 0 ? modelCfg.costMultiplier : 1;
+  const videoNative = modelCfg?.supportsVideo === true;
 
   const systemPromptContent =
     buildSystemPrompt({
@@ -349,6 +350,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
           ? toApiUserContent(m.content, {
               inlineBudgetChars: i === lastUserIdx ? API_INLINE_TOTAL_MAX_CHARS : OLDER_INLINE_BUDGET_CHARS,
               includeImages: i === lastImageIdx,
+              videoNative,
             })
           : extractAgentStepsMeta(m.content).visibleText,
     })),

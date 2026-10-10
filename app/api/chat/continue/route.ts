@@ -163,7 +163,9 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
 
   // اسم الموديل المعروض للهوية — من إعداد الموديل نفسه
   const costMult = await getCostMultiplier(model).catch(() => 1);
-  const modelDisplayName = (await getModelProvider(model).catch(() => null))?.displayName ?? "Malg-A3";
+  const continueCfg = await getModelProvider(model).catch(() => null);
+  const modelDisplayName = continueCfg?.displayName ?? "Malg-A3";
+  const videoNative = continueCfg?.supportsVideo === true;
 
   const apiMessages: ApiMessage[] = [
     {
@@ -190,6 +192,7 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
             ? toApiUserContent(m.content, {
                 inlineBudgetChars: i === lastUser ? API_INLINE_TOTAL_MAX_CHARS : 8_000,
                 includeImages: i === lastImage,
+                videoNative,
               })
             : m.content,
       }));

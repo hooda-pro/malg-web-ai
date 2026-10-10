@@ -343,6 +343,25 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
     }
   };
 
+  const setSupportsVideo = async (id: string, v: boolean) => {
+    setActingId(id);
+    try {
+      const res = await fetch(`/api/admin/models/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ supports_video: v }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "update failed");
+      setModels(data.models ?? []);
+      notify("ok", v ? `Native video ON for ${id}` : `Native video OFF for ${id} (frames fallback)`);
+    } catch (e) {
+      notify("err", e instanceof Error ? e.message : "update failed");
+    } finally {
+      setActingId(null);
+    }
+  };
+
   const setTier = async (id: string, tier: "free" | "paid") => {
     setActingId(id);
     try {
@@ -483,6 +502,11 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
                           مجاني
                         </span>
                       )}
+                      {m.supportsVideo === true && (
+                        <span className="shrink-0 rounded-full bg-live-soft px-1.5 py-px text-[10.5px] font-medium text-live">
+                          VID
+                        </span>
+                      )}
                       {(m.costMultiplier ?? 1) > 1 && (
                         <span
                           className="shrink-0 rounded-full bg-surface-3 px-1.5 py-px text-[10.5px] font-medium text-ink-2"
@@ -518,6 +542,20 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
                       <Loader2 size={13} className="animate-spin" />
                     ) : (
                       <Crown size={13} className={((m as { tier?: string }).tier ?? "free") === "paid" ? "text-warn" : "text-ink-3"} />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setSupportsVideo(m.id, !(m.supportsVideo === true))}
+                    disabled={busy}
+                    title="native video on/off (Gemini-class models)"
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-full transition-colors duration-1 hover:bg-surface-3 disabled:opacity-40"
+                  >
+                    {acting ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <span className={m.supportsVideo === true ? "text-[11px] font-bold text-live" : "text-[11px] font-bold text-ink-3"}>
+                        VID
+                      </span>
                     )}
                   </button>
                   <button

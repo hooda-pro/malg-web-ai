@@ -20,6 +20,7 @@ export interface ComposerAttachment {
   kind: "image" | "text" | "video";
   frames?: { dataUrl: string; atSec: number }[];
   durationSec?: number;
+  videoDataUrl?: string;
 }
 
 /**
@@ -107,6 +108,7 @@ export default function BottomInputBar({
         kind: a.kind,
         frames: a.frames,
         durationSec: a.durationSec,
+        videoDataUrl: a.videoDataUrl,
       }))
     );
     if (ok === false) {

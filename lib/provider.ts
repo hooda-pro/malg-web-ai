@@ -55,6 +55,7 @@ export interface ProviderConfig {
   maxTokens: number;
   tier: ModelTier;
   costMultiplier: number;
+  supportsVideo: boolean;
   isActive: boolean;
   updatedAt: string | null;
 }
@@ -80,6 +81,7 @@ export interface ModelSummary {
   updatedAt: string | null;
   tier: ModelTier;
   costMultiplier: number;
+  supportsVideo: boolean;
 }
 
 /** إعداد مزوّد مربوط بموديل معين — اللي بيستخدمه التفاوض الفعلي */
@@ -104,6 +106,7 @@ export interface ModelRow {
   max_tokens: unknown;
   tier: unknown;
   cost_multiplier: unknown;
+  supports_video: unknown;
   is_active: boolean;
   is_default: unknown;
   updated_at: string | null;
@@ -158,6 +161,7 @@ function modelRowToConfig(r: ModelRow): ModelProviderConfig {
     protocol: r.protocol,
     tier: r.tier,
     cost_multiplier: r.cost_multiplier,
+    supports_video: r.supports_video,
   });
   return {
     ...base,
@@ -179,6 +183,7 @@ function modelRowToSummary(r: ModelRow): ModelSummary {
     updatedAt: r.updated_at ?? null,
     tier: (r as { tier?: unknown }).tier === "paid" ? "paid" : "free",
     costMultiplier: clampCostMultiplier((r as { cost_multiplier?: unknown }).cost_multiplier),
+    supportsVideo: (r as { supports_video?: unknown }).supports_video === true,
   };
 }
 
@@ -349,6 +354,7 @@ function envFallback(): ProviderConfig {
     maxTokens: 128000,
     tier: "free",
     costMultiplier: 1,
+    supportsVideo: false,
     isActive: true,
     updatedAt: null,
   };
@@ -387,6 +393,7 @@ export interface ProviderRow {
   protocol?: unknown;
   tier?: unknown;
   cost_multiplier?: unknown;
+  supports_video?: unknown;
 }
 
 function clampCostMultiplier(v: unknown): number {
@@ -407,6 +414,7 @@ export function rowToConfig(r: ProviderRow): ProviderConfig {
     protocol,
     tier: r.tier === "paid" ? "paid" : "free",
     costMultiplier: clampCostMultiplier(r.cost_multiplier),
+    supportsVideo: r.supports_video === true,
     model: r.model,
     apiKeys: Array.isArray(r.api_keys) ? r.api_keys.filter((k) => typeof k === "string" && k.trim()) : [],
     temperature: Number(r.temperature ?? 0.4),

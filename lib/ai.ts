@@ -44,7 +44,8 @@ export function normalizeModelId(_raw: unknown): ModelId {
  * الصور فعليًا — شوف lib/attachments.ts::buildApiMessageContent). */
 export type ApiContentPart =
   | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } };
+  | { type: "image_url"; image_url: { url: string } }
+  | { type: "video_url"; video_url: { url: string } };
 
 export interface ApiMessage {
   role: string;
@@ -102,6 +103,7 @@ function apiContentToText(content: string | ApiContentPart[]): string {
     .map((p) => {
       if (p.type === "text") return p.text;
       if (p.type === "image_url") return "[image]";
+      if (p.type === "video_url") return "[video]";
       return "";
     })
     .join("\n");
@@ -117,7 +119,8 @@ function apiContentToResponsesContent(
   if (!hasImage) return content.map((p) => (p.type === "text" ? p.text : "")).join("\n");
   return content.map((p) => {
     if (p.type === "text") return { type: "input_text", text: p.text };
-    return { type: "input_image", image_url: p.image_url.url };
+    if (p.type === "image_url") return { type: "input_image", image_url: p.image_url.url };
+    return { type: "input_text", text: "[video]" };
   });
 }
 

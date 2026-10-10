@@ -364,6 +364,7 @@ export function ensureSchema(): Promise<void> {
         )
       `;
       await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS cost_multiplier DOUBLE PRECISION NOT NULL DEFAULT 1`;
+      await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS supports_video BOOLEAN NOT NULL DEFAULT FALSE`;
 
       await seedDefaultModel();
       await seedClaudeModel();

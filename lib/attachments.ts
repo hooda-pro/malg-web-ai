@@ -33,6 +33,7 @@ export interface PendingAttachment {
   note?: string;
   frames?: { dataUrl: string; atSec: number }[];
   durationSec?: number;
+  videoDataUrl?: string;
 }
 
 const TEXT_EXTENSIONS = new Set([
@@ -94,6 +95,7 @@ export function isVideoFile(file: File): boolean {
 // رقم معقول يتحفظ في الرسالة ويتبعت للموديل من غير ما ياكل التوكنز.
 const MAX_VIDEO_FRAMES = 24;
 const MAX_VIDEO_FRAME_WIDTH = 512;
+const VIDEO_NATIVE_MAX_BYTES = 8 * 1024 * 1024;
 const VIDEO_FRAME_QUALITY = 0.65;
 const VIDEO_SEEK_TIMEOUT_MS = 8000;
 
@@ -204,6 +206,14 @@ export async function processVideoFile(file: File): Promise<PendingAttachment[]>
     if (frames.length === 0) throw new Error("no-frames");
     const durLabel = fmtClock(durationSec);
     const poster = frames[Math.floor(frames.length / 2)];
+    let videoDataUrl: string | undefined;
+    if (file.size <= VIDEO_NATIVE_MAX_BYTES) {
+      try {
+        videoDataUrl = await readAsDataURL(file);
+      } catch {
+        videoDataUrl = undefined;
+      }
+    }
     const att: PendingAttachment = {
       id: makeAttachmentId(),
       file,
@@ -211,6 +221,7 @@ export async function processVideoFile(file: File): Promise<PendingAttachment[]>
       previewUrl: poster.dataUrl,
       loading: false,
       durationSec: Math.round(durationSec),
+      videoDataUrl,
       frames: frames.map((f) => ({ dataUrl: f.dataUrl, atSec: Math.round(f.atSec * 10) / 10 })),
       note: `${frames.length} frames - ${durLabel}`,
     };
@@ -492,6 +503,7 @@ export interface StoredAttachmentMeta {
   previewUrl?: string;
   frames?: { url: string; at: number }[];
   durationSec?: number;
+  videoUrl?: string;
 }
 
 interface AttachmentLike {
@@ -500,6 +512,7 @@ interface AttachmentLike {
   previewUrl?: string;
   frames?: { dataUrl: string; atSec: number }[];
   durationSec?: number;
+  videoDataUrl?: string;
 }
 
 /**
@@ -514,6 +527,7 @@ export function buildAttachmentsMetaBlock(attachments: AttachmentLike[]): string
     size: a.file.size,
     kind: a.kind,
     previewUrl: a.kind === "image" || a.kind === "video" ? a.previewUrl : undefined,
+    videoUrl: a.kind === "video" ? a.videoDataUrl : undefined,
     frames:
       a.kind === "video" && a.frames
         ? a.frames.map((f) => ({ url: f.dataUrl, at: Math.round(f.atSec) }))
@@ -564,7 +578,8 @@ export function extractAttachmentsPromptSection(text: string): {
 
 export type ApiContentPart =
   | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } };
+  | { type: "image_url"; image_url: { url: string } }
+  | { type: "video_url"; video_url: { url: string } };
 
 // ---------------------------------------------------------------------------
 // قراءة الملفات المرفقة من النص المخزّن
@@ -652,6 +667,7 @@ export function extractUserAttachmentFiles(content: string): AttachedFile[] {
 export interface ApiContentOptions {
   /** ميزانية الحروف اللي مسموح تتحط inline من الملفات الصغيرة في الرسالة دي (0 = قايمة أسماء بس). */
   inlineBudgetChars?: number;
+  videoNative?: boolean;
   /** false → الصور مبتتبعتش (بتتحول لسطر نصي) — لرسايل قديمة عشان نوفر توكنز. */
   includeImages?: boolean;
 }
@@ -724,6 +740,7 @@ export function toApiUserContent(content: string, opts: ApiContentOptions = {}):
   const images = attachments.filter((a) => a.kind === "image" && a.previewUrl);
   const videos = attachments.filter((a) => a.kind === "video" && a.frames && a.frames.length > 0);
   if (images.length === 0 && videos.length === 0) return text;
+  const videoNative = opts.videoNative === true;
 
   if (!includeImages) {
     const bits = [
@@ -737,12 +754,15 @@ export function toApiUserContent(content: string, opts: ApiContentOptions = {}):
 
   let labeledText = text;
   if (videos.length > 0) {
-    const lines = videos.map(
-      (v) => `Attached video "${v.name}" as ${(v.frames?.length ?? 0)} chronological frames - the following images are its frames in order. ` +
+    const lines = videos.map((v) => {
+      if (videoNative && v.videoUrl) {
+        return `Attached video "${v.name}" as a FULL native video file (with audio) - the following video part is the complete file. Watch AND listen to it: describe visuals, actions, and anything said or heard.`;
+      }
+      return `Attached video "${v.name}" as ${(v.frames?.length ?? 0)} chronological frames - the following images are its frames in order. ` +
         `These frames are SILENT stills: there is NO audio. Never invent or quote spoken words, dialogue, lyrics, or sounds ` +
         `from them. If the user asks what was said/heard, say honestly you cannot hear audio from uploaded videos, ` +
-        `and suggest alternatives: a YouTube/public link (transcribable via tools) or the user describing what was said.`
-    );
+        `and suggest alternatives: a YouTube/public link (transcribable via tools) or the user describing what was said.`;
+    });
     labeledText = `${text}\n\n${lines.join("\n")}`.trim();
   }
 
@@ -750,8 +770,12 @@ export function toApiUserContent(content: string, opts: ApiContentOptions = {}):
   for (const a of attachments) {
     if (a.kind === "image" && a.previewUrl) {
       parts.push({ type: "image_url", image_url: { url: a.previewUrl } });
-    } else if (a.kind === "video" && a.frames) {
-      for (const f of a.frames) parts.push({ type: "image_url", image_url: { url: f.url } });
+    } else if (a.kind === "video") {
+      if (videoNative && a.videoUrl) {
+        parts.push({ type: "video_url", video_url: { url: a.videoUrl } });
+      } else if (a.frames) {
+        for (const f of a.frames) parts.push({ type: "image_url", image_url: { url: f.url } });
+      }
     }
   }
   return parts;
@@ -773,6 +797,7 @@ export function apiUserContentLength(content: string | ApiContentPart[]): { char
   let images = 0;
   for (const p of content) {
     if (p.type === "text") chars += p.text.length;
+    else if (p.type === "video_url") images += 8;
     else images += 1;
   }
   return { chars, images };
