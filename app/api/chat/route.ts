@@ -336,7 +336,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   windowMsgs.forEach((m, i) => {
     if (m.role !== "user") return;
     lastUserIdx = i;
-    if (extractAttachmentsMeta(m.content).attachments.some((a) => a.kind === "image" && a.previewUrl) || (a.kind === "video" && (a.frames?.length ?? 0) > 0)) lastImageIdx = i;
+    if (extractAttachmentsMeta(m.content).attachments.some((a) => (a.kind === "image" && a.previewUrl) || (a.kind === "video" && (a.frames?.length ?? 0) > 0))) lastImageIdx = i;
   });
 
   const apiMessages: ApiMessage[] = [
