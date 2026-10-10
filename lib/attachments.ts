@@ -90,8 +90,8 @@ export function isVideoFile(file: File): boolean {
 
 // سقف اللقطات وحجمها: 6 لقطات × ~640px بجودة متوسطة ≈ نص ميجا إجمالي،
 // رقم معقول يتحفظ في الرسالة ويتبعت للموديل من غير ما ياكل التوكنز.
-const MAX_VIDEO_FRAMES = 6;
-const MAX_VIDEO_FRAME_WIDTH = 640;
+const MAX_VIDEO_FRAMES = 12;
+const MAX_VIDEO_FRAME_WIDTH = 512;
 const VIDEO_FRAME_QUALITY = 0.65;
 const VIDEO_SEEK_TIMEOUT_MS = 8000;
 
