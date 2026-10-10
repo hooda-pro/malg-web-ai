@@ -179,6 +179,14 @@
   select:focus-visible {
     outline: none;
   }
+  /* ظهور ناعم لحلقة التركيز: يمنع الومضة البيضا في التسجيلات المضغوطة.
+     الـ hover يفضل بسرعته الطبيعية — البطء هنا لحظة التركيز فقط. */
+  input:focus,
+  textarea:focus,
+  select:focus,
+  button:focus-visible {
+    transition-duration: 350ms !important;
+  }
   /* العناصر اللي جوه حاويات overflow-hidden: الحلقة جوّه مش برّه عشان ما تتقصّش */
   [role="dialog"] button:focus-visible,
   [role="dialog"] a:focus-visible,
