@@ -7,7 +7,6 @@ import {
   isVideoFile,
   makeAttachmentId,
   processFile,
-  processVideoFile,
   type PendingAttachment,
 } from "@/lib/attachments";
 import { useSettings } from "./SettingsContext";
@@ -58,15 +57,17 @@ export default function BottomInputBar({
     list.forEach(async (file) => {
       // Video becomes frame images (async extraction) with a temp placeholder
       if (isVideoFile(file)) {
-        const placeholder: PendingAttachment = {
+        // Video uploads are paused for now (native video needs a paid
+        // provider). The extraction pipeline stays in the codebase for later.
+        // Keep the file visible as a flagged chip so the user knows why.
+        const denied: PendingAttachment = {
           id: makeAttachmentId(),
           file,
-          kind: "video",
-          loading: true,
+          kind: "text",
+          loading: false,
+          error: "رفع الفيديو متوقف حاليا",
         };
-        setAttachments((prev) => [...prev, placeholder]);
-        const frames = await processVideoFile(file);
-        setAttachments((prev) => prev.flatMap((a) => (a.id === placeholder.id ? frames : [a])));
+        setAttachments((prev) => [...prev, denied]);
         return;
       }
       const placeholder: PendingAttachment = {
