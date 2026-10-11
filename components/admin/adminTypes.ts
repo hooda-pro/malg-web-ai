@@ -89,6 +89,11 @@ export const ACTION_LABELS: Record<string, string> = {
   set_api_tokens: "تعيين رصيد API",
   reset_api_usage: "تصفير استهلاك API",
   update_provider: "تغيير مزوّد الموديل",
+  reorder_models: "إعادة ترتيب الموديلات",
+  create_model: "إنشاء موديل",
+  update_model: "تعديل موديل",
+  delete_model: "حذف موديل",
+  save_mcp_servers: "حفظ سيرفرات MCP",
   update_search: "تغيير إعداد البحث",
 };
 

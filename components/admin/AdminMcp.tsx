@@ -17,6 +17,8 @@ export default function AdminMcp({ notify }: { notify: (type: "ok" | "err", text
   const [url, setUrl] = useState("");
   const [headersText, setHeadersText] = useState("");
   const [test, setTest] = useState<TestState>({ loading: false });
+  // تاكيد الحذف لعنصر واحد فقط (بالـ index عشان الـ ids المكررة القديمة)
+  const [confirmRemoveIdx, setConfirmRemoveIdx] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,20 +53,28 @@ export default function AdminMcp({ notify }: { notify: (type: "ok" | "err", text
   const persist = async (next: McpServerConfig[]) => {
     setSaving(true);
     try {
+      // نبعت اليدوي بس — سيرفرات الـ auto (Tavily/Firecrawl/...) بيضيفها السيرفر تلقائيا كل مرة
+      const manual = next.filter((s) => !(s.id || "").startsWith("auto-") && !s.auto);
       const res = await fetch("/api/admin/mcp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ servers: next }),
+        body: JSON.stringify({ servers: manual }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to save");
-      setServers(Array.isArray(data.servers) ? data.servers : next);
+      // نعيد التحميل عشان نرجع الـ auto + الـ ids النهائية من السيرفر
+      await load();
       notify("ok", "MCP servers saved");
     } catch (e) {
       notify("err", e instanceof Error ? e.message : "Failed to save");
     } finally {
       setSaving(false);
     }
+  };
+
+  const slugId = (name: string) => {
+    const base = name.trim().toLowerCase().replace(/[^a-z0-9-_]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 18) || "srv";
+    return `${base}-${Math.random().toString(36).slice(2, 7)}`.slice(0, 24);
   };
 
   const add = async () => {
@@ -76,18 +86,30 @@ export default function AdminMcp({ notify }: { notify: (type: "ok" | "err", text
       notify("err", e instanceof Error ? e.message : "Bad headers JSON");
       return;
     }
-    await persist([...servers, { id: "", name: name.trim(), url: url.trim(), headers, enabled: true }]);
+    // id فريد من عند العميل — السيرفر قديما كان بيولد "srv" مكرر للكل لما id فاضي،
+    // ومسح واحد كان بيمسح الكل.
+    await persist([...servers, { id: slugId(name.trim()), name: name.trim(), url: url.trim(), headers, enabled: true }]);
     setName("");
     setUrl("");
     setHeadersText("");
   };
 
-  const remove = async (id: string) => {
-    await persist(servers.filter((s) => s.id !== id));
+  // الحذف والتبديل بالـ index (مش بالـ id) — يضمن حذف/تبديل عنصر واحد فقط
+  // حتى لو قاعدة قديمة فيها ids مكررة.
+  const removeAt = async (index: number) => {
+    if (saving) return;
+    if (confirmRemoveIdx !== index) {
+      setConfirmRemoveIdx(index);
+      setTimeout(() => setConfirmRemoveIdx((cur) => (cur === index ? null : cur)), 4000);
+      return;
+    }
+    setConfirmRemoveIdx(null);
+    await persist(servers.filter((_, i) => i !== index));
   };
 
-  const toggle = async (id: string) => {
-    await persist(servers.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)));
+  const toggleAt = async (index: number) => {
+    if (saving) return;
+    await persist(servers.map((s, i) => (i === index ? { ...s, enabled: !s.enabled } : s)));
   };
 
   const runTest = async () => {
@@ -144,14 +166,14 @@ export default function AdminMcp({ notify }: { notify: (type: "ok" | "err", text
           </p>
         )}
         <div className="space-y-2">
-          {servers.map((s) => (
+          {servers.map((s, idx) => (
             <div
-              key={s.id}
+              key={`${s.id}-${idx}`}
               className="flex items-center gap-2 rounded-md border border-hair bg-surface-2 px-3 py-2"
             >
               {!s.auto && (
               <button
-                onClick={() => toggle(s.id)}
+                onClick={() => toggleAt(idx)}
                 title={s.enabled ? "Disable" : "Enable"}
                 className={`grid h-7 w-7 shrink-0 place-items-center rounded-full transition-colors ${
                   s.enabled ? "text-live" : "text-ink-3"
@@ -177,11 +199,12 @@ export default function AdminMcp({ notify }: { notify: (type: "ok" | "err", text
               </div>
               {!s.auto && (
               <button
-                onClick={() => remove(s.id)}
-                title="Delete server"
-                className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-ink-3 hover:bg-danger-soft hover:text-danger"
+                onClick={() => removeAt(idx)}
+                title={confirmRemoveIdx === idx ? "اضغط تاني للتأكيد" : "Delete server"}
+                className={`flex h-7 shrink-0 items-center gap-1 rounded-full px-2 text-[12px] font-medium transition-colors ${confirmRemoveIdx === idx ? "bg-danger-soft text-danger" : "text-ink-3 hover:bg-danger-soft hover:text-danger"}`}
               >
                 <Trash2 size={13} />
+                {confirmRemoveIdx === idx && <span>تأكيد؟</span>}
               </button>
               )}
             </div>

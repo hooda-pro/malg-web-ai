@@ -35,10 +35,13 @@ export async function POST(req: NextRequest) {
 
   const countRows = (await sql`SELECT COUNT(*)::int AS c FROM ai_models`) as { c: number }[];
   const isFirst = Number(countRows[0]?.c ?? 0) === 0;
+  // الموديل الجديد ينزل في آخر الترتيب (مش الأول) — عشان الترتيب اليدوي يفضل ثابت
+  const maxRows = (await sql`SELECT COALESCE(MAX(sort_order), -1)::int AS m FROM ai_models`) as { m: number }[];
+  const nextOrder = Number(maxRows[0]?.m ?? -1) + 1;
   // قيم مبدئية آمنة — الأدمن يعدل الرابط/المفاتيح من نموذج المزوّد قبل الاعتماد عليه
   await sql`
-    INSERT INTO ai_models (id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default)
-    VALUES (${v.id}, ${v.name}, ${v.description}, 'https://api.openai.com/v1', 'chat_completions', ${v.id}, '{}', 0.4, 128000, TRUE, ${isFirst})
+    INSERT INTO ai_models (id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, sort_order)
+    VALUES (${v.id}, ${v.name}, ${v.description}, 'https://api.openai.com/v1', 'chat_completions', ${v.id}, '{}', 0.4, 128000, TRUE, ${isFirst}, ${nextOrder})
   `;
   invalidateProviderCache();
 

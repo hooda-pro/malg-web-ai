@@ -369,6 +369,23 @@ export function ensureSchema(): Promise<void> {
       await seedDefaultModel();
       await seedClaudeModel();
 
+      // ——— ترتيب الموديلات: backfill لمرة واحدة للقواعد القديمة اللي كلها sort_order=0 ———
+      // (لو كل الصفوف صفر معناه عمر ما حد رتب يدويًا — نوزع 0,1,2... حسب الأقدمية.
+      // لو فيه أي قيمة غير صفر معناه فيه ترتيب يدوي — لا نلمسه.)
+      try {
+        const nz = (await sql`SELECT COUNT(*)::int AS c FROM ai_models WHERE sort_order != 0`) as { c: number }[];
+        if (Number(nz[0]?.c ?? 0) === 0) {
+          await sql`
+            WITH ranked AS (
+              SELECT id, (ROW_NUMBER() OVER (ORDER BY created_at ASC)) - 1 AS rn FROM ai_models
+            )
+            UPDATE ai_models SET sort_order = ranked.rn FROM ranked WHERE ai_models.id = ranked.id
+          `;
+        }
+      } catch {
+        // تجاهل — الجدول قد لا يكون جاهزًا بعد
+      }
+
       // ——— تثبيت المحادثات + المؤقتة + المشاركة برابط (تفاعلات المستخدم) ———
       await sql`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN NOT NULL DEFAULT FALSE`;
       await sql`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS is_temp BOOLEAN NOT NULL DEFAULT FALSE`;

@@ -14,7 +14,7 @@ export async function GET() {
   const [models, defaultId] = await Promise.all([listModels(true), getDefaultModelId()]);
   const list = models.length > 0
     ? models
-    : [{ id: "malg-a3", name: "Malg-A3", description: "", isDefault: true, isActive: true, keysCount: 0, updatedAt: null, tier: "free" as const }];
+    : [{ id: "malg-a3", name: "Malg-A3", description: "", isDefault: true, isActive: true, keysCount: 0, sortOrder: 0, updatedAt: null, tier: "free" as const }];
 
   let unlocked = false;
   try {

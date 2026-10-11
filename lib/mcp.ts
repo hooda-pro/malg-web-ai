@@ -63,7 +63,7 @@ export async function listMcpServers(): Promise<McpServerConfig[]> {
     const servers: McpServerConfig[] = (v.servers as Record<string, unknown>[])
       .filter((s) => s && typeof s === "object")
       .map((s) => ({
-        id: slug(String(s.id ?? s.name ?? ""), 24),
+        id: slug(String((typeof s.id === "string" ? s.id.trim() : "") || (typeof s.name === "string" ? s.name : "") || ""), 24) || "srv",
         name: String(s.name ?? "").trim().slice(0, 60) || "MCP",
         url: String(s.url ?? "").trim().replace(/\/+$/, ""),
         headers:
@@ -79,6 +79,20 @@ export async function listMcpServers(): Promise<McpServerConfig[]> {
       }))
       .filter((s) => /^https?:\/\//i.test(s.url))
       .slice(0, MAX_SERVERS);
+    // توحيد الـ ids المكررة (قواعد قديمة فيها الكل id="srv"): id فريد لكل سيرفر
+    // عشان حذف واحد ميمسحش الكل حتى قبل أول حفظ جديد.
+    {
+      const seen = new Set<string>();
+      for (const s of servers) {
+        if (!s.id || seen.has(s.id)) {
+          const base = (s.id || "srv").slice(0, 20);
+          let n = 2;
+          while (seen.has(`${base}-${n}`.slice(0, 24))) n++;
+          s.id = `${base}-${n}`.slice(0, 24);
+        }
+        seen.add(s.id);
+      }
+    }
     // Tavily auto-wire: reuses the existing TAVILY_API_KEY env - zero admin setup.
     // (GitHub/Neon need personal tokens, so the admin adds those by hand.)
     const tavilyKey = (process.env.TAVILY_API_KEY || "").trim();
@@ -134,22 +148,72 @@ export async function listMcpServers(): Promise<McpServerConfig[]> {
 
 export async function saveMcpServers(input: unknown): Promise<McpServerConfig[]> {
   const arr = Array.isArray(input) ? input : [];
+  // نحمل المحفوظ الحالي للحفاظ على أسرار الهيدرز: الـ GET يرجع القيم مخفية ("...")
+  // وبدون الدمج ده أي إضافة/حذف/تبديل كان بيمسح كل المفاتيح الحقيقية.
+  const oldById = new Map<string, Record<string, string>>();
+  const oldByUrl = new Map<string, Record<string, string>>();
+  try {
+    const rows = (await sql`SELECT value FROM app_settings WHERE key = ${SETTINGS_KEY}`) as {
+      value: unknown;
+    }[];
+    const v = rows[0]?.value as { servers?: unknown } | null;
+    if (v && Array.isArray(v.servers)) {
+      for (const s of v.servers as Record<string, unknown>[]) {
+        if (!s || typeof s !== "object") continue;
+        const sid = slug(String(typeof s.id === "string" && s.id.trim() ? s.id.trim() : (s.name as string) ?? ""), 24);
+        const surl = String(s.url ?? "").trim().replace(/\/+$/, "");
+        const hdr: Record<string, string> = {};
+        if (s.headers && typeof s.headers === "object") {
+          for (const [k, val] of Object.entries(s.headers as Record<string, unknown>)) {
+            if (k && typeof val === "string" && val && val !== "...") hdr[k] = val;
+          }
+        }
+        if (sid && !sid.startsWith("auto-")) oldById.set(sid, hdr);
+        if (surl) oldByUrl.set(surl.toLowerCase(), hdr);
+      }
+    }
+  } catch {
+    // أول حفظ — مفيش قديم
+  }
+  const seen = new Set<string>();
   const cleaned = arr
     .filter((s) => s && typeof s === "object")
-    .filter((s) => !String((s as Record<string, unknown>).id ?? "").startsWith("auto-"))
+    .filter((s) => !String((s as Record<string, unknown>).id ?? "").trim().startsWith("auto-"))
     .slice(0, MAX_SERVERS)
-    .map((s) => {
+    .map((s, idx) => {
       const r = s as Record<string, unknown>;
       const url = String(r.url ?? "").trim().replace(/\/+$/, "");
       if (!/^https?:\/\//i.test(url)) throw new Error("رابط غير صالح (لازم http(s)): " + url.slice(0, 80));
       const name = String(r.name ?? "").trim().slice(0, 60) || new URL(url).hostname;
+      // إصلاح بج حذف-الكل: r.id الفاضي "" مع ?? كان يطلع "srv" مكرر للكل،
+      // فحذف سيرفر واحد كان يمسح الكل. نستخدم || مع بديل فريد وتوحيد ضد التكرار.
+      let id = slug(String(typeof r.id === "string" && r.id.trim() ? r.id.trim() : name) || `srv-${idx}`, 24) || `srv-${idx}`;
+      if (seen.has(id)) {
+        let n = 2;
+        while (seen.has(`${id}-${n}`.slice(0, 24))) n++;
+        id = `${id}-${n}`.slice(0, 24);
+      }
+      seen.add(id);
       const headers: Record<string, string> = {};
+      const fallbackHdr = oldById.get(id) ?? oldByUrl.get(url.toLowerCase()) ?? {};
       if (r.headers && typeof r.headers === "object") {
         for (const [k, v] of Object.entries(r.headers as Record<string, unknown>).slice(0, 10)) {
-          if (k && typeof v === "string" && v) headers[k.slice(0, 100)] = v.slice(0, 2000);
+          if (!k || typeof v !== "string" || !v) continue;
+          // القيمة المخفية "..." معناها "خلّي القديم" — مش قيمة حقيقية
+          if (v === "...") {
+            if (fallbackHdr[k]) headers[k.slice(0, 100)] = fallbackHdr[k];
+            continue;
+          }
+          headers[k.slice(0, 100)] = v.slice(0, 2000);
         }
       }
-      const id = slug(String(r.id ?? name), 24);
+      // لو السيرفر موجود أصلًا والعميل بعت هيدرز مخفية فاضية، حافظ على القديم
+      if (Object.keys(headers).length === 0 && Object.keys(fallbackHdr).length > 0) {
+        const incomingKeys = r.headers && typeof r.headers === "object" ? Object.keys(r.headers as object).length : 0;
+        if (incomingKeys > 0) {
+          for (const [k2, v2] of Object.entries(fallbackHdr).slice(0, 10)) headers[k2] = v2;
+        }
+      }
       return { id, name, url, headers, enabled: r.enabled !== false };
     });
   await sql`

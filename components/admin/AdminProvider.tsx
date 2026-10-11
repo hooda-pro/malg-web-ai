@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Crown, FlaskConical, KeyRound, Layers, Loader2, PlugZap, Plus, RefreshCw, Save, Star, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Crown, FlaskConical, GripVertical, KeyRound, Layers, Loader2, PlugZap, Plus, RefreshCw, Save, Star, Trash2 } from "lucide-react";
 import type { ModelSummary, ProviderConfigPublic, ProviderProtocol } from "@/lib/provider";
 
 interface Loaded {
@@ -63,6 +63,11 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
   // إجراءات على صف موديل (حذف/افتراضي)
   const [actingId, setActingId] = useState<string | null>(null);
   const [confirmDeleteModel, setConfirmDeleteModel] = useState<string | null>(null);
+
+  // إعادة الترتيب اليدوي (سحب وإفلات + أسهم)
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+  const [reordering, setReordering] = useState(false);
 
   const loadModels = async (keepId?: string | null): Promise<ModelSummary[]> => {
     const res = await fetch("/api/admin/models");
@@ -409,6 +414,41 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
     }
   };
 
+  const persistOrder = async (ordered: ModelSummary[]) => {
+    setReordering(true);
+    try {
+      const res = await fetch("/api/admin/models/reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order: ordered.map((m) => m.id) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "فشل حفظ الترتيب");
+      setModels(data.models ?? ordered);
+      notify("ok", "تم حفظ ترتيب الموديلات");
+    } catch (e) {
+      notify("err", e instanceof Error ? e.message : "فشل حفظ الترتيب");
+      try {
+        const list = await loadModels(selectedId);
+        setSelectedId(pickSelection(list, selectedId));
+      } catch {
+        // تجاهل
+      }
+    } finally {
+      setReordering(false);
+    }
+  };
+
+  const moveModel = (from: number, to: number) => {
+    const list = models ?? [];
+    if (reordering || from < 0 || to < 0 || from >= list.length || to >= list.length || from === to) return;
+    const next = [...list];
+    const [m] = next.splice(from, 1);
+    next.splice(to, 0, m);
+    setModels(next);
+    void persistOrder(next);
+  };
+
   if (loading || !loaded) {
     return (
       <div className="flex items-center justify-center gap-2 py-24 text-ink-3">
@@ -420,7 +460,7 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
 
   const inputCls = "w-full rounded-md border border-hair bg-surface-2 px-3 py-2 text-[13px] text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent";
   const masked = loaded.active.maskedKeys ?? [];
-  const busy = saving || testing || addingKey || adding || actingId !== null;
+  const busy = saving || testing || addingKey || adding || actingId !== null || reordering;
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
@@ -440,6 +480,7 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
         </div>
         <p className="mb-3 text-[12px] leading-5 text-ink-3">
           كل موديل ليه قايمة مزوّد خاصة بيه (رابط + بروتوكول + مفاتيح) — اختار موديل من القايمة عشان تعدّل إعداداته تحت.
+          اسحب من مقبض <GripVertical size={11} className="inline" /> عشان تغيّر الترتيب، أو استخدم الأسهم — الترتيب بيتحفظ تلقائيًا وبيظهر بنفس الشكل للمستخدمين.
         </p>
 
         {showAdd && (
@@ -471,15 +512,50 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
         )}
 
         <div className="space-y-2">
-          {(models ?? []).map((m) => {
+          {(models ?? []).map((m, idx) => {
             const selected = m.id === selectedId;
             const acting = actingId === m.id;
+            const total = (models ?? []).length;
+            const isDragOver = dragOverIdx === idx && dragIdx !== null && dragIdx !== idx;
             return (
               <div
                 key={m.id}
-                className={`rounded-md border px-3 py-2 transition-colors ${selected ? "border-accent-line bg-accent-soft/40" : "border-hair bg-surface-2"}`}
+                onDragOver={(e) => {
+                  if (dragIdx === null) return;
+                  e.preventDefault();
+                  setDragOverIdx(idx);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragIdx !== null) {
+                    const from = dragIdx;
+                    setDragIdx(null);
+                    setDragOverIdx(null);
+                    moveModel(from, idx);
+                  }
+                }}
+                className={`rounded-md border px-3 py-2 transition-colors ${selected ? "border-accent-line bg-accent-soft/40" : "border-hair bg-surface-2"} ${isDragOver ? "border-accent" : ""}`}
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span
+                    draggable={!(busy)}
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = "move";
+                      setDragIdx(idx);
+                    }}
+                    onDragEnd={() => {
+                      setDragIdx(null);
+                      setDragOverIdx(null);
+                    }}
+                    title="اسحب لتغيير الترتيب"
+                    aria-label={`اسحب لتغيير ترتيب ${m.name}`}
+                    className={`grid h-7 w-6 shrink-0 place-items-center rounded text-ink-3 ${busy ? "cursor-not-allowed opacity-40" : "cursor-grab active:cursor-grabbing hover:bg-surface-3 hover:text-ink"}`}
+                  >
+                    <GripVertical size={14} />
+                  </span>
+                  <span className="tnum grid h-6 w-6 shrink-0 place-items-center rounded-full bg-surface-3 text-[11px] font-medium text-ink-2" title={`الترتيب: ${idx + 1}`}>
+                    {idx + 1}
+                  </span>
                   <button onClick={() => onSelectModel(m.id)} disabled={busy} title={`إدارة ${m.name}`} className="min-w-0 flex-1 text-start disabled:opacity-40">
                     <span className="flex items-center gap-2">
                       <span className="truncate text-[13px] font-semibold text-ink">{m.name}</span>
@@ -558,6 +634,26 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
                       </span>
                     )}
                   </button>
+                  <span className="flex shrink-0 flex-col" role="group" aria-label="تغيير الترتيب">
+                    <button
+                      onClick={() => moveModel(idx, idx - 1)}
+                      disabled={busy || idx === 0}
+                      title="حرّك فوق"
+                      aria-label={`حرّك ${m.name} فوق`}
+                      className="grid h-4 w-6 place-items-center rounded text-ink-3 hover:bg-surface-3 hover:text-ink disabled:opacity-30"
+                    >
+                      <ChevronUp size={12} />
+                    </button>
+                    <button
+                      onClick={() => moveModel(idx, idx + 1)}
+                      disabled={busy || idx >= total - 1}
+                      title="حرّك تحت"
+                      aria-label={`حرّك ${m.name} تحت`}
+                      className="grid h-4 w-6 place-items-center rounded text-ink-3 hover:bg-surface-3 hover:text-ink disabled:opacity-30"
+                    >
+                      <ChevronDown size={12} />
+                    </button>
+                  </span>
                   <button
                     onClick={() => deleteModel(m.id)}
                     disabled={busy}

@@ -78,6 +78,8 @@ export interface ModelSummary {
   isDefault: boolean;
   isActive: boolean;
   keysCount: number;
+  /** الترتيب اليدوي (sort_order) — الأصغر يظهر الأول */
+  sortOrder: number;
   updatedAt: string | null;
   tier: ModelTier;
   costMultiplier: number;
@@ -109,6 +111,7 @@ export interface ModelRow {
   supports_video: unknown;
   is_active: boolean;
   is_default: unknown;
+  sort_order: unknown;
   updated_at: string | null;
 }
 
@@ -184,6 +187,7 @@ function modelRowToSummary(r: ModelRow): ModelSummary {
     tier: (r as { tier?: unknown }).tier === "paid" ? "paid" : "free",
     costMultiplier: clampCostMultiplier((r as { cost_multiplier?: unknown }).cost_multiplier),
     supportsVideo: (r as { supports_video?: unknown }).supports_video === true,
+    sortOrder: Number((r as { sort_order?: unknown }).sort_order ?? 0) || 0,
   };
 }
 
@@ -198,14 +202,14 @@ export function invalidateModelCache(modelId?: string) {
 async function selectModelRows(whereActive: boolean): Promise<ModelRow[]> {
   if (whereActive) {
     return (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order
       FROM ai_models
       WHERE is_active = TRUE
       ORDER BY is_default DESC, sort_order ASC, created_at ASC
     `) as ModelRow[];
   }
   return (await sql`
-    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier
+    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order
     FROM ai_models
     ORDER BY is_default DESC, sort_order ASC, created_at ASC
   `) as ModelRow[];
@@ -219,6 +223,34 @@ export async function listModels(activeOnly = false): Promise<ModelSummary[]> {
   } catch {
     return [];
   }
+}
+
+/** إعادة ترتيب الموديلات حسب مصفوفة ids بالترتيب الجديد — يحفظ sort_order = index.
+ * الصفوف غير المذكورة (إن وجدت) تنتقل للآخر بنفس ترتيبها القديم. */
+export async function updateModelsOrder(ids: string[]): Promise<ModelSummary[]> {
+  const clean = (Array.isArray(ids) ? ids : []).map((v) => sanitizeModelId(v)).filter(Boolean);
+  if (clean.length === 0) throw new Error("الترتيب فارغ");
+  const unique = [...new Set(clean)];
+  const rows = (await sql`SELECT id FROM ai_models`) as { id: string }[];
+  const existing = new Set(rows.map((r) => r.id));
+  for (const id of unique) {
+    if (!existing.has(id)) throw new Error(`موديل غير موجود: ${id}`);
+  }
+  for (let i = 0; i < unique.length; i++) {
+    await sql`UPDATE ai_models SET sort_order = ${i}, updated_at = now() WHERE id = ${unique[i]}`;
+  }
+  if (unique.length < existing.size) {
+    const oldRows = (await sql`SELECT id FROM ai_models ORDER BY sort_order ASC, created_at ASC`) as { id: string }[];
+    let tail = unique.length;
+    for (const r of oldRows) {
+      if (!unique.includes(r.id)) {
+        await sql`UPDATE ai_models SET sort_order = ${tail}, updated_at = now() WHERE id = ${r.id}`;
+        tail++;
+      }
+    }
+  }
+  invalidateModelCache();
+  return listModels(false);
 }
 
 /** id الموديل الافتراضي النشط — أو أول موديل نشط — أو 'malg-a3' كحل أخير */
@@ -257,7 +289,7 @@ export async function getModelProvider(modelId: string): Promise<ModelProviderCo
 
   try {
     const rows = (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order
       FROM ai_models
       WHERE id = ${id} AND is_active = TRUE
       LIMIT 1
@@ -269,7 +301,7 @@ export async function getModelProvider(modelId: string): Promise<ModelProviderCo
     }
     // fallback: الموديل الافتراضي النشط
     const defs = (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order
       FROM ai_models
       WHERE is_active = TRUE
       ORDER BY is_default DESC, sort_order ASC, created_at ASC
@@ -294,7 +326,7 @@ export async function getSavedModelProvider(modelId: string): Promise<ModelProvi
   const id = sanitizeModelId(modelId) || "malg-a3";
   try {
     const rows = (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order
       FROM ai_models
       WHERE id = ${id}
       LIMIT 1
