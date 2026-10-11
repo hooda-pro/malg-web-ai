@@ -11,7 +11,7 @@ export interface McpServerConfig {
   url: string;
   headers?: Record<string, string>;
   enabled: boolean;
-  /** auto-wired from env (not stored, not deletable from the panel) */
+  /** حقل قديم للتوافق الخلفي — لم تعد هناك سيرفرات تلقائية */
   auto?: boolean;
 }
 
@@ -93,53 +93,6 @@ export async function listMcpServers(): Promise<McpServerConfig[]> {
         seen.add(s.id);
       }
     }
-    // Tavily auto-wire: reuses the existing TAVILY_API_KEY env - zero admin setup.
-    // (GitHub/Neon need personal tokens, so the admin adds those by hand.)
-    const tavilyKey = (process.env.TAVILY_API_KEY || "").trim();
-    if (tavilyKey && !servers.some((s) => s.url.includes("mcp.tavily.com"))) {
-      servers.push({
-        id: "auto-tavily",
-        name: "Tavily",
-        url: "https://mcp.tavily.com/mcp/",
-        headers: { Authorization: `Bearer ${tavilyKey}` },
-        enabled: true,
-        auto: true,
-      });
-    }
-    // Firecrawl auto-wire: keyless free tier (scrape/search/parse, rate-limited).
-    // Official: point any client at https://mcp.firecrawl.dev/v2/mcp with no key.
-    if (!servers.some((s) => s.url.includes("mcp.firecrawl.dev"))) {
-      servers.push({
-        id: "auto-firecrawl",
-        name: "Firecrawl",
-        url: "https://mcp.firecrawl.dev/v2/mcp",
-        headers: {},
-        enabled: true,
-        auto: true,
-      });
-    }
-    // MDN auto-wire: official Mozilla endpoint, no key (web docs + browser compat).
-    if (!servers.some((s) => s.url.includes("mcp.mdn.mozilla.net"))) {
-      servers.push({
-        id: "auto-mdn",
-        name: "MDN",
-        url: "https://mcp.mdn.mozilla.net/",
-        headers: {},
-        enabled: true,
-        auto: true,
-      });
-    }
-    // DeepWiki auto-wire: free, no key, no account — Q&A over any public repo.
-    if (!servers.some((s) => s.url.includes("mcp.deepwiki.com"))) {
-      servers.push({
-        id: "auto-deepwiki",
-        name: "DeepWiki",
-        url: "https://mcp.deepwiki.com/mcp",
-        headers: {},
-        enabled: true,
-        auto: true,
-      });
-    }
     return servers;
   } catch {
     return [];
@@ -168,7 +121,7 @@ export async function saveMcpServers(input: unknown): Promise<McpServerConfig[]>
             if (k && typeof val === "string" && val && val !== "...") hdr[k] = val;
           }
         }
-        if (sid && !sid.startsWith("auto-")) oldById.set(sid, hdr);
+        if (sid) oldById.set(sid, hdr);
         if (surl) oldByUrl.set(surl.toLowerCase(), hdr);
       }
     }
@@ -178,7 +131,6 @@ export async function saveMcpServers(input: unknown): Promise<McpServerConfig[]>
   const seen = new Set<string>();
   const cleaned = arr
     .filter((s) => s && typeof s === "object")
-    .filter((s) => !String((s as Record<string, unknown>).id ?? "").trim().startsWith("auto-"))
     .slice(0, MAX_SERVERS)
     .map((s, idx) => {
       const r = s as Record<string, unknown>;

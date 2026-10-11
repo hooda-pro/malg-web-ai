@@ -53,8 +53,7 @@ export default function AdminMcp({ notify }: { notify: (type: "ok" | "err", text
   const persist = async (next: McpServerConfig[]) => {
     setSaving(true);
     try {
-      // نبعت اليدوي بس — سيرفرات الـ auto (Tavily/Firecrawl/...) بيضيفها السيرفر تلقائيا كل مرة
-      const manual = next.filter((s) => !(s.id || "").startsWith("auto-") && !s.auto);
+      const manual = next.filter((s) => (s.id || "").trim() !== "");
       const res = await fetch("/api/admin/mcp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -171,7 +170,6 @@ export default function AdminMcp({ notify }: { notify: (type: "ok" | "err", text
               key={`${s.id}-${idx}`}
               className="flex items-center gap-2 rounded-md border border-hair bg-surface-2 px-3 py-2"
             >
-              {!s.auto && (
               <button
                 onClick={() => toggleAt(idx)}
                 title={s.enabled ? "Disable" : "Enable"}
@@ -183,21 +181,14 @@ export default function AdminMcp({ notify }: { notify: (type: "ok" | "err", text
                   className={`h-2.5 w-2.5 rounded-full ${s.enabled ? "bg-live" : "bg-surface-3"}`}
                 />
               </button>
-              )}
               <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-1.5 truncate text-[13px] font-semibold text-ink">
+                <p className="truncate text-[13px] font-semibold text-ink">
                   {s.name}
-                  {s.auto && (
-                    <span className="shrink-0 rounded-full bg-live-soft px-1.5 py-px text-[10px] font-medium text-live">
-                      auto
-                    </span>
-                  )}
                 </p>
                 <p className="tnum truncate text-[11.5px] text-ink-3" dir="ltr">
                   {s.url}
                 </p>
               </div>
-              {!s.auto && (
               <button
                 onClick={() => removeAt(idx)}
                 title={confirmRemoveIdx === idx ? "اضغط تاني للتأكيد" : "Delete server"}
@@ -206,7 +197,6 @@ export default function AdminMcp({ notify }: { notify: (type: "ok" | "err", text
                 <Trash2 size={13} />
                 {confirmRemoveIdx === idx && <span>تأكيد؟</span>}
               </button>
-              )}
             </div>
           ))}
         </div>
