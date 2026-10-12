@@ -1,11 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ArrowUpRight } from "lucide-react";
 import Logo from "./Logo";
 import { useSettings } from "./SettingsContext";
-
-const QUICK_PROMPT_KEYS = ["prompt1", "prompt2", "prompt3", "prompt4"] as const;
 
 export default function WelcomeHero({
   totalTokens,
@@ -15,7 +12,7 @@ export default function WelcomeHero({
 }: {
   totalTokens: number;
   userName?: string | null;
-  onPromptSelected: (prompt: string) => void;
+  onPromptSelected?: (prompt: string) => void;
   /** خانة الكتابة في المنتصف (وضع الشات الجديد) — تُعرض بين الترحيب والاقتراحات */
   composer?: ReactNode;
 }) {
@@ -44,35 +41,6 @@ export default function WelcomeHero({
         </p>
 
         {composer && <div className="mt-6 w-full">{composer}</div>}
-
-        {/* ONE panel + hairline dividers instead of four floating cards */}
-        <div className={`${composer ? "mt-4" : "mt-10"} w-full overflow-hidden rounded-xl border border-hair bg-surface text-start shadow-2`}>
-          <ul className="grid sm:grid-cols-2">
-            {QUICK_PROMPT_KEYS.map((key, i) => (
-              <li
-                key={key}
-                className={
-                  "border-b border-hair last:border-b-0 " +
-                  (i % 2 === 0 ? "sm:border-e sm:border-b-0" : "") +
-                  (i >= 2 ? "sm:border-b-0" : "")
-                }
-              >
-                <button
-                  onClick={() => onPromptSelected(t(key))}
-                  className="group flex w-full items-center gap-3 px-4 py-3.5 text-start transition-all duration-1 ease-soft hover:bg-accent-soft"
-                >
-                  <span className="min-w-0 flex-1 text-pretty text-[13.5px] leading-6 text-ink-2 transition-colors duration-1 group-hover:text-ink">
-                    {t(key)}
-                  </span>
-                  <ArrowUpRight
-                    size={14}
-                    className="flip-rtl shrink-0 text-ink-3 transition-all duration-1 group-hover:-translate-y-0.5 group-hover:text-accent"
-                  />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
       </div>
     </div>
   );

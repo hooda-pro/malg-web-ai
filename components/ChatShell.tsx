@@ -1265,7 +1265,7 @@ export default function ChatShell() {
           <QuotaExhaustedNotice renewsAt={quotaRenewsAt} onRecharge={openRecharge} />
         ) : !messagesLoading && messages.length === 0 && !live && !isGenerating ? (
           /* شات جديد فارغ — الترحيب وخانة الكتابة في المنتصف (زي المنصات الكبيرة) */
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
             <WelcomeHero
               totalTokens={quota?.total ?? 500000}
               userName={user?.displayName}
