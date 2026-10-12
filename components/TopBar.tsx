@@ -253,8 +253,6 @@ function ModelPicker({
   }, [open]);
 
   const displayId = lockedModel ?? model;
-  const fallback: ModelOption = { id: displayId, label: displayId, hint: "", recommended: false };
-  const current = models.find((m) => m.id === displayId) ?? models[0] ?? fallback;
 
   return (
     <div className="relative" ref={ref}>
@@ -265,9 +263,6 @@ function ModelPicker({
         className="flex h-9 items-center gap-1.5 rounded-full px-3 transition-colors duration-1 hover:bg-surface-3"
       >
         <span className="text-[15px] font-semibold tracking-title text-ink">MALG</span>
-        <span dir="ltr" className="text-[15px] font-medium tracking-title text-ink-3">
-          {current.label}
-        </span>
         {lockedModel && <Lock size={11} className="text-ink-3" aria-hidden="true" />}
         <ChevronDown
           size={14}

@@ -1263,7 +1263,27 @@ export default function ChatShell() {
           <ChatEndedNotice endedBy={currentSession?.endedBy ?? null} onNewChat={handleNewChat} />
         ) : quotaExhausted && !isGenerating ? (
           <QuotaExhaustedNotice renewsAt={quotaRenewsAt} onRecharge={openRecharge} />
-        ) : !messagesLoading && messages.length === 0 && !live && !isGenerating ? (
+        ) : messagesLoading ? (
+          /* جارٍ التحميل — هيكل الرسائل فقط بدون خانة الكتابة */
+          <MessageList
+            messages={messages}
+            live={live}
+            loading={messagesLoading}
+            sessionKey={currentSessionId}
+            totalTokens={quota?.total ?? 500000}
+            userName={user?.displayName}
+            onPromptSelected={(p) => sendMessage(p)}
+            onContinue={continueMessage}
+            continuingMessageId={continuingMessageId}
+            continuationStreamingContent={continuationStreamingContent}
+            onPreviewFiles={openPanelWithFiles}
+            onRegenerate={regenerateReply}
+            regeneratingMessageId={regeneratingMessageId}
+            onEdit={startEdit}
+            onFeedback={sendFeedback}
+            actionsDisabled={messageActionsLocked}
+          />
+        ) : messages.length === 0 && !live && !isGenerating ? (
           /* شات جديد فارغ — الترحيب وخانة الكتابة في المنتصف (زي المنصات الكبيرة) */
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
             <WelcomeHero
