@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Coins, Crown, Lock, PanelLeft, Share2, SquarePen } from "lucide-react";
 import { formatTokens } from "@/lib/ai";
 import { IconButton } from "./ui/Controls";
-import { useSettings, type ModelId, type ModelOption } from "./SettingsContext";
+import { useSettings, type ModelId } from "./SettingsContext";
 import { cn } from "@/lib/utils";
 
 export default function TopBar({
