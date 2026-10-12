@@ -40,6 +40,7 @@ export default function BottomInputBar({
   onSend,
   onStop,
   disabled,
+  embedded,
 }: {
   isGenerating: boolean;
   onSend: (text: string, attachments: ComposerAttachment[]) => Promise<boolean> | void;
