@@ -331,8 +331,13 @@ export default function ApiKeysPage() {
 
   if (!authChecked) {
     return (
-      <div dir="rtl" lang="ar" className="flex min-h-[100dvh] items-center justify-center bg-ground">
-        <Loader2 size={20} className="animate-spin-slow text-ink-3" aria-label="جاري التحميل" />
+      <div dir="rtl" lang="ar" className="bg-ground" role="status" aria-live="polite" aria-label="جاري التحميل">
+        <div className="mx-auto w-full max-w-2xl space-y-3 px-5 py-8" aria-hidden="true">
+          <div className="skel h-8 w-48 rounded-lg" />
+          <div className="skel h-4 w-72 rounded-full" />
+          <div className="skel mt-4 h-24 rounded-2xl" />
+          <div className="skel h-24 rounded-2xl" />
+        </div>
       </div>
     );
   }

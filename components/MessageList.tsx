@@ -21,11 +21,11 @@ function HistorySkeleton() {
     <div className="min-h-0 flex-1 overflow-hidden" aria-busy="true">
       <div className="animate-fade-delayed mx-auto w-full max-w-[820px] space-y-8 px-4 py-6 sm:px-6">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="flex animate-pulse gap-3">
-            <span className="h-7 w-7 shrink-0 rounded-[9px] bg-surface-3" />
+          <div key={i} className="flex gap-3">
+            <span className="skel h-7 w-7 shrink-0 rounded-[9px]" />
             <div className="min-w-0 flex-1 space-y-2.5 pt-1.5">
-              <span className="block h-3 w-[72%] rounded-full bg-surface-3" />
-              <span className="block h-3 w-[48%] rounded-full bg-surface-3" />
+              <span className="skel block h-3 w-[72%] rounded-full" />
+              <span className="skel block h-3 w-[48%] rounded-full" />
             </div>
           </div>
         ))}

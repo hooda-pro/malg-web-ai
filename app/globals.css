@@ -692,6 +692,14 @@
   animation: mlag-shimmer 2.4s linear infinite;
 }
 
+/* Skeleton placeholders — gray bars with a light sweep while content loads.
+   (The no-anim setting and prefers-reduced-motion below already disable it.) */
+.skel {
+  background: linear-gradient(100deg, var(--surface-3) 30%, var(--surface-2) 50%, var(--surface-3) 70%);
+  background-size: 200% 100%;
+  animation: mlag-shimmer 1.6s linear infinite;
+}
+
 .toast-drain {
   transform-origin: inline-start;
   animation: mlag-drain linear forwards;
