@@ -253,6 +253,7 @@ function ModelPicker({
   }, [open]);
 
   const displayId = lockedModel ?? model;
+  const currentLabel = models.find((m) => m.id === displayId)?.label ?? models[0]?.label ?? displayId;
 
   return (
     <div className="relative" ref={ref}>
@@ -262,7 +263,7 @@ function ModelPicker({
         aria-expanded={open}
         className="flex h-9 items-center gap-1.5 rounded-full px-3 transition-colors duration-1 hover:bg-surface-3"
       >
-        <span className="text-[15px] font-semibold tracking-title text-ink">MALG</span>
+        <span dir="ltr" className="text-[15px] font-semibold tracking-title text-ink">{currentLabel}</span>
         {lockedModel && <Lock size={11} className="text-ink-3" aria-hidden="true" />}
         <ChevronDown
           size={14}
