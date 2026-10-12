@@ -275,10 +275,6 @@ export default function BottomInputBar({
             <Paperclip size={16} />
           </button>
 
-          <p className="min-w-0 flex-1 truncate px-1.5 text-[11.5px] text-ink-3">
-            {enterToSend ? t("composerHint") : t("enterToSendHint")}
-          </p>
-
           {isGenerating ? (
             <button
               onMouseDown={(e) => e.preventDefault()}
