@@ -211,10 +211,9 @@ export default function BottomInputBar({
 
       <div
         className={cn(
-          "mx-auto w-full max-w-[760px] rounded-2xl border border-hair bg-surface-2 shadow-2 composer-glow",
-          "transition-[border-color,box-shadow] duration-2 ease-soft",
-          "focus-within:!border-accent-line focus-within:shadow-[0_2px_8px_rgba(0,0,0,0.05),0_28px_60px_-28px_var(--accent-line)]",
-          dragOver && "!border-accent-line ring-2 ring-accent-line ring-offset-0"
+          "mx-auto w-full max-w-[760px] rounded-2xl border border-hair bg-surface-2 shadow-2",
+          "transition-[border-color] duration-2 ease-soft",
+          dragOver && "!border-accent-line"
         )}
       >
         {dragOver && (

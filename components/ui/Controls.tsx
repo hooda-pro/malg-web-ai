@@ -170,7 +170,6 @@ export function Field({
           "h-11 w-full rounded-md border border-hair bg-surface-2 px-3.5 text-[14.5px]",
           "text-ink placeholder:text-ink-3 transition-all duration-1 ease-soft",
           "hover:border-hair-2 focus:border-accent focus:bg-surface focus:outline-none",
-          "focus:shadow-[0_0_0_3.5px_var(--accent-soft)]",
           className
         )}
       />

@@ -365,17 +365,13 @@
     animation: mlag-sheen 0.9s var(--ease-soft);
   }
 
-  /* Gradient send button + glow ring while typing/focused */
+  /* Gradient send button (flat — no glow) */
   .btn-send {
     background: var(--send-gradient);
-    box-shadow: 0 6px 20px -8px var(--accent-line), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    box-shadow: none;
   }
   .btn-send:hover {
     background: var(--send-gradient-hover);
-  }
-  .composer-glow:focus-within {
-    border-color: var(--accent-line);
-    box-shadow: 0 0 0 4px var(--accent-soft), var(--shadow-1);
   }
 
   /* Hover lift for cards */

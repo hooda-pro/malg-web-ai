@@ -290,7 +290,7 @@ function PersonalizationTab() {
             className={cn(
               "h-11 w-full rounded-md border border-hair bg-surface px-3.5 text-[14.5px] text-ink shadow-1",
               "placeholder:text-ink-3 transition-all duration-1 hover:border-hair-2",
-              "focus:border-accent focus:outline-none focus:shadow-[0_0_0_3.5px_var(--accent-soft)]"
+              "focus:border-accent focus:outline-none"
             )}
           />
         </label>
@@ -310,7 +310,7 @@ function PersonalizationTab() {
             className={cn(
               "w-full resize-y rounded-md border border-hair bg-surface px-3.5 py-3 text-[14px] leading-6 text-ink shadow-1",
               "placeholder:text-ink-3 transition-all duration-1 hover:border-hair-2",
-              "focus:border-accent focus:outline-none focus:shadow-[0_0_0_3.5px_var(--accent-soft)]"
+              "focus:border-accent focus:outline-none"
             )}
           />
           <span className="mt-1.5 flex items-center justify-between text-[12px] text-ink-3">
@@ -659,7 +659,7 @@ function AccountTab({
                 "h-10 min-w-0 flex-1 rounded-md border border-hair bg-surface-2 px-3",
                 "text-[14px] text-ink placeholder:text-ink-3 transition-all duration-1",
                 "hover:border-hair-2 focus:border-accent focus:bg-surface focus:outline-none",
-                "focus:shadow-[0_0_0_3.5px_var(--accent-soft)]"
+                ""
               )}
             />
             <Button
