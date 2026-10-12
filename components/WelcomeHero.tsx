@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { ArrowUpRight } from "lucide-react";
 import Logo from "./Logo";
 import { useSettings } from "./SettingsContext";
@@ -10,10 +11,13 @@ export default function WelcomeHero({
   totalTokens,
   userName,
   onPromptSelected,
+  composer,
 }: {
   totalTokens: number;
   userName?: string | null;
   onPromptSelected: (prompt: string) => void;
+  /** خانة الكتابة في المنتصف (وضع الشات الجديد) — تُعرض بين الترحيب والاقتراحات */
+  composer?: ReactNode;
 }) {
   const { t, nickname } = useSettings();
   const name = (nickname || userName || "").trim().split(/\s+/)[0];
@@ -39,8 +43,10 @@ export default function WelcomeHero({
           {t("heroSubtitle")}
         </p>
 
+        {composer && <div className="mt-6 w-full">{composer}</div>}
+
         {/* ONE panel + hairline dividers instead of four floating cards */}
-        <div className="mt-10 w-full overflow-hidden rounded-xl border border-hair bg-surface text-start shadow-2">
+        <div className={`${composer ? "mt-4" : "mt-10"} w-full overflow-hidden rounded-xl border border-hair bg-surface text-start shadow-2`}>
           <ul className="grid sm:grid-cols-2">
             {QUICK_PROMPT_KEYS.map((key, i) => (
               <li

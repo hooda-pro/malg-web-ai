@@ -45,6 +45,8 @@ export default function BottomInputBar({
   onSend: (text: string, attachments: ComposerAttachment[]) => Promise<boolean> | void;
   onStop: () => void;
   disabled: boolean;
+  /** وضع المنتصف (شات جديد): بدون حواف جانبية إضافية */
+  embedded?: boolean;
 }) {
   const { t, enterToSend } = useSettings();
   const [text, setText] = useState("");
@@ -181,7 +183,10 @@ export default function BottomInputBar({
 
   return (
     <div
-      className="m-composer relative shrink-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-6"
+      className={cn(
+        "m-composer relative shrink-0",
+        embedded ? "w-full px-0 pb-1 pt-4" : "px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-6"
+      )}
       onDragEnter={onDragEnter}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}

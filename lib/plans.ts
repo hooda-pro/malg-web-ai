@@ -43,7 +43,7 @@ export const FREE_PLAN: SubscriptionPlan = {
 export const PRO_PLAN: SubscriptionPlan = {
   id: "pro",
   name: "Pro",
-  tagline: "كل الموديلات + رصيد شهري ضخم + شحن إضافي براحتك",
+  tagline: "كل الموديلات + رصيد شهري ضخم + شحن إضافي بحرية",
   monthlyTokens: 20_000_000,
   paidModels: true,
   topUpAllowed: true,
@@ -76,7 +76,7 @@ export function buildSubscribeMessage(
   const periodLabel = period === "yearly" ? "سنوي (12 شهر)" : "شهري";
   const lines = [
     "مرحباً 👋",
-    "عايز أشترك في موقع MALG AI:",
+    "أرغب في الاشتراك في موقع MALG AI:",
     "",
     `👑 الباقة: ${plan.name}${plan.badge ? " " + plan.badge : ""}`,
     `📅 المدة: ${periodLabel}`,
@@ -85,7 +85,7 @@ export function buildSubscribeMessage(
   if (user?.displayName || user?.email) {
     lines.push("", `👤 حسابي: ${user.displayName || "—"}${user.email ? ` (${user.email})` : ""}`);
   }
-  lines.push("", "محتاج أأكد الاشتراك وطرق الدفع ✨");
+  lines.push("", "أرجو تأكيد الاشتراك وطرق الدفع ✨");
   return lines.join("\n");
 }
 

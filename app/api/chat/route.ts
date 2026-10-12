@@ -157,6 +157,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   const sessionId = String(body?.sessionId || "");
   const userPrompt = String(body?.message || "").trim();
   const uiLanguage = typeof body?.uiLanguage === "string" ? body.uiLanguage.slice(0, 8) : null;
+  const tone = body?.tone === "egyptian" ? "egyptian" : "msa";
   const model = normalizeModelId(body?.model);
   const personalization = buildPersonalizationBlock({
     customInstructions: body?.customInstructions,
@@ -179,7 +180,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   const isAdmin = flags.isAdmin;
   if (flags.isBanned) {
     return NextResponse.json(
-      { error: "تم حظر حسابك من إدارة المنصة — مش قادر تبعث رسايل حاليًا." },
+      { error: "تم حظر حسابك من إدارة المنصة — لا يمكنك إرسال رسائل حاليًا." },
       { status: 403 }
     );
   }
@@ -194,7 +195,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   // حتى لو حد بعت الطلب مباشرة من غير الواجهة.
   if (sessionRows[0].ended_at) {
     return NextResponse.json(
-      { error: "المحادثة دي اتقفلت — ابدأ محادثة جديدة.", sessionEnded: true },
+      { error: "تم إغلاق هذه المحادثة — ابدأ محادثة جديدة.", sessionEnded: true },
       { status: 409 }
     );
   }
@@ -213,7 +214,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   // موديلات الباقات المدفوعة: محجوبة عن الخطة المجانية (الأدمن والمشتركون فقط)
   if (!isAdmin && (await isModelPaid(model).catch(() => false)) && !(await hasPaidSubscription(user.id).catch(() => false))) {
     return NextResponse.json(
-      { error: "الموديل ده متاح لمشتركي باقة Pro فقط — اشترك من حسابك عشان تستخدمه.", subscriptionRequired: true },
+      { error: "هذا الموديل متاح لمشتركي باقة Pro فقط — اشترك من حسابك لاستخدامه.", subscriptionRequired: true },
       { status: 403 }
     );
   }
@@ -313,6 +314,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
       totalTokens: totalAllocated,
       remainingTokens: Math.max(totalAllocated - usedTokensCount, 0),
       uiLanguage,
+      tone,
       webSearchAvailable: SEARCH_ON,
       sandboxAvailable: SANDBOX_ON,
       memory: userMemory,

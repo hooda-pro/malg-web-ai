@@ -8,6 +8,8 @@ export type Theme = "system" | "light" | "dark";
 /** معرف الموديل = slug من لوحة الأدمن (مثال: malg-a3). أي قيمة غير معروفة
  * السيرفر بيقع بها على الموديل الافتراضي تلقائيًا. */
 export type ModelId = string;
+/** أسلوب رد المساعد على الرسائل العربية: فصحى (افتراضي) أو عامية مصرية. */
+export type AssistantTone = "msa" | "egyptian";
 
 /** موديل واحد في قوائم الاختيار — الاسم والوصف من الأدمن (أي لغة يكتبها). */
 export interface ModelOption {
@@ -45,6 +47,8 @@ export interface Settings {
   customInstructions: string;
   /** اسم يحب الموديل يناديه بيه (اختياري). */
   nickname: string;
+  /** أسلوب رد المساعد — يُرسل للسيرفر مع كل رسالة. */
+  tone: AssistantTone;
 }
 
 const DEFAULTS: Settings = {
@@ -56,6 +60,7 @@ const DEFAULTS: Settings = {
   enterToSend: true,
   customInstructions: "",
   nickname: "",
+  tone: "msa",
 };
 const STORAGE_KEY = "mlag-settings";
 
@@ -73,6 +78,7 @@ interface SettingsValue extends Settings {
   setAnimations: (on: boolean) => void;
   setShowTime: (on: boolean) => void;
   setModel: (model: ModelId) => void;
+  setTone: (tone: AssistantTone) => void;
   /** ترجمة نص بمعاملات اختيارية: t("balance", { n: "500,000" }) */
   t: (key: string, params?: Record<string, string | number>) => string;
 }
@@ -164,6 +170,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const setAnimations = useCallback((on: boolean) => update("animations", on), [update]);
   const setShowTime = useCallback((on: boolean) => update("showTime", on), [update]);
   const setModel = useCallback((model: ModelId) => update("model", model), [update]);
+  const setTone = useCallback((tone: AssistantTone) => update("tone", tone), [update]);
 
   const t = useCallback(
     (key: string, params?: Record<string, string | number>) => translate(settings.lang, key, params),
@@ -184,9 +191,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setAnimations,
       setShowTime,
       setModel,
+      setTone,
       t,
     }),
-    [settings, resolvedModels, defaultModelId, resolvedTheme, update, setLang, setTheme, setAnimations, setShowTime, setModel, t]
+    [settings, resolvedModels, defaultModelId, resolvedTheme, update, setLang, setTheme, setAnimations, setShowTime, setModel, setTone, t]
   );
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
@@ -207,6 +215,7 @@ export function useSettings(): SettingsValue {
       setAnimations: () => {},
       setShowTime: () => {},
       setModel: () => {},
+      setTone: () => {},
       t: (key, params) => translate(DEFAULTS.lang, key, params),
     };
   }

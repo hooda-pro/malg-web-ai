@@ -71,6 +71,7 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
   const sessionId = String(body?.sessionId || "");
   const messageId = String(body?.messageId || "");
   const uiLanguage = typeof body?.uiLanguage === "string" ? body.uiLanguage.slice(0, 8) : null;
+  const tone = body?.tone === "egyptian" ? "egyptian" : "msa";
   const model = normalizeModelId(body?.model);
   const personalization = buildPersonalizationBlock({
     customInstructions: body?.customInstructions,
@@ -171,7 +172,7 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
     {
       role: "system",
       content:
-        buildSystemPrompt({ userName: user.displayName, uiLanguage, modelName: modelDisplayName, memory: userMemory }) +
+        buildSystemPrompt({ userName: user.displayName, uiLanguage, tone, modelName: modelDisplayName, memory: userMemory }) +
         (personalization ? `\n\n${personalization}` : ""),
     },
     // نفس تخفيف /api/chat: المرفقات قايمة أسماء (+ ملفات صغيرة inline في آخر رسالة)

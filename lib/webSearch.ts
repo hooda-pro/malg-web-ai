@@ -160,7 +160,7 @@ function cleanDomains(raw: unknown): string[] {
  */
 export async function runToolSearch(args: Record<string, unknown>): Promise<ToolSearchOutcome> {
   if (!(await isDeepSearchEnabled())) {
-    return { ok: false, text: "", queries: [], sources: [], error: "البحث مش متفعل على السيرفر ده (مفيش مفتاح Tavily)." };
+    return { ok: false, text: "", queries: [], sources: [], error: "البحث غير مفعّل على هذا السيرفر (لا يوجد مفتاح Tavily)." };
   }
   const query = String(args.query ?? "").trim().slice(0, 300);
   if (!query) {
@@ -177,7 +177,7 @@ export async function runToolSearch(args: Record<string, unknown>): Promise<Tool
   });
   if (results.length === 0) {
     return {
-      ok: true, text: "مفيش نتايج للاستعلام ده — جرّب كلمات تانية أو وسّع المصادر.", queries: [query], sources: [],
+      ok: true, text: "لا توجد نتائج لهذا الاستعلام — جرّب كلمات أخرى أو وسّع المصادر.", queries: [query], sources: [],
     };
   }
   const today = new Date().toISOString().slice(0, 10);

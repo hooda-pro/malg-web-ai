@@ -111,7 +111,7 @@ export default function RechargeModal({
             <Lock size={15} className="text-warn" />
             الشحن للمشتركين فقط
           </p>
-          <p className="mt-1 text-[12.5px] leading-6 text-ink-2">اشترك في باقة Pro الأول، وبعدها اشحن توكنز براحتك.</p>
+          <p className="mt-1 text-[12.5px] leading-6 text-ink-2">اشترك في باقة Pro أولًا، ثم اشحن التوكنز بحرية.</p>
           <Button variant="primary" size="sm" onClick={onOpenPlans} className="mt-3">
             <Crown size={14} />
             اشترك في Pro
@@ -208,7 +208,7 @@ export default function RechargeModal({
           <button
             onClick={copyUsername}
             aria-label="نسخ يوزر الدعم"
-            title={copied ? "اتنسخ" : "نسخ"}
+            title={copied ? "تم النسخ" : "نسخ"}
             className="grid h-7 w-7 place-items-center rounded-full transition-colors duration-1 hover:bg-surface-3 hover:text-ink"
           >
             {copied ? <Check size={13} className="text-live" /> : <Copy size={13} />}

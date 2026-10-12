@@ -46,7 +46,7 @@ export async function getUserFlags(userId: string): Promise<UserFlags | null> {
 
 /** رسالة الرفض الموحّدة لما مقدرناش نتحقق من حالة الحساب (مع status 503 و Retry-After). */
 export const ACCOUNT_CHECK_UNAVAILABLE_MESSAGE =
-  "مقدرناش نتحقق من حالة حسابك دلوقتي (مشكلة مؤقتة) — جرّب تاني بعد شوية.";
+  "تعذر التحقق من حالة حسابك حاليًا (مشكلة مؤقتة) — حاول مجددًا بعد قليل.";
 
 export type RateCheck =
   | { allowed: true }
@@ -138,7 +138,7 @@ export interface GenerationLease {
 }
 
 export const GENERATION_BUSY_MESSAGE =
-  "لسه فيه رد شغال على حسابك (ممكن في محادثة تانية). استنى لحد ما يخلص أو اضغط «إيقاف» وبعدين ابعت رسالتك.";
+  "ما زال هناك رد قيد التوليد على حسابك (ربما في محادثة أخرى). انتظر حتى ينتهي أو اضغط «إيقاف» ثم أرسل رسالتك.";
 
 /** بيرجع lease لو مفيش رد شغال، أو null لو فيه واحد شغال بالفعل. */
 export async function acquireGenerationLease(userId: string): Promise<GenerationLease | null> {

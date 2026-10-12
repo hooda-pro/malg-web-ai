@@ -20,6 +20,7 @@ import ArtifactPanel from "./ArtifactPanel";
 import SettingsModal from "./SettingsModal";
 import ShortcutsDialog from "./ShortcutsDialog";
 import Toast from "./Toast";
+import WelcomeHero from "./WelcomeHero";
 import type { SettingsTab } from "./AccountMenu";
 import { useSettings, type ModelId } from "./SettingsContext";
 import { buildAttachmentsMetaBlock, buildAttachmentsPromptBlock, extractAttachmentsMeta, extractAttachmentsPromptSection } from "@/lib/attachments";
@@ -101,7 +102,7 @@ function createChunkBatcher(apply: (chunk: string) => void) {
 const NO_MESSAGES: ChatMessage[] = [];
 
 export default function ChatShell() {
-  const { t, lang, model, setModel, customInstructions, nickname } = useSettings();
+  const { t, lang, model, setModel, customInstructions, nickname, tone } = useSettings();
   const [authChecked, setAuthChecked] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -597,7 +598,7 @@ export default function ChatShell() {
     setUser((u) => (u ? { ...u, displayName: newName } : u));
   };
 
-  const personalizationBody = { customInstructions, nickname };
+  const personalizationBody = { customInstructions, nickname, tone };
 
   /**
    * لو الرد اتوقف (Stop) أو انقطع، السيرفر بيحفظ الرد الجزئي بعد لحظات — فبنسيب نسخة
@@ -823,6 +824,7 @@ export default function ChatShell() {
       isGenerating,
       user,
       lang,
+      tone,
       model,
       sessionModels,
       lockSessionModel,
@@ -936,6 +938,7 @@ export default function ChatShell() {
       user,
       continuingMessageId,
       lang,
+      tone,
       model,
       sessionModels,
       customInstructions,
@@ -1256,36 +1259,55 @@ export default function ChatShell() {
           </div>
         )}
 
-        <MessageList
-          messages={messages}
-          live={live}
-          loading={messagesLoading}
-          sessionKey={currentSessionId}
-          totalTokens={quota?.total ?? 500000}
-          userName={user?.displayName}
-          onPromptSelected={(p) => sendMessage(p)}
-          onContinue={continueMessage}
-          continuingMessageId={continuingMessageId}
-          continuationStreamingContent={continuationStreamingContent}
-          onPreviewFiles={openPanelWithFiles}
-          onRegenerate={regenerateReply}
-          regeneratingMessageId={regeneratingMessageId}
-          onEdit={startEdit}
-          onFeedback={sendFeedback}
-          actionsDisabled={messageActionsLocked}
-        />
-
         {currentSessionEnded && !isGenerating ? (
           <ChatEndedNotice endedBy={currentSession?.endedBy ?? null} onNewChat={handleNewChat} />
         ) : quotaExhausted && !isGenerating ? (
           <QuotaExhaustedNotice renewsAt={quotaRenewsAt} onRecharge={openRecharge} />
+        ) : !messagesLoading && messages.length === 0 && !live && !isGenerating ? (
+          /* شات جديد فارغ — الترحيب وخانة الكتابة في المنتصف (زي المنصات الكبيرة) */
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <WelcomeHero
+              totalTokens={quota?.total ?? 500000}
+              userName={user?.displayName}
+              onPromptSelected={(p) => sendMessage(p)}
+              composer={
+                <BottomInputBar
+                  embedded
+                  isGenerating={false}
+                  onSend={sendMessage}
+                  onStop={stopGeneration}
+                  disabled={!authChecked}
+                />
+              }
+            />
+          </div>
         ) : (
-          <BottomInputBar
-            isGenerating={isGenerating}
-            onSend={sendMessage}
-            onStop={stopGeneration}
-            disabled={!authChecked}
-          />
+          <>
+            <MessageList
+              messages={messages}
+              live={live}
+              loading={messagesLoading}
+              sessionKey={currentSessionId}
+              totalTokens={quota?.total ?? 500000}
+              userName={user?.displayName}
+              onPromptSelected={(p) => sendMessage(p)}
+              onContinue={continueMessage}
+              continuingMessageId={continuingMessageId}
+              continuationStreamingContent={continuationStreamingContent}
+              onPreviewFiles={openPanelWithFiles}
+              onRegenerate={regenerateReply}
+              regeneratingMessageId={regeneratingMessageId}
+              onEdit={startEdit}
+              onFeedback={sendFeedback}
+              actionsDisabled={messageActionsLocked}
+            />
+            <BottomInputBar
+              isGenerating={isGenerating}
+              onSend={sendMessage}
+              onStop={stopGeneration}
+              disabled={!authChecked}
+            />
+          </>
         )}
       </main>
 

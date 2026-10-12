@@ -195,7 +195,7 @@ function SettingRow({
 }
 
 function GeneralTab() {
-  const { t, lang, theme, model, models, animations, showTime, enterToSend, setLang, setTheme, setModel, setAnimations, setShowTime, update } =
+  const { t, lang, theme, model, models, animations, showTime, enterToSend, tone, setLang, setTheme, setModel, setAnimations, setShowTime, setTone, update } =
     useSettings();
 
   return (
@@ -249,6 +249,19 @@ function GeneralTab() {
         </SettingRow>
         <SettingRow label={t("settingsShowTime")} hint={t("showTimeHint")}>
           <Switch checked={showTime} onChange={setShowTime} label={t("settingsShowTime")} />
+        </SettingRow>
+        <SettingRow label={t("toneLabel")} hint={t("toneHint")} htmlFor="mlag-tone">
+          <SelectWrap>
+          <select
+            id="mlag-tone"
+            value={tone}
+            onChange={(e) => setTone(e.target.value as "msa" | "egyptian")}
+            className={selectClass}
+          >
+            <option value="msa">{t("toneMSA")}</option>
+            <option value="egyptian">{t("toneEgyptian")}</option>
+          </select>
+          </SelectWrap>
         </SettingRow>
       </Panel>
 

@@ -266,7 +266,7 @@ function ModelPicker({
       >
         <span className="text-[15px] font-semibold tracking-title text-ink">MALG</span>
         <span dir="ltr" className="text-[15px] font-medium tracking-title text-ink-3">
-          {current.label.replace("malg-", "")}
+          {current.label}
         </span>
         {lockedModel && <Lock size={11} className="text-ink-3" aria-hidden="true" />}
         <ChevronDown

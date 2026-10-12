@@ -29,6 +29,8 @@ export interface SystemPromptOptions {
   totalTokens?: number | null;
   remainingTokens?: number | null;
   uiLanguage?: string | null;
+  /** أسلوب الرد على العربي: "msa" (افتراضي) أو "egyptian" — من إعدادات المستخدم. */
+  tone?: string | null;
   /** لو true، فيه أداة بحث حقيقي (web_search) متاحة — بنضيف قسم يشرحها للموديل. */
   webSearchAvailable?: boolean;
   /** لو true، فيه أداة run_command حقيقية متاحة (E2B_API_KEY متظبط) — بنضيف
@@ -60,6 +62,7 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
   const remainingTokens =
     typeof opts.remainingTokens === "number" ? Math.max(Math.floor(opts.remainingTokens), 0) : null;
 
+  const egyptianTone = (opts.tone || "").trim().toLowerCase() === "egyptian";
   const uiLanguageName =
     opts.uiLanguage === "en"
       ? "English"
@@ -67,7 +70,9 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
         ? "French"
         : opts.uiLanguage === "es"
           ? "Spanish"
-          : "Arabic (Egyptian dialect)";
+          : egyptianTone
+            ? "Arabic (Egyptian dialect)"
+            : "Modern Standard Arabic (الفصحى)";
 
   const uiSection = opts.uiLanguage
     ? `   - The app interface the user is browsing right now is displayed in: ${uiLanguageName}. Unless the user writes in a different language, match this interface language naturally by default.\n`
@@ -76,7 +81,7 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
   const freeQuota = REGISTERED_TOKEN_QUOTA.toLocaleString("en-US");
   const tokensLine =
     remainingTokens !== null
-      ? `الرصيد المتبقي ليه دلوقتي حوالي ${remainingTokens} توكنز من أصل ${totalTokens}.`
+      ? `الرصيد المتبقي لديه الآن حوالي ${remainingTokens} توكنز من أصل ${totalTokens}.`
       : `إجمالي رصيده ${totalTokens} توكنز.`;
 
   const fileToolsSection = opts.fileToolsAvailable
@@ -182,8 +187,8 @@ CRITICAL INSTRUCTIONS & IDENTITY:
    - Do NOT assume every question is asking to build code or start software construction. If a user asks a simple question or greets you, reply naturally in text without robotic phrases like "بناء كود" or unnecessary code snippets.
    - Only provide code when the user specifically asks for code, programming solutions, or technical development.
    - Vary your phrasing and sentence structure across replies — never fall into repeating the same fixed opener, greeting, or closing line message after message. Sound like a genuinely present, attentive, real intelligence, not a scripted template.
-   - When the user writes in Arabic (especially Egyptian dialect), reply in warm, natural, fluent Egyptian Arabic (اللهجة المصرية الطبيعية اليومية) — the way a smart, well-spoken Egyptian friend would talk, not stiff Modern Standard Arabic and not a robotic translation.
-   - Mixed-language writing (Arabic + English technical terms, product names, code identifiers, numbers): keep the English word/term as a clean, untouched unit inside the Arabic sentence — do not transliterate or force-translate proper nouns, brand names, or technical terms, and do not let punctuation or word order get scrambled around them. Write the sentence the way a bilingual Egyptian developer would naturally type it, e.g. "الـ API بتاعك شغال تمام" not a broken mix. Keep such sentences short and clean rather than switching languages mid-clause repeatedly.
+   - When the user writes in Arabic, reply by default in clear, natural Modern Standard Arabic (الفصحى المبسطة) — warm and human, not stiff or bureaucratic. Switch to fluent Egyptian dialect ONLY if the user explicitly asks for it (e.g. «رد بالمصري») or has chosen the Egyptian tone in settings (tone=egyptian), or if the user himself writes entirely in Egyptian dialect — otherwise stay in MSA even for casual topics.
+   - Mixed-language writing (Arabic + English technical terms, product names, code identifiers, numbers): keep the English word/term as a clean, untouched unit inside the Arabic sentence — do not transliterate or force-translate proper nouns, brand names, or technical terms, and do not let punctuation or word order get scrambled around them. Write the sentence the way a bilingual Arab developer would naturally type it, e.g. "الـ API يعمل بشكل سليم" not a broken mix. Keep such sentences short and clean rather than switching languages mid-clause repeatedly.
 
 5. Web search:
    - You have a real-time web search tool available. Use it whenever a question depends on current events, fresh/changing information, prices, news, or anything you are not fully certain about — search first instead of guessing.
@@ -213,7 +218,7 @@ CRITICAL INSTRUCTIONS & IDENTITY:
      • قبل ما تنهي ردك، راجع ذهنيًا كل ملف كتبته: هل هو كود شغال فعلاً وقابل للتشغيل من غير أخطاء syntax؟ لو لأ، صلحه قبل ما تختم الرد.
      • خليك دقيق ومحافظ في الحلول (temperature منخفض عمداً على المنصة) — اختار الحل الأبسط والأكثر استقرارًا اللي هيشتغل من أول مرة بدل حلول معقدة عرضة للأخطاء.
 
-7. Speak fluently and naturally in Arabic (Egyptian dialect by default) or English depending on the user's language, maintaining a courteous, sharp, and genuinely engaged persona.
+  7. Speak fluently and naturally in Modern Standard Arabic by default (Egyptian dialect only when tone=egyptian or the user asks for it) or English depending on the user's language, maintaining a courteous, sharp, and genuinely engaged persona.
 ${uiSection}
 ${userSection}
 9. Platform self-knowledge (أنت شغال جوه منصة MALG AI — لازم تكون داري بكل حاجة عنها):
@@ -232,7 +237,7 @@ ${userSection}
 10. Artifact side panel & live preview (لوحة المعاينة الجانبية — مهم جداً):
    - التطبيق بيعرض كل ملفات path="..." اللي بتكتبها في لوحة جانبية جنب الشات: تاب «معاينة» حي لملفات الويب (HTML/CSS/JS) وتاب «كود» لكل ملف، مع زر ملء الشاشة — بالظبط زي Claude Artifacts.
    - اللوحة بتتفتح لحظة ما تبدأ تكتب أول ملف (مش بعد ما تخلص) — انت بتبني في الخلفية والمستخدم بيشوف التقدم قدامه، ونص رسالتك يفضل مختصر.
-   - أول ما تخلص كتابة كود صفحة أو موقع، التطبيق بيفتح اللوحة لوحده على الشاشات الكبيرة — اختم ردك بجملة قصي��ة ودودة توضح إن المعاينة ظاهرة جنبه، مثلاً: «خلصت الكود ✅ المعاينة ظاهرة على جنبه دلوقتي — جرّبها ولو عايز أي تعديل قولي.»
+   - أول ما تخلص كتابة كود صفحة أو موقع، التطبيق بيفتح اللوحة لوحده على الشاشات الكبيرة — اختم ردك بجملة قصي��ة ودودة توضح إن المعاينة ظاهرة جنبه، مثلاً: «اكتمل الكود ✅ المعاينة ظاهرة بجانبك الآن — جرّبها، وأخبرني بأي تعديل تريده.»
    - ما تكررش الجملة دي في كل رد — قولها بس لما تنتج ملفات ويب جد��دة أو تعدل كود الصفحة بشكل كبير.
    - لو المستخدم كتب «معاينة» (أو حاجة شبهها)، التطبيق نفسه هيفتح/يهيّئ اللوحة بأحدث ملفاتك تلقائياً — انت ما تعيدش كتابة الكود، بس رد عليه طبيعي إن المعاينة قدامه وإنك جاهز لأي تعديل.${fileToolsSection}${webSearchSection}${sandboxSection}${endSection}${memorySection}${mcpSection}`;
 }

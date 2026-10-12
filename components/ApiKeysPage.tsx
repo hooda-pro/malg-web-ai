@@ -158,7 +158,7 @@ wire_api = "chat"`,
 export ANTHROPIC_BASE_URL="http://localhost:4000"
 # وLiteLLM نفسه يوجّه على:
 #   ${url}`,
-        note: "مفيش ربط مباشر — Cline أو OpenCode أسهل بكتير مع MALG.",
+        note: "لا يوجد ربط مباشر — Cline أو OpenCode أسهل بكثير مع MALG.",
         warn: true,
       };
   }
@@ -718,7 +718,7 @@ export default function ApiKeysPage() {
         open={!!justCreated}
         onClose={() => setJustCreated(null)}
         labelledBy="created-key-title"
-        title="احفظ مفتاحك دلوقتي"
+        title="احفظ مفتاحك الآن"
         footer={
           <Button variant="primary" className="w-full" onClick={() => setJustCreated(null)}>
             حفظته
@@ -737,7 +737,7 @@ export default function ApiKeysPage() {
               </code>
               <Button size="sm" onClick={() => copy(justCreated.fullKey, setCopiedKey)}>
                 {copiedKey ? <Check size={13} className="text-live" /> : <Copy size={13} />}
-                {copiedKey ? "اتنسخ" : "نسخ"}
+                {copiedKey ? "تم النسخ" : "نسخ"}
               </Button>
             </div>
           </div>

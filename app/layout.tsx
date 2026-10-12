@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(getSiteUrl()),
   title: "MALG AI",
   description:
-    "MALG AI — مساعد ذكي يكتب ويبني ويشغّل الكود جنبك: شات فوري، معاينة حيّة للمشاريع، بيئة تشغيل كود، ومحادثات محفوظة.",
+    "MALG AI — مساعد ذكي يكتب ويبني ويشغّل الكود بجانبك: شات فوري، معاينة حيّة للمشاريع، بيئة تشغيل كود، ومحادثات محفوظة.",
   applicationName: "MALG AI",
   keywords: ["MALG", "AI", "chat", "coding assistant", "artifacts"],
   openGraph: {

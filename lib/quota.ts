@@ -59,7 +59,7 @@ export async function checkAndMaybeRenewQuota(
     `;
     return {
       blocked: true,
-      message: `لقد استنفذت رصيد التوكنز المتاح لك (${formatTokens(totalAllocated)} توكنز). هيتجدد الرصيد تلقائيًا بعد شهر كامل (30 يوم) من دلوقتي، أو اشحن رصيدك فورًا من «شراء توكنز» في قايمة حسابك.`,
+      message: `لقد استنفذت رصيد التوكنز المتاح لك (${formatTokens(totalAllocated)} توكنز). سيتجدد الرصيد تلقائيًا بعد شهر كامل (30 يومًا) من الآن، أو اشحن رصيدك فورًا من «شحن الرصيد» في قائمة حسابك.`,
     };
   }
 
@@ -89,7 +89,7 @@ export async function checkAndMaybeRenewQuota(
         : `${remainingMinutes} دقيقة`;
   return {
     blocked: true,
-    message: `لقد استنفذت رصيد التوكنز المتاح لك (${formatTokens(totalAllocated)} توكنز). هيتجدد الرصيد تلقائيًا خلال ${remainingText}، أو اشحن رصيدك فورًا من «شراء توكنز» في قايمة حسابك.`,
+    message: `لقد استنفذت رصيد التوكنز المتاح لك (${formatTokens(totalAllocated)} توكنز). سيتجدد الرصيد تلقائيًا خلال ${remainingText}، أو اشحن رصيدك فورًا من «شحن الرصيد» في قائمة حسابك.`,
   };
 }
 

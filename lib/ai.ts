@@ -301,16 +301,16 @@ export interface ClassifiedError {
 }
 
 const SAFE_MESSAGES: Record<UpstreamErrorCategory, string> = {
-  invalid_api_key: "حصلت مشكلة مؤقتة في الاتصال بالخدمة — جرب تاني بعد شوية.",
-  forbidden_model: "حصلت مشكلة مؤقتة في الاتصال بالخدمة — جرب تاني بعد شوية.",
-  wrong_endpoint: "حصل خطأ غير متوقع أثناء توليد الرد — جرب تاني كمان شوية.",
-  unsupported_protocol: "حصل خطأ غير متوقع أثناء توليد الرد — جرب تاني كمان شوية.",
-  quota_payment: "في مشكلة مؤقتة في تشغيل الرد دلوقتي — جرب تاني كمان شوية.",
-  rate_limit: "الخدمة مزدحمة شوية دلوقتي — استنى ثانيتين وابعت تاني.",
-  model_not_found: "حصل خطأ غير متوقع أثناء توليد الرد — جرب تاني كمان شوية.",
-  bad_request: "حصل خطأ غير متوقع أثناء توليد الرد — جرب تاني كمان شوية.",
-  server_error: "حصل خطأ غير متوقع أثناء توليد الرد — جرب تاني كمان شوية.",
-  unknown: "حصل خطأ غير متوقع أثناء توليد الرد — جرب تاني كمان شوية.",
+  invalid_api_key: "حصلت مشكلة مؤقتة في الاتصال بالخدمة — حاول مجددًا بعد قليل.",
+  forbidden_model: "حصلت مشكلة مؤقتة في الاتصال بالخدمة — حاول مجددًا بعد قليل.",
+  wrong_endpoint: "حصل خطأ غير متوقع أثناء توليد الرد — حاول مجددًا بعد قليل.",
+  unsupported_protocol: "حصل خطأ غير متوقع أثناء توليد الرد — حاول مجددًا بعد قليل.",
+  quota_payment: "هناك مشكلة مؤقتة في تشغيل الرد حاليًا — حاول مجددًا بعد قليل.",
+  rate_limit: "الخدمة مزدحمة قليلًا حاليًا — انتظر ثانيتين ثم أعد الإرسال.",
+  model_not_found: "حصل خطأ غير متوقع أثناء توليد الرد — حاول مجددًا بعد قليل.",
+  bad_request: "حصل خطأ غير متوقع أثناء توليد الرد — حاول مجددًا بعد قليل.",
+  server_error: "حصل خطأ غير متوقع أثناء توليد الرد — حاول مجددًا بعد قليل.",
+  unknown: "حصل خطأ غير متوقع أثناء توليد الرد — حاول مجددًا بعد قليل.",
 };
 
 /** يميّز سبب الفشل من status + نص الخطأ الخام — لا يفترض أن كل 403 سببه المفتاح */
@@ -323,7 +323,7 @@ export function classifyUpstreamError(httpCode: number, rawText: string): Classi
     const daily = /limit|quota|rate.?limit/i.test(rawText ?? "");
     return {
       category: "rate_limit",
-      userMessage: daily && httpCode === 429 ? "الخدمة مزدحمة شوية دلوقتي — استنى ثانيتين وابعت تاني وهيشتغل." : SAFE_MESSAGES.rate_limit,
+      userMessage: daily && httpCode === 429 ? "الخدمة مزدحمة قليلًا حاليًا — انتظر ثانيتين ثم أعد الإرسال وسيعمل." : SAFE_MESSAGES.rate_limit,
     };
   }
   if (httpCode === 401) {
@@ -362,7 +362,7 @@ export function classifyUpstreamError(httpCode: number, rawText: string): Classi
     return { category: "bad_request", userMessage: SAFE_MESSAGES.bad_request };
   }
   if (httpCode >= 500) return { category: "server_error", userMessage: SAFE_MESSAGES.server_error };
-  if (httpCode === 0) return { category: "unknown", userMessage: "حصلت مشكلة في الاتصال بالخدمة — جرب تاني." };
+  if (httpCode === 0) return { category: "unknown", userMessage: "حدثت مشكلة في الاتصال بالخدمة — حاول مجددًا." };
   return { category: "unknown", userMessage: SAFE_MESSAGES.unknown };
 }
 
@@ -717,7 +717,7 @@ export async function readUpstreamStream(
 /** رسالة صادقة تتكتب للمستخدم لو الموديل رجّع استجابة فاضية بعد كل المحاولات
  * — بدل ما نكذب ونقول "تمت المعالجة بنجاح" من غير أي محتوى فعلي. */
 export const EMPTY_RESPONSE_FALLBACK_MESSAGE =
-  "معنديش رد فعلي أقدر أكتبهولك دلوقتي 🙏 — الموديل مارجعش أي محتوى بعد أكتر من محاولة (مشكلة مؤقتة في المزوّد الخارجي، مش في سؤالك). جرب تبعت رسالتك تاني كمان شوية، أو اختار موديل تاني من القايمة لو الموضوع مستعجل.";
+  "تعذر توليد رد فعلي حاليًا 🙏 — لم يُرجع الموديل أي محتوى بعد عدة محاولات (مشكلة مؤقتة في المزوّد الخارجي، وليست في سؤالك). حاول إرسال رسالتك مجددًا بعد قليل، أو اختر موديلًا آخر من القائمة إذا كان الأمر مستعجلًا.";
 
 /** تقدير تقريبي لعدد التوكنز (نفس منطق ChatRepository.estimateTokens في تطبيق الأندرويد). */
 export function estimateTokens(...texts: (string | null | undefined)[]): number {
