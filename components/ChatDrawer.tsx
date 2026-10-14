@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, LogIn, PanelLeftClose, Pin, Search, Sparkles, SquarePen, Timer, Trash2, X } from "lucide-react";
+import { Download, LogIn, Mic, PanelLeftClose, Pin, Search, Sparkles, SquarePen, Timer, Trash2, X } from "lucide-react";
 import type { ChatSession, SessionUser } from "@/lib/types";
 import type { SubscriptionInfo } from "@/lib/plans";
 import { Button, IconButton, Kbd, modKeyLabel } from "./ui/Controls";
@@ -132,6 +132,7 @@ export default function ChatDrawer({
   onOpenRecharge,
   onOpenPlans,
   onOpenShortcuts,
+  onOpenVoice,
 }: {
   open: boolean;
   collapsed: boolean;
@@ -155,6 +156,8 @@ export default function ChatDrawer({
   onOpenRecharge: () => void;
   onOpenPlans: () => void;
   onOpenShortcuts: () => void;
+  /** فتح استوديو الصوت (نص → صوت — للمشتركين) */
+  onOpenVoice: () => void;
 }) {
   const { t } = useSettings();
   const [query, setQuery] = useState("");
@@ -268,6 +271,22 @@ export default function ChatDrawer({
             <Timer size={16} className={inTempMode ? "text-accent" : "text-ink-3"} />
             <span className="flex-1 text-start">{t("tempChat")}</span>
           </button>
+
+          {user && (
+            <button
+              onClick={onOpenVoice}
+              className={cn(
+                "group flex h-10 w-full items-center gap-2.5 rounded-md border border-hair bg-surface px-3",
+                "text-[13.5px] font-medium text-ink shadow-1 transition-colors duration-1 hover:border-hair-2"
+              )}
+            >
+              <Mic size={16} className="text-accent" />
+              <span className="flex-1 text-start">{t("voiceStudio")}</span>
+              <span className="shrink-0 rounded-full bg-warn-soft px-2 py-px text-[10.5px] font-bold text-warn">
+                {t("modelProBadge")}
+              </span>
+            </button>
+          )}
 
           {sessions.length > 0 && (
             <label className="relative block">

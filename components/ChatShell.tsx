@@ -15,6 +15,7 @@ import QuotaExhaustedNotice from "./QuotaExhaustedNotice";
 import AuthModal from "./AuthModal";
 import RechargeModal from "./RechargeModal";
 import PlansModal from "./PlansModal";
+import VoiceStudio from "./VoiceStudio";
 import type { SubscriptionInfo } from "@/lib/plans";
 import ArtifactPanel from "./ArtifactPanel";
 import SettingsModal from "./SettingsModal";
@@ -139,6 +140,7 @@ export default function ChatShell() {
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [showRecharge, setShowRecharge] = useState(false);
   const [showPlans, setShowPlans] = useState(false);
+  const [showVoice, setShowVoice] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
 
   // الرد الحيّ بيتربط بالشات اللي اتبعت منه (لو المستخدم فتح شات تاني ما يظهرش فيه)
@@ -1230,6 +1232,10 @@ export default function ChatShell() {
           setDrawerOpen(false);
           setShowShortcuts(true);
         }}
+        onOpenVoice={() => {
+          setDrawerOpen(false);
+          setShowVoice(true);
+        }}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
@@ -1399,6 +1405,16 @@ export default function ChatShell() {
 
       {showPlans && (
         <PlansModal user={user} subscription={subscription} onClose={() => setShowPlans(false)} />
+      )}
+
+      {showVoice && (
+        <VoiceStudio
+          onClose={() => setShowVoice(false)}
+          onOpenPlans={() => {
+            setShowVoice(false);
+            setShowPlans(true);
+          }}
+        />
       )}
 
       {toast && <Toast key={toastSeq} message={toast} onClose={() => setToast(null)} />}

@@ -28,6 +28,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     tier?: unknown;
     cost_multiplier?: unknown;
     supports_video?: unknown;
+    modality?: unknown;
+    tts_voice?: unknown;
   };
 
   const sets: string[] = [];
@@ -65,6 +67,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.supports_video === true || body.supports_video === false) {
     sets.push("native video " + (body.supports_video ? "ON" : "OFF"));
     await sql`UPDATE ai_models SET supports_video = ${body.supports_video}, updated_at = now() WHERE id = ${id}`;
+  }
+  if (body.modality === "chat" || body.modality === "tts") {
+    sets.push(body.modality === "tts" ? "صوت (TTS)" : "محادثة");
+    await sql`UPDATE ai_models SET modality = ${body.modality}, updated_at = now() WHERE id = ${id}`;
+  }
+  if (typeof body.tts_voice === "string") {
+    const ttsVoice = body.tts_voice.trim().slice(0, 80);
+    sets.push(ttsVoice ? `الصوت: ${ttsVoice}` : "بدون صوت محدد");
+    await sql`UPDATE ai_models SET tts_voice = ${ttsVoice}, updated_at = now() WHERE id = ${id}`;
   }
   if (sets.length === 0) {
     return NextResponse.json({ error: "لا يوجد ما يُحدّث" }, { status: 400 });

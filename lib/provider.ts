@@ -84,6 +84,10 @@ export interface ModelSummary {
   tier: ModelTier;
   costMultiplier: number;
   supportsVideo: boolean;
+  /** نوع الموديل: محادثة (chat) أو توليد صوت (tts) — نفس الجدول والإعداد */
+  modality: "chat" | "tts";
+  /** الصوت الافتراضي لموديلات TTS (مثال: alloy) — فارغ = صوت المزوّد الافتراضي */
+  ttsVoice: string;
 }
 
 /** إعداد مزوّد مربوط بموديل معين — اللي بيستخدمه التفاوض الفعلي */
@@ -112,6 +116,8 @@ export interface ModelRow {
   is_active: boolean;
   is_default: unknown;
   sort_order: unknown;
+  modality?: unknown;
+  tts_voice?: unknown;
   updated_at: string | null;
 }
 
@@ -176,6 +182,7 @@ function modelRowToConfig(r: ModelRow): ModelProviderConfig {
 
 function modelRowToSummary(r: ModelRow): ModelSummary {
   const keys = Array.isArray(r.api_keys) ? r.api_keys.filter((k) => typeof k === "string" && k.trim()) : [];
+  const voiceRaw = (r as { tts_voice?: unknown }).tts_voice;
   return {
     id: r.id,
     name: r.name,
@@ -188,6 +195,8 @@ function modelRowToSummary(r: ModelRow): ModelSummary {
     costMultiplier: clampCostMultiplier((r as { cost_multiplier?: unknown }).cost_multiplier),
     supportsVideo: (r as { supports_video?: unknown }).supports_video === true,
     sortOrder: Number((r as { sort_order?: unknown }).sort_order ?? 0) || 0,
+    modality: (r as { modality?: unknown }).modality === "tts" ? "tts" : "chat",
+    ttsVoice: typeof voiceRaw === "string" ? voiceRaw.slice(0, 80) : "",
   };
 }
 
@@ -202,24 +211,25 @@ export function invalidateModelCache(modelId?: string) {
 async function selectModelRows(whereActive: boolean): Promise<ModelRow[]> {
   if (whereActive) {
     return (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, modality, tts_voice
       FROM ai_models
       WHERE is_active = TRUE
       ORDER BY is_default DESC, sort_order ASC, created_at ASC
     `) as ModelRow[];
   }
   return (await sql`
-    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order
+    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, modality, tts_voice
     FROM ai_models
     ORDER BY is_default DESC, sort_order ASC, created_at ASC
   `) as ModelRow[];
 }
 
-/** كل الموديلات (للأدمن: الكل، للواجهة: النشطة فقط) — فارغ لو الجدول لسه متعملش */
-export async function listModels(activeOnly = false): Promise<ModelSummary[]> {
+/** كل الموديلات (للأدمن: الكل، للواجهة: النشطة فقط) — فارغ لو الجدول لسه متعملش.
+ *  modality اختياري لتصفية النوع (موديلات الشات لا ترى موديلات الصوت والعكس). */
+export async function listModels(activeOnly = false, modality?: "chat" | "tts"): Promise<ModelSummary[]> {
   try {
     const rows = await selectModelRows(activeOnly);
-    return rows.map(modelRowToSummary);
+    return rows.map(modelRowToSummary).filter((m) => !modality || m.modality === modality);
   } catch {
     return [];
   }
@@ -253,12 +263,13 @@ export async function updateModelsOrder(ids: string[]): Promise<ModelSummary[]> 
   return listModels(false);
 }
 
-/** id الموديل الافتراضي النشط — أو أول موديل نشط — أو 'malg-ai' كحل أخير */
+/** id موديل الشات الافتراضي النشط — أو أول موديل شات نشط — أو 'malg-ai' كحل أخير.
+ *  موديلات الصوت (tts) مستبعدة عمدًا: لها مسارها الخاص. */
 export async function getDefaultModelId(): Promise<string> {
   try {
     const rows = (await sql`
       SELECT id FROM ai_models
-      WHERE is_active = TRUE
+      WHERE is_active = TRUE AND modality = 'chat'
       ORDER BY is_default DESC, sort_order ASC, created_at ASC
       LIMIT 1
     `) as { id: string }[];
@@ -321,9 +332,53 @@ export async function getModelProvider(modelId: string): Promise<ModelProviderCo
   return config;
 }
 
+/**
+ * حل endpoint تحويل النص إلى صوت (OpenAI-compatible /audio/speech) من الـ base المخزّن.
+ * نفس فلسفة resolveProviderEndpoint: يقبل المسار الكامل أو الجذر أو أي prefix.
+ */
+export function resolveTtsEndpoint(baseUrl: string): string {
+  const b = cleanBaseUrl(baseUrl);
+  if (!b) return "";
+  if (/\/audio\/speech\/?(\?.*)?$/i.test(b)) return b;
+  if (/\/chat\/completions\/?(\?.*)?$/i.test(b)) {
+    return b.replace(/\/chat\/completions\/?(\?.*)?$/i, "/audio/speech");
+  }
+  if (/\/responses\/?(\?.*)?$/i.test(b)) {
+    return b.replace(/\/responses\/?(\?.*)?$/i, "/audio/speech");
+  }
+  if (/\/v1\/?(\?.*)?$/i.test(b)) return `${b}/audio/speech`;
+  if (/\/v1\//i.test(b)) return `${b}/audio/speech`.replace(/([^:])\/+/g, "$1/");
+  return `${b}/v1/audio/speech`;
+}
+
+export interface TtsModelConfig {
+  config: ModelProviderConfig;
+  /** الصوت الافتراضي للصف (قد يكون فارغًا — وقتها المزوّد يختار صوته الافتراضي) */
+  voice: string;
+  tier: "free" | "paid";
+}
+
+/** إعداد موديل صوتي نشط (موديل معين أو الأول بالترتيب) — يرمي NO_TTS_MODEL لو مفيش. */
+export async function getTtsModelConfig(modelId?: string): Promise<TtsModelConfig> {
+  const rows = (await sql`
+    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, modality, tts_voice
+    FROM ai_models
+    WHERE is_active = TRUE AND modality = 'tts'
+    ORDER BY is_default DESC, sort_order ASC, created_at ASC
+  `) as ModelRow[];
+  const wanted = modelId ? sanitizeModelId(modelId) : "";
+  const row = (wanted ? rows.find((r) => r.id === wanted) : undefined) ?? rows[0];
+  if (!row) throw new Error("NO_TTS_MODEL");
+  const voiceRaw = (row as { tts_voice?: unknown }).tts_voice;
+  return {
+    config: modelRowToConfig(row),
+    voice: typeof voiceRaw === "string" ? voiceRaw.trim().slice(0, 80) : "",
+    tier: (row as { tier?: unknown }).tier === "paid" ? "paid" : "free",
+  };
+}
+
 /** آخر إعداد محفوظ لموديل معين حتى لو مش نشط — للعرض في لوحة الأدمن */
-export async function getSavedModelProvider(modelId: string): Promise<ModelProviderConfig | null> {
-  const id = sanitizeModelId(modelId) || "malg-ai";
+export async function getSavedModelProvider(modelId: string): Promise<ModelProviderConfig | null> {  const id = sanitizeModelId(modelId) || "malg-ai";
   try {
     const rows = (await sql`
       SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order
@@ -603,13 +658,15 @@ export interface ProviderInput {
   temperature?: unknown;
   maxTokens?: unknown;
   protocol?: unknown;
+  /** الصوت الافتراضي لموديلات TTS (اختياري — مثال: alloy) */
+  ttsVoice?: unknown;
   /** أسماء بديلة مقبولة من الواجهة */
   apiProtocol?: unknown;
   api_protocol?: unknown;
 }
 
 export type ProviderValidation =
-  | { ok: true; value: { name: string; baseUrl: string; protocol: ProviderProtocol; model: string; apiKeys: string[]; temperature: number; maxTokens: number } }
+  | { ok: true; value: { name: string; baseUrl: string; protocol: ProviderProtocol; model: string; apiKeys: string[]; temperature: number; maxTokens: number; ttsVoice: string } }
   | { ok: false; error: string };
 
 function parseProtocolInput(input: ProviderInput, baseUrlRaw: string): ProviderProtocol {
@@ -662,5 +719,7 @@ export function validateProviderInput(input: ProviderInput): ProviderValidation 
   if (!Number.isFinite(maxTokens) || maxTokens <= 0) maxTokens = 128000;
   maxTokens = Math.min(Math.max(maxTokens, 1000), 256000);
 
-  return { ok: true, value: { name, baseUrl, protocol, model, apiKeys, temperature, maxTokens } };
+  const ttsVoice = String(input.ttsVoice ?? "").trim().slice(0, 80);
+
+  return { ok: true, value: { name, baseUrl, protocol, model, apiKeys, temperature, maxTokens, ttsVoice } };
 }

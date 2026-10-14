@@ -1,0 +1,166 @@
+/**
+ * توليد الصوت (TTS): نص → مقطع صوتي عبر أي موديل صوتي يضيفه الأدمن
+ * (نفس جدول ai_models — modality='tts' — بنفس فكرة مفاتيح الدوران).
+ *
+ * - للمشتركين (Pro) والأدمن فقط — يتحقق منه الراوت قبل النداء.
+ * - الخصم من رصيد التوكنز بعدد الحروف (حماية تكلفة)، والحد الأقصى للنص
+ *   يحمي من فواتير ضخمة في الطلب الواحد.
+ */
+
+import { sql, ensureSchema } from "./db";
+import { cleanBaseUrl, getTtsModelConfig, resolveTtsEndpoint } from "./provider";
+import { checkAndMaybeRenewQuota, deductTokens } from "./quota";
+import { hasPaidSubscription } from "./subscription";
+
+export const TTS_TEXT_MAX_CHARS = 2000;
+export const TTS_DEFAULT_VOICE = "alloy";
+const TTS_TIMEOUT_MS = 120_000;
+
+export interface TtsVoiceModel {
+  id: string;
+  name: string;
+  description: string;
+  tier: "free" | "paid";
+  locked: boolean;
+  voice: string;
+  isDefault: boolean;
+}
+
+/** موديلات الصوت النشطة للمستخدم + هل له حق الاستخدام (مشترك/أدمن) */
+export async function listTtsModelsForUser(
+  userId: string,
+  isAdmin: boolean
+): Promise<{ models: TtsVoiceModel[]; hasAccess: boolean }> {
+  await ensureSchema();
+  const unlocked = isAdmin || (await hasPaidSubscription(userId).catch(() => false));
+  let rows: {
+    id: string;
+    name: string;
+    description: string | null;
+    tier: unknown;
+    tts_voice: unknown;
+    is_default: boolean;
+  }[] = [];
+  try {
+    rows = (await sql`
+      SELECT id, name, description, tier, tts_voice, is_default
+      FROM ai_models
+      WHERE is_active = TRUE AND modality = 'tts'
+      ORDER BY is_default DESC, sort_order ASC, created_at ASC
+    `) as typeof rows;
+  } catch {
+    rows = [];
+  }
+  return {
+    hasAccess: unlocked,
+    models: rows.map((r) => {
+      const tier = r.tier === "paid" ? "paid" : "free";
+      return {
+        id: r.id,
+        name: r.name,
+        description: typeof r.description === "string" ? r.description : "",
+        tier,
+        locked: tier === "paid" && !unlocked,
+        voice: typeof r.tts_voice === "string" ? r.tts_voice : "",
+        isDefault: r.is_default === true,
+      };
+    }),
+  };
+}
+
+export interface SynthesizeOptions {
+  userId: string;
+  isAdmin: boolean;
+  text: string;
+  modelId?: string;
+}
+
+export interface SynthesizeResult {
+  audio: Uint8Array;
+  contentType: string;
+  modelName: string;
+  chars: number;
+}
+
+function upstreamErrorMessage(status: number, bodyText: string): string {
+  try {
+    const j = JSON.parse(bodyText) as { error?: { message?: unknown } | string };
+    const m = typeof j?.error === "string" ? j.error : (j?.error as { message?: unknown } | undefined)?.message;
+    if (typeof m === "string" && m.trim()) return m.trim().slice(0, 300);
+  } catch {
+    // تجاهل — رسالة عامة تحت
+  }
+  if (status === 401 || status === 403) return "مفتاح المزوّد مرفوض — راجع مفاتيح موديل الصوت من لوحة الأدمن";
+  if (status === 429) return "المزوّد مضغوط حاليًا (rate limit) — حاول بعد دقيقة";
+  return "تعذّر توليد الصوت من المزوّد — حاول مجددًا";
+}
+
+/** يولّد الصوت ويرجع الباينري — يرمي أخطاء عربية جاهزة للعرض (err.message). */
+export async function synthesizeSpeech(opts: SynthesizeOptions): Promise<SynthesizeResult> {
+  const text = String(opts.text ?? "").trim();
+  if (!text) throw new Error("اكتب النص أولًا");
+  if (text.length > TTS_TEXT_MAX_CHARS) {
+    throw new Error(`النص طويل — الحد الأقصى ${TTS_TEXT_MAX_CHARS} حرف في المرة الواحدة`);
+  }
+
+  await ensureSchema();
+
+  // رصيد التوكنز يحمي من إساءة الاستخدام حتى للمشتركين (يتجدد مع الباقة)
+  const quotaCheck = await checkAndMaybeRenewQuota(opts.userId, opts.isAdmin);
+  if (quotaCheck.blocked) throw new Error(quotaCheck.message);
+
+  let resolved: Awaited<ReturnType<typeof getTtsModelConfig>>;
+  try {
+    resolved = await getTtsModelConfig(opts.modelId);
+  } catch {
+    throw new Error("لا يوجد موديل صوتي نشط — أضف واحدًا من لوحة الأدمن (الموديلات) وحدد نوعه «صوت»");
+  }
+  if (resolved.tier === "paid" && !opts.isAdmin && !(await hasPaidSubscription(opts.userId).catch(() => false))) {
+    throw new Error("NEEDS_PRO");
+  }
+
+  const endpoint = resolveTtsEndpoint(resolved.config.baseUrl || cleanBaseUrl(""));
+  if (!endpoint) throw new Error("رابط مزوّد الصوت غير مكتمل — راجعه من لوحة الأدمن");
+  const keys = Array.isArray(resolved.config.apiKeys) ? resolved.config.apiKeys.filter(Boolean) : [];
+  if (keys.length === 0) throw new Error("موديل الصوت بلا مفاتيح — أضف مفتاحًا من لوحة الأدمن");
+
+  const payload = {
+    model: resolved.config.model,
+    input: text,
+    voice: resolved.voice || TTS_DEFAULT_VOICE,
+    response_format: "mp3",
+  };
+
+  let lastError = "";
+  for (const key of keys) {
+    let res: Response;
+    try {
+      res = await fetch(endpoint, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(TTS_TIMEOUT_MS),
+      });
+    } catch {
+      lastError = "تعذّر الوصول لمزوّد الصوت — حاول مجددًا";
+      continue; // جرّب المفتاح التالي
+    }
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => "");
+      if (res.status === 400) throw new Error(upstreamErrorMessage(res.status, bodyText));
+      lastError = upstreamErrorMessage(res.status, bodyText);
+      continue; // 401/429/5xx → المفتاح التالي
+    }
+    const contentType = res.headers.get("content-type") || "audio/mpeg";
+    if (!contentType.startsWith("audio/")) {
+      const bodyText = await res.text().catch(() => "");
+      throw new Error(upstreamErrorMessage(res.status, bodyText));
+    }
+    const buf = new Uint8Array(await res.arrayBuffer());
+    if (buf.length === 0) throw new Error("المزوّد رجّع صوتًا فارغًا — حاول مجددًا");
+    // الخصم بعد النجاح فقط — بعدد الحروف (تسعير الصوت بالحرف)
+    await deductTokens(opts.userId, text.length, opts.isAdmin).catch(() => {});
+    return { audio: buf, contentType, modelName: resolved.config.displayName, chars: text.length };
+  }
+  throw new Error(lastError || "تعذّر توليد الصوت — حاول مجددًا");
+}

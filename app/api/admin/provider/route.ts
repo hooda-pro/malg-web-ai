@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
       UPDATE ai_models
       SET name = ${displayName}, base_url = ${v.baseUrl}, protocol = ${v.protocol},
           model = ${v.model}, api_keys = ${v.apiKeys}, temperature = ${v.temperature},
-          max_tokens = ${v.maxTokens}, is_active = TRUE, updated_at = now()
+          max_tokens = ${v.maxTokens}, tts_voice = ${v.ttsVoice}, is_active = TRUE, updated_at = now()
       WHERE id = ${requestedId}
     `;
   } catch (e) {

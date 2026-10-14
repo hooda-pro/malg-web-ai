@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
 
   const knownIds = new Set<string>(LEGACY_MODEL_IDS);
   try {
-    for (const m of await listModels(false)) knownIds.add(m.id);
+    for (const m of await listModels(false, "chat")) knownIds.add(m.id);
   } catch {
     // تجاهل — القيم القديمة كافية كـ fallback
   }
