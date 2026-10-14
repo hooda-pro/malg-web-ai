@@ -18,13 +18,11 @@
 - توثيق env للسيرفر فقط (Stripe لاحقًا + تحليلات) بدون أي سر في الملفات: `.env.example`.
 - تفاصيل: `CHANGELOG-v2-platform.md`.
 
-## 3) المشاريع والذاكرة (P0)
-- جداول جديدة: `projects` + `project_files` (حتى 20 ملف، 12k حرف/ملف) + `user_facts` (حتى 100 حقيقة، 300 حرف) + عمود `chat_sessions.project_id` (`lib/db.ts`).
-- منطق: `lib/projects.ts` (CRUD + سياق بميزانية 24k حرف) + `lib/facts.ts` (أعلى 10 حقائق).
-- API: `/api/projects` (GET/POST)، `/api/projects/[id]` (GET/PATCH/DELETE)، `/api/projects/[id]/files` (GET/PUT)، `/api/projects/[id]/attach` (ربط/فك)، `/api/facts` (GET/POST)، `/api/facts/[id]` (DELETE) — كلها 401 بدون جلسة.
-- حقن تلقائي في الـ system prompt (بحد 8000 حرف) في `/api/chat` و `/api/chat/continue`.
-- واجهة: قسم مشاريع أعلى درج المحادثات + تبويبا «المشاريع» و«حقائقي» في الإعدادات (4 لغات).
-- تفاصيل: `CHANGELOG-v2-projects.md`.
+## 3) حقائق المستخدم (تبقى المشاريع اتشالت بطلبك)
+- جدول `user_facts` (حتى 100 حقيقة، 300 حرف) + تبويب «حقائقي» في الإعدادات (4 لغات) + `lib/facts.ts` (أعلى 10 حقائق).
+- API: `/api/facts` (GET/POST)، `/api/facts/[id]` (DELETE) — 401 بدون جلسة.
+- حقن تلقائي في الـ system prompt في `/api/chat` و `/api/chat/continue`.
+- ميزة المشاريع (`projects`/`project_files`/واجهتها) اتشالت بالكامل؛ جداولها القديمة في `lib/db.ts` متسابة بدون ضرر.
 
 ## التشغيل
 ```bash

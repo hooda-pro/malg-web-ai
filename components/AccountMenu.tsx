@@ -25,7 +25,7 @@ import { Kbd, modKeyLabel } from "./ui/Controls";
 import { useSettings, type Theme } from "./SettingsContext";
 import { cn } from "@/lib/utils";
 
-export type SettingsTab = "general" | "personalization" | "projects" | "facts" | "billing" | "data" | "account";
+export type SettingsTab = "general" | "personalization" | "facts" | "billing" | "data" | "account";
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
