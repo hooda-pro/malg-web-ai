@@ -44,7 +44,7 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
   const [maxTokens, setMaxTokens] = useState("128000");
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [testResult, setTestResult] = useState<{ ok: boolean; text: string; detail?: string; endpoint?: string } | null>(null);
 
   // إدارة المفاتيح
   const [newKey, setNewKey] = useState("");
@@ -170,10 +170,10 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
-        setTestResult({ ok: false, text: data.error || "فشل الاتصال" });
+        setTestResult({ ok: false, text: data.error || "فشل الاتصال", detail: typeof data.detail === "string" ? data.detail : undefined, endpoint: typeof data.endpoint === "string" ? data.endpoint : undefined });
         return;
       }
-      setTestResult({ ok: true, text: data.sample ? `شغال [${data.protocol ?? protocol}] — رد الموديل: ${data.sample}` : `شغال [${data.protocol ?? protocol}] — الاتصال ناجح` });
+      setTestResult({ ok: true, text: data.sample ? `شغال [${data.protocol ?? protocol}] — رد الموديل: ${data.sample}` : `شغال [${data.protocol ?? protocol}] — الاتصال ناجح`, endpoint: typeof data.endpoint === "string" ? data.endpoint : undefined });
     } catch {
       setTestResult({ ok: false, text: "مشكلة في الاتصال — حاول تاني" });
     } finally {
@@ -861,9 +861,19 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
           </div>
 
           {testResult && (
-            <p className={`rounded-md px-3 py-2 text-[12.5px] leading-5 ${testResult.ok ? "bg-live-soft text-live" : "bg-danger-soft text-danger"}`} dir="auto">
-              {testResult.text}
-            </p>
+            <div className={`rounded-md px-3 py-2 text-[12.5px] leading-5 ${testResult.ok ? "bg-live-soft text-live" : "bg-danger-soft text-danger"}`}>
+              <p dir="auto">{testResult.text}</p>
+              {testResult.endpoint && (
+                <p className="mt-1 break-all text-[11px]" dir="ltr">
+                  <span className="font-semibold">Endpoint:</span> {testResult.endpoint}
+                </p>
+              )}
+              {testResult.detail && (
+                <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap break-words rounded bg-black/5 p-2 text-[11px] leading-4 text-ink" dir="ltr">
+                  {testResult.detail}
+                </pre>
+              )}
+            </div>
           )}
 
           <div className="flex gap-2">
