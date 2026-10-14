@@ -65,8 +65,11 @@ const DEFAULTS: Settings = {
 const STORAGE_KEY = "mlag-settings";
 
 interface SettingsValue extends Settings {
-  /** قائمة الموديلات المتاحة من السيرفر (أو fallback محلي قبل التحميل) */
+  /** قائمة الموديلات من السيرفر — فارغة أثناء التحميل حتى لا يظهر اسم وهمي،
+   * وfallback محلي عند فشل الشبكة فقط */
   models: ModelOption[];
+  /** true من أول render حتى وصول قائمة السيرفر (أو فشلها) */
+  modelsLoading: boolean;
   /** id الموديل الافتراضي من السيرفر */
   defaultModelId: string;
   /** الثيم الفعلي بعد حل "system" */
@@ -177,11 +180,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [settings.lang]
   );
 
-  const resolvedModels = models ?? FALLBACK_MODELS;
+  const resolvedModels = models ?? [];
   const value = useMemo<SettingsValue>(
     () => ({
       ...settings,
       models: resolvedModels,
+      modelsLoading: models === null,
       defaultModelId,
       resolvedTheme,
       dir: settings.lang === "ar" ? "rtl" : "ltr",
@@ -194,7 +198,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setTone,
       t,
     }),
-    [settings, resolvedModels, defaultModelId, resolvedTheme, update, setLang, setTheme, setAnimations, setShowTime, setModel, setTone, t]
+    [settings, resolvedModels, models, defaultModelId, resolvedTheme, update, setLang, setTheme, setAnimations, setShowTime, setModel, setTone, t]
   );
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
@@ -206,6 +210,7 @@ export function useSettings(): SettingsValue {
     return {
       ...DEFAULTS,
       models: FALLBACK_MODELS,
+      modelsLoading: false,
       defaultModelId: "malg-a3",
       resolvedTheme: "light",
       dir: "rtl",

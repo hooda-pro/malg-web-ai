@@ -233,7 +233,7 @@ function ModelPicker({
   onPickModel: (id: ModelId) => void;
   onLockedModel?: (id: ModelId) => void;
 }) {
-  const { t, model, models } = useSettings();
+  const { t, model, models, modelsLoading } = useSettings();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -260,11 +260,20 @@ function ModelPicker({
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
+        disabled={modelsLoading}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="flex h-9 items-center gap-1.5 rounded-full px-3 transition-colors duration-1 hover:bg-surface-3"
+        aria-label={modelsLoading ? t("modelsLoading") : undefined}
+        className={cn(
+          "flex h-9 items-center gap-1.5 rounded-full px-3 transition-colors duration-1 hover:bg-surface-3",
+          modelsLoading && "pointer-events-none opacity-70"
+        )}
       >
-        <span dir="ltr" className="text-[15px] font-semibold tracking-title text-ink">{currentLabel}</span>
+        {modelsLoading ? (
+          <span className="skel inline-block h-5 w-24 rounded-full" aria-hidden="true" />
+        ) : (
+          <span dir="ltr" className="text-[15px] font-semibold tracking-title text-ink">{currentLabel}</span>
+        )}
         {lockedModel && <Lock size={11} className="text-ink-3" aria-hidden="true" />}
         <ChevronDown
           size={14}
