@@ -337,7 +337,8 @@ export async function getModelProvider(modelId: string): Promise<ModelProviderCo
  * نفس فلسفة resolveProviderEndpoint: يقبل المسار الكامل أو الجذر أو أي prefix.
  */
 export function resolveTtsEndpoint(baseUrl: string): string {
-  const b = cleanBaseUrl(baseUrl);
+  // شيل أي query/hash (مثال: لصق رابط استعراض الأصوات بالغلط) قبل بناء المسار
+  const b = cleanBaseUrl(baseUrl).split(/[?#]/)[0].replace(/\/+$/, "");
   if (!b) return "";
   if (/\/audio\/speech\/?(\?.*)?$/i.test(b)) return b;
   if (/\/chat\/completions\/?(\?.*)?$/i.test(b)) {
@@ -698,6 +699,10 @@ export function validateProviderInput(input: ProviderInput): ProviderValidation 
   }
   const model = String(input.model ?? "").trim().slice(0, 200);
   if (!model) return { ok: false, error: "اسم الموديل مطلوب — زي ما المزوّد مسمّيه بالظبط" };
+  // غلطة شائعة: لصق رابط استعراض الأصوات (/audio/voices) كـ Base URL — ده للتصفح بس
+  if (/\/audio\/voices/i.test(rawBase)) {
+    return { ok: false, error: "هذا رابط استعراض الأصوات — حط رابط الـ API الجذري (مثال: https://api.xkiro.com/v1)" };
+  }
 
   const rawKeys = Array.isArray(input.apiKeys)
     ? input.apiKeys.map((k) => String(k ?? "").trim()).filter(Boolean)

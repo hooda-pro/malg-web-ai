@@ -958,14 +958,20 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
           )}
 
           <div className="flex gap-2">
-            <button
-              onClick={test}
-              disabled={testing || saving}
-              className="flex flex-1 items-center justify-center gap-2 rounded-md border border-hair bg-surface-2 py-2.5 text-[13.5px] font-semibold text-ink hover:border-accent-line hover:text-accent disabled:opacity-40"
-            >
-              {testing ? <Loader2 size={14} className="animate-spin" /> : <FlaskConical size={14} />}
-              {testing ? "جاري الاختبار…" : "اختبار الاتصال"}
-            </button>
+            {selectedSummary?.modality === "tts" ? (
+              <p className="flex-1 rounded-md bg-surface-2 px-3 py-2.5 text-[12.5px] leading-5 text-ink-3">
+                زرار الاختبار للمحادثة فقط — لموديلات الصوت جرّب التوليد الحقيقي من «استوديو الصوت».
+              </p>
+            ) : (
+              <button
+                onClick={test}
+                disabled={testing || saving}
+                className="flex flex-1 items-center justify-center gap-2 rounded-md border border-hair bg-surface-2 py-2.5 text-[13.5px] font-semibold text-ink hover:border-accent-line hover:text-accent disabled:opacity-40"
+              >
+                {testing ? <Loader2 size={14} className="animate-spin" /> : <FlaskConical size={14} />}
+                {testing ? "جاري الاختبار…" : "اختبار الاتصال"}
+              </button>
+            )}
             <button
               onClick={save}
               disabled={saving || testing}
