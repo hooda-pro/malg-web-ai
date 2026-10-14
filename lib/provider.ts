@@ -574,6 +574,8 @@ export function resolveProviderEndpoint(baseUrl: string, protocol: ProviderProto
     if (/\/chat\/completions\/?(\?.*)?$/i.test(b)) {
       return b.replace(/\/chat\/completions\/?(\?.*)?$/i, "/responses");
     }
+    // Z.AI and compatible PaaS endpoints use /api/paas/vN as the API root, not /v1.
+    if (/\/api\/paas\/v\d+$/i.test(b)) return `${b}/responses`;
     if (/\/v1\/?(\?.*)?$/i.test(b)) return `${b}/responses`;
     // قاعدة تحتوي /v1 في المنتصف (مثال: …/inference/openai/v1/custom؟ لا —
     // لو فيها /v1/ فعلًا نضيف /responses فقط بدل تكرار v1)
@@ -586,6 +588,8 @@ export function resolveProviderEndpoint(baseUrl: string, protocol: ProviderProto
   if (/\/responses\/?(\?.*)?$/i.test(b)) {
     return b.replace(/\/responses\/?(\?.*)?$/i, "/chat/completions");
   }
+  // Without this check, /api/paas/v4 incorrectly becomes /api/paas/v4/v1/chat/completions.
+  if (/\/api\/paas\/v\d+$/i.test(b)) return `${b}/chat/completions`;
   if (/\/v1\/?(\?.*)?$/i.test(b)) return `${b}/chat/completions`;
   if (/\/v1\//i.test(b)) return `${b}/chat/completions`.replace(/([^:])\/+/g, "$1/");
   return `${b}/v1/chat/completions`;
