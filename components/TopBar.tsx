@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Coins, Crown, Lock, PanelLeft, Share2, SquarePen } from "lucide-react";
 import { formatTokens } from "@/lib/ai";
-import { IconButton } from "./ui/Controls";
+import { IconButton, Segmented } from "./ui/Controls";
 import { useSettings, type ModelId } from "./SettingsContext";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +15,8 @@ export default function TopBar({
   onOpenRecharge,
   onNewChat,
   onShare,
+  mode,
+  onModeChange,
 }: {
   onToggleDrawer: () => void;
   sidebarCollapsed: boolean;
@@ -24,11 +26,14 @@ export default function TopBar({
   onNewChat: () => void;
   /** مشاركة المحادثة الحالية برابط — null = الزرار مخفي (مؤقت/لا جلسة) */
   onShare?: (() => void) | null;
+  /** وضع العرض الحالي للتبديل بين الشات والاستوديو من الشريط العلوي */
+  mode: "chat" | "voice";
+  onModeChange: (mode: "chat" | "voice") => void;
 }) {
   const { t } = useSettings();
 
   return (
-    <header className="m-topbar glass sticky top-0 z-nav flex h-[calc(3.25rem+env(safe-area-inset-top))] shrink-0 items-center gap-1.5 border-b border-hair ps-[max(0.625rem,env(safe-area-inset-left))] pe-[max(0.625rem,env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] sm:px-4">
+    <header className="m-topbar glass sticky top-0 z-nav flex h-[calc(3.25rem+env(safe-area-inset-top))] shrink-0 items-center gap-1.5 border-b border-hair ps-[max(0.625rem,env(safe-area-inset-left))] pe-[max(0.625rem,env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] sm:px-4 relative">
       <IconButton
         label={t("toggleSidebar")}
         onClick={onToggleDrawer}
@@ -44,6 +49,18 @@ export default function TopBar({
           onOpenRecharge={onOpenRecharge}
         />
       )}
+
+      <div className="absolute left-1/2 -translate-x-1/2">
+        <Segmented<"chat" | "voice">
+          size="sm"
+          value={mode}
+          onChange={onModeChange}
+          options={[
+            { value: "chat", label: t("modeChat") },
+            { value: "voice", label: t("modeVoice") },
+          ]}
+        />
+      </div>
 
       <div className="ms-auto flex items-center gap-1">
         {onShare && (

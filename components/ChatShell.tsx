@@ -1252,6 +1252,15 @@ export default function ChatShell() {
           onOpenRecharge={openRecharge}
           onNewChat={handleNewChat}
           onShare={currentSessionId && !inTempMode && !voiceOpen ? () => setShareOpen(true) : undefined}
+          mode={voiceOpen ? "voice" : "chat"}
+          onModeChange={(m) => {
+            if (m === "voice") {
+              setDrawerOpen(false);
+              setVoiceOpen(true);
+            } else {
+              setVoiceOpen(false);
+            }
+          }}
         />
 
         {inTempMode && (

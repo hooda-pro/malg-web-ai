@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, LogIn, Mic, PanelLeftClose, Pin, Search, Sparkles, SquarePen, Timer, Trash2, X } from "lucide-react";
+import { AudioLines, Download, LogIn, PanelLeftClose, Pin, Search, Sparkles, SquarePen, Timer, Trash2, X } from "lucide-react";
 import type { ChatSession, SessionUser } from "@/lib/types";
 import type { SubscriptionInfo } from "@/lib/plans";
 import { Button, IconButton, Kbd, modKeyLabel } from "./ui/Controls";
@@ -256,8 +256,8 @@ export default function ChatDrawer({
                   : "border-hair bg-surface text-ink shadow-1 hover:border-hair-2"
               )}
             >
-              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-accent text-accent-ink shadow-accent">
-                <Mic size={17} />
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-accent to-accent-hover text-accent-ink shadow-accent">
+                <AudioLines size={17} />
               </span>
               <span className="flex-1 text-start">{t("voiceStudio")}</span>
               <span className="shrink-0 rounded-full bg-warn-soft px-2 py-px text-[10.5px] font-bold text-warn">
@@ -266,7 +266,7 @@ export default function ChatDrawer({
             </button>
           )}
 
-          {user && <div className="border-t border-hair" aria-hidden="true" />}
+          {user && <div className="-mx-3 border-t border-hair" aria-hidden="true" />}
 
           <button
             onClick={onNewChat}

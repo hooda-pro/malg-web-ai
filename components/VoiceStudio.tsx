@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Crown, Download, Loader2, Mic, Play, X } from "lucide-react";
+import { AudioLines, Crown, Download, Loader2, Play, X } from "lucide-react";
 import { Button } from "./ui/Controls";
 import { useSettings } from "./SettingsContext";
 
@@ -68,10 +68,6 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
     };
   }, [load]);
 
-  function trackUrl(url: string) {
-    urlsRef.current.push(url);
-  }
-
   function removeClip(id: number) {
     setClips((prev) => {
       const target = prev.find((c) => c.id === id);
@@ -103,7 +99,7 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
       const buf = await r.arrayBuffer();
       const blob = new Blob([buf], { type: r.headers.get("content-type") || "audio/mpeg" });
       const url = URL.createObjectURL(blob);
-      trackUrl(url);
+      urlsRef.current.push(url);
       let modelName = "";
       try {
         modelName = decodeURIComponent(r.headers.get("x-tts-model") || "");
@@ -127,22 +123,30 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      <div className="mx-auto w-full max-w-[720px] px-4 pb-10 pt-8 sm:px-6">
-        <div className="flex items-center gap-3">
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-accent text-accent-ink shadow-accent">
-            <Mic size={20} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h1 className="flex items-center gap-2 text-[19px] font-semibold tracking-display text-ink">
-              {t("voiceStudio")}
-              <span className="shrink-0 rounded-full bg-warn-soft px-2 py-px text-[10.5px] font-bold text-warn">
-                {t("modelProBadge")}
-              </span>
-            </h1>
+      <div className="mx-auto w-full max-w-[720px] px-4 pb-10 pt-6 sm:px-6 sm:pt-8">
+        {/* بطاقة الترويسة */}
+        <div className="relative overflow-hidden rounded-3xl border border-hair bg-surface p-5 shadow-2 sm:p-6">
+          <div className="aurora" aria-hidden="true">
+            <span className="aurora-blob left-[70%] top-[-60%] h-48 w-48" style={{ background: "var(--aurora-1)" }} />
+            <span className="aurora-blob aurora-blob-b left-[4%] top-[10%] h-40 w-40" style={{ background: "var(--aurora-2)" }} />
+          </div>
+          <div className="relative flex items-center gap-3.5">
+            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-accent to-accent-hover p-3 text-accent-ink shadow-accent">
+              <AudioLines size={24} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h1 className="flex flex-wrap items-center gap-2 text-[20px] font-semibold tracking-display text-ink">
+                {t("voiceStudio")}
+                <span className="shrink-0 rounded-full bg-warn-soft px-2 py-px text-[10.5px] font-bold text-warn">
+                  {t("modelProBadge")}
+                </span>
+              </h1>
+              <p className="mt-0.5 truncate text-[13px] text-ink-2">{t("voiceStudioHint")}</p>
+            </div>
           </div>
         </div>
 
-        <div className="mt-5">
+        <div className="mt-4">
           {models === null && !error && (
             <p className="flex items-center gap-2 text-[13px] text-ink-2">
               <Loader2 size={14} className="animate-spin" />
@@ -151,17 +155,18 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
           )}
 
           {error && (
-            <p role="alert" className="rounded-xl bg-danger-soft px-3.5 py-2.5 text-[13px] leading-6 text-danger">
+            <p role="alert" className="rounded-2xl bg-danger-soft px-4 py-3 text-[13px] leading-6 text-danger">
               {error}
             </p>
           )}
 
           {models !== null && !hasAccess && (
-            <div className="rounded-2xl border border-hair bg-surface p-6 text-center shadow-1">
-              <span className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-warn-soft text-warn">
-                <Crown size={22} />
+            <div className="rounded-3xl border border-hair bg-surface p-8 text-center shadow-2">
+              <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-warn-soft text-warn">
+                <Crown size={24} />
               </span>
-              <p className="mt-3 text-[15px] font-semibold text-ink">{t("voiceProOnly")}</p>
+              <p className="mt-3 text-[16px] font-semibold text-ink">{t("voiceProOnly")}</p>
+              <p className="mx-auto mt-1 max-w-[40ch] text-[13px] leading-6 text-ink-2">{t("voiceStudioHint")}</p>
               <Button variant="primary" size="sm" onClick={onOpenPlans} className="mt-4">
                 {t("modelProBadge")} — {t("settingsBilling")}
               </Button>
@@ -171,27 +176,33 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
           {models !== null && hasAccess && (
             <>
               {models.length === 0 ? (
-                <p className="rounded-xl bg-warn-soft px-3.5 py-2.5 text-[13px] leading-6 text-warn">{t("ttsNoModels")}</p>
+                <p className="rounded-2xl bg-warn-soft px-4 py-3 text-[13px] leading-6 text-warn">{t("ttsNoModels")}</p>
               ) : (
-                <div className="rounded-2xl border border-hair bg-surface-2 p-4 shadow-2">
-                  <label className="block">
-                    <span className="mb-1.5 block text-[12.5px] font-medium text-ink-2">{t("ttsModelLabel")}</span>
-                    <span className="relative block">
-                      <select
-                        value={modelId}
-                        onChange={(e) => setModelId(e.target.value)}
-                        className="h-11 w-full cursor-pointer appearance-none rounded-xl border border-hair bg-surface pe-9 ps-3.5 text-[14px] text-ink focus:outline-none"
-                        dir="auto"
-                      >
-                        {models.map((m) => (
-                          <option key={m.id} value={m.id} disabled={m.locked}>
-                            {m.name}
-                            {m.locked ? ` (${t("modelProBadge")})` : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </span>
-                  </label>
+                <div className="rounded-3xl border border-hair bg-surface-2 p-4 shadow-2 sm:p-5">
+                  <div className="grid gap-3 sm:grid-cols-[1fr_180px] sm:items-end">
+                    <label className="block min-w-0">
+                      <span className="mb-1.5 block text-[12.5px] font-medium text-ink-2">{t("ttsModelLabel")}</span>
+                      <span className="relative block">
+                        <select
+                          value={modelId}
+                          onChange={(e) => setModelId(e.target.value)}
+                          className="h-12 w-full cursor-pointer appearance-none rounded-2xl border border-hair bg-surface pe-9 ps-3.5 text-[14px] font-medium text-ink shadow-1 focus:outline-none"
+                          dir="auto"
+                        >
+                          {models.map((m) => (
+                            <option key={m.id} value={m.id} disabled={m.locked}>
+                              {m.name}
+                              {m.locked ? ` (${t("modelProBadge")})` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </span>
+                    </label>
+                    <div className="tnum hidden items-center justify-end gap-1.5 pb-3 text-[12px] text-ink-3 sm:flex" aria-hidden="true">
+                      <AudioLines size={14} />
+                      {selected?.voice || selected?.name || ""}
+                    </div>
+                  </div>
 
                   <label className="mt-3 block">
                     <span className="mb-1.5 flex items-center justify-between text-[12.5px] font-medium text-ink-2">
@@ -206,30 +217,39 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
                       rows={6}
                       dir="auto"
                       placeholder={t("ttsPlaceholder")}
-                      className="w-full resize-y rounded-xl border border-hair bg-surface px-3.5 py-2.5 text-[15px] leading-7 text-ink placeholder:text-ink-3 focus:outline-none"
+                      className="min-h-[150px] w-full resize-y rounded-2xl border border-hair bg-surface px-4 py-3 text-[15px] leading-8 text-ink shadow-1 placeholder:text-ink-3 focus:outline-none"
                     />
                   </label>
 
-                  <Button variant="primary" onClick={generate} disabled={busy || !text.trim()} className="mt-3 w-full">
-                    {busy ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}
+                  <Button
+                    variant="primary"
+                    onClick={generate}
+                    disabled={busy || !text.trim()}
+                    className="btn-sheen mt-3 h-12 w-full !rounded-2xl !text-[15px]"
+                  >
+                    {busy ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
                     {busy ? t("ttsGenerating") : t("ttsGenerate")}
                   </Button>
                 </div>
               )}
 
-              {clips.length > 0 && (
-                <div className="mt-5">
-                  <h2 className="mb-2 px-1 text-[12px] font-semibold uppercase tracking-micro text-ink-3">
+              {clips.length > 0 ? (
+                <div className="mt-6">
+                  <h2 className="mb-2 flex items-center gap-2 px-1 text-[12px] font-semibold uppercase tracking-micro text-ink-3">
                     {t("ttsHistory")}
+                    <span className="tnum rounded-full bg-surface-3 px-2 py-px text-[11px]">{clips.length}</span>
                   </h2>
-                  <ul className="space-y-2">
-                    {clips.map((c) => (
-                      <li key={c.id} className="rounded-2xl border border-hair bg-surface p-3.5 shadow-1">
-                        <p className="truncate text-[13px] text-ink-2" dir="auto" title={c.text}>
+                  <ul className="space-y-2.5">
+                    {clips.map((c, i) => (
+                      <li
+                        key={c.id}
+                        className={i === 0 ? "rounded-3xl border border-accent-line bg-surface p-4 shadow-2" : "rounded-3xl border border-hair bg-surface p-4 shadow-1"}
+                      >
+                        <p className="truncate text-[13.5px] font-medium text-ink" dir="auto" title={c.text}>
                           {c.text}
                         </p>
                         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-                        <audio controls src={c.url} className="mt-2 w-full" />
+                        <audio controls src={c.url} className="mt-2.5 w-full" />
                         <div className="mt-2 flex items-center justify-between gap-2">
                           <span className="truncate text-[11.5px] text-ink-3" dir="auto">
                             {c.modelName || selected?.name || ""}
@@ -238,7 +258,7 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
                             <a
                               href={c.url}
                               download={`malg-voice-${c.at}.mp3`}
-                              className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px] font-medium text-accent hover:bg-accent-soft"
+                              className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1.5 text-[12.5px] font-medium text-accent transition-colors hover:bg-accent hover:text-accent-ink"
                             >
                               <Download size={13} />
                               {t("ttsDownload")}
@@ -257,6 +277,15 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
                     ))}
                   </ul>
                 </div>
+              ) : (
+                models.length > 0 && (
+                  <div className="mt-6 rounded-3xl border border-dashed border-hair-2 px-4 py-8 text-center">
+                    <span className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-surface-3 text-ink-3">
+                      <AudioLines size={20} />
+                    </span>
+                    <p className="mt-2 text-[13px] text-ink-3">{t("ttsEmpty")}</p>
+                  </div>
+                )
               )}
             </>
           )}
