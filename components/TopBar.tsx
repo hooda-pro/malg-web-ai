@@ -14,9 +14,6 @@ export default function TopBar({
   totalTokens,
   onOpenRecharge,
   onNewChat,
-  lockedModel,
-  onPickModel,
-  onLockedModel,
   onShare,
 }: {
   onToggleDrawer: () => void;
@@ -25,11 +22,6 @@ export default function TopBar({
   totalTokens?: number | null;
   onOpenRecharge: () => void;
   onNewChat: () => void;
-  /** الموديل اللي الشات الحالي متثبت عليه (لو اتبعت فيه رسايل بالفعل) */
-  lockedModel?: ModelId | null;
-  onPickModel: (id: ModelId) => void;
-  /** ضغطة على موديل مقفول (اشتراك) — تفتح الباقات بدل الاختيار */
-  onLockedModel?: (id: ModelId) => void;
   /** مشاركة المحادثة الحالية برابط — null = الزرار مخفي (مؤقت/لا جلسة) */
   onShare?: (() => void) | null;
 }) {
@@ -44,8 +36,6 @@ export default function TopBar({
       >
         <PanelLeft size={18} className="flip-rtl" />
       </IconButton>
-
-      <ModelPicker lockedModel={lockedModel} onPickModel={onPickModel} onLockedModel={onLockedModel} />
 
       {remainingTokens !== null && (
         <TokensBadge
@@ -224,14 +214,19 @@ function TokensBadge({
   );
 }
 
-function ModelPicker({
+/** اختيار الموديل — يُستخدم تحت خانة الكتابة (مضغوط، القايمة تفتح لفوق) زي كلود. */
+export function ModelPicker({
   lockedModel,
   onPickModel,
   onLockedModel,
+  compact,
+  dropUp,
 }: {
   lockedModel?: ModelId | null;
   onPickModel: (id: ModelId) => void;
   onLockedModel?: (id: ModelId) => void;
+  compact?: boolean;
+  dropUp?: boolean;
 }) {
   const { t, model, models, modelsLoading } = useSettings();
   const [open, setOpen] = useState(false);
@@ -265,18 +260,19 @@ function ModelPicker({
         aria-expanded={open}
         aria-label={modelsLoading ? t("modelsLoading") : undefined}
         className={cn(
-          "flex h-9 items-center gap-1.5 rounded-full px-3 transition-colors duration-1 hover:bg-surface-3",
+          "flex items-center gap-1.5 rounded-full transition-colors duration-1 hover:bg-surface-3",
+          compact ? "h-8 px-2.5" : "h-9 px-3",
           modelsLoading && "pointer-events-none opacity-70"
         )}
       >
         {modelsLoading ? (
           <span className="skel inline-block h-5 w-24 rounded-full" aria-hidden="true" />
         ) : (
-          <span dir="ltr" className="text-[15px] font-semibold tracking-title text-ink">{currentLabel}</span>
+          <span dir="ltr" className={cn("font-semibold tracking-title text-ink", compact ? "text-[12.5px]" : "text-[15px]")}>{currentLabel}</span>
         )}
         {lockedModel && <Lock size={11} className="text-ink-3" aria-hidden="true" />}
         <ChevronDown
-          size={14}
+          size={compact ? 12 : 14}
           className={cn("text-ink-3 transition-transform duration-2 ease-soft", open && "rotate-180")}
         />
       </button>
@@ -285,7 +281,10 @@ function ModelPicker({
         <div
           role="listbox"
           aria-label={t("modelSwitcherTitle")}
-          className="animate-materialize glass absolute start-0 top-[calc(100%+6px)] z-modal w-[300px] overflow-hidden rounded-lg border border-hair p-1.5 shadow-3"
+          className={cn(
+            "animate-materialize glass absolute start-0 z-modal w-[300px] overflow-hidden rounded-lg border border-hair p-1.5 shadow-3",
+            dropUp ? "bottom-[calc(100%+6px)]" : "top-[calc(100%+6px)]"
+          )}
         >
           <p className="px-2.5 pb-1.5 pt-1 text-[11.5px] font-medium text-ink-3">
             {t("modelSwitcherTitle")}

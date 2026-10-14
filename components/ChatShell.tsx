@@ -1240,12 +1240,6 @@ export default function ChatShell() {
           totalTokens={quota?.total ?? null}
           onOpenRecharge={openRecharge}
           onNewChat={handleNewChat}
-          lockedModel={lockedModel}
-          onPickModel={handlePickModel}
-          onLockedModel={() => {
-            showToast(t("modelLockedToast"));
-            setShowPlans(true);
-          }}
           onShare={currentSessionId && !inTempMode ? () => setShareOpen(true) : undefined}
         />
 
@@ -1297,6 +1291,12 @@ export default function ChatShell() {
                   onSend={sendMessage}
                   onStop={stopGeneration}
                   disabled={!authChecked}
+                  lockedModel={lockedModel}
+                  onPickModel={handlePickModel}
+                  onLockedModel={() => {
+                    showToast(t("modelLockedToast"));
+                    setShowPlans(true);
+                  }}
                 />
               }
             />
@@ -1326,6 +1326,12 @@ export default function ChatShell() {
               onSend={sendMessage}
               onStop={stopGeneration}
               disabled={!authChecked}
+              lockedModel={lockedModel}
+              onPickModel={handlePickModel}
+              onLockedModel={() => {
+                showToast(t("modelLockedToast"));
+                setShowPlans(true);
+              }}
             />
           </>
         )}

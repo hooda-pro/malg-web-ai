@@ -9,7 +9,8 @@ import {
   processFile,
   type PendingAttachment,
 } from "@/lib/attachments";
-import { useSettings } from "./SettingsContext";
+import { useSettings, type ModelId } from "./SettingsContext";
+import { ModelPicker } from "./TopBar";
 import { cn } from "@/lib/utils";
 
 export interface ComposerAttachment {
@@ -41,6 +42,9 @@ export default function BottomInputBar({
   onStop,
   disabled,
   embedded,
+  lockedModel,
+  onPickModel,
+  onLockedModel,
 }: {
   isGenerating: boolean;
   onSend: (text: string, attachments: ComposerAttachment[]) => Promise<boolean> | void;
@@ -48,6 +52,11 @@ export default function BottomInputBar({
   disabled: boolean;
   /** وضع المنتصف (شات جديد): بدون حواف جانبية إضافية */
   embedded?: boolean;
+  /** الموديل اللي الشات الحالي متثبت عليه (لو اتبعت فيه رسايل بالفعل) */
+  lockedModel?: ModelId | null;
+  onPickModel: (id: ModelId) => void;
+  /** ضغطة على موديل مقفول (اشتراك) — تفتح الباقات بدل الاختيار */
+  onLockedModel?: (id: ModelId) => void;
 }) {
   const { t, enterToSend } = useSettings();
   const [text, setText] = useState("");
@@ -306,9 +315,19 @@ export default function BottomInputBar({
         </div>
       </div>
 
-      <p className="mx-auto mt-2 max-w-[760px] text-center text-[11px] text-ink-3">
-        {t("disclaimer")}
-      </p>
+      {/* صف تحت الخانة زي كلود: اختيار الموديل في الأول (يمين) والتنبيه في الآخر (شمال) */}
+      <div className="mx-auto mt-2 flex max-w-[760px] items-center justify-between gap-3 px-1">
+        <ModelPicker
+          compact
+          dropUp
+          lockedModel={lockedModel}
+          onPickModel={onPickModel}
+          onLockedModel={onLockedModel}
+        />
+        <p className="min-w-0 flex-1 text-end text-[11px] leading-4 text-ink-3">
+          {t("disclaimer")}
+        </p>
+      </div>
     </div>
   );
 }
