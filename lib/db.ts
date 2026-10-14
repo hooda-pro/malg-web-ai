@@ -77,7 +77,7 @@ async function seedDefaultAdmin() {
 
 /**
  * يضمن وجود موديل افتراضي واحد على الأقل في ai_models.
- * - لو الجدول فاضي وفيه إعداد قديم في provider_settings → يرحّله كموديل 'malg-a3' افتراضي.
+ * - لو الجدول فاضي وفيه إعداد قديم في provider_settings → يرحّله كموديل 'malg-ai' افتراضي.
  * - لو مفيش حاجة خالص → يزرع موديل افتراضي من متغيرات البيئة (نفس قيم الـ fallback).
  * Idempotent: لا يفعل شيئًا لو الجدول فيه صفوف.
  */
@@ -90,7 +90,7 @@ async function seedDefaultModel() {
     try {
       const migrated = await sql`
         INSERT INTO ai_models (id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default)
-        SELECT 'malg-a3', COALESCE(name, 'Malg-A3'), '', base_url, COALESCE(protocol, 'chat_completions'), model, api_keys, temperature, max_tokens, TRUE, TRUE
+        SELECT 'malg-ai', COALESCE(name, 'MALG AI'), '', base_url, COALESCE(protocol, 'chat_completions'), model, api_keys, temperature, max_tokens, TRUE, TRUE
         FROM provider_settings
         WHERE is_active = TRUE
         ORDER BY updated_at DESC
@@ -99,7 +99,7 @@ async function seedDefaultModel() {
         RETURNING id
       `;
       if (migrated.length > 0) {
-        console.log("[seed] تم ترحيل إعداد المزوّد القديم إلى موديل malg-a3 الافتراضي");
+        console.log("[seed] تم ترحيل إعداد المزوّد القديم إلى موديل malg-ai الافتراضي");
         return;
       }
     } catch (e) {
@@ -133,26 +133,26 @@ async function seedDefaultModel() {
     const fullBase = /^https?:\/\//i.test(cleanBase) ? cleanBase : `https://${cleanBase}`;
     await sql`
       INSERT INTO ai_models (id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default)
-      VALUES ('malg-a3', 'Malg-A3', '', ${fullBase}, 'chat_completions', ${model}, ${[...new Set(keys)]}, 0.4, 128000, TRUE, TRUE)
+      VALUES ('malg-ai', 'MALG AI', '', ${fullBase}, 'chat_completions', ${model}, ${[...new Set(keys)]}, 0.4, 128000, TRUE, TRUE)
       ON CONFLICT (id) DO NOTHING
     `;
-    console.log("[seed] تم إنشاء الموديل الافتراضي malg-a3");
+    console.log("[seed] تم إنشاء الموديل الافتراضي malg-ai");
   } catch (e) {
     console.error("seedDefaultModel error", e);
   }
 }
 
 /**
- * يزرع موديل Claude Sonnet 5.5 (عبر Token Harbor — نفس baseURL ومفاتيح malg-a3):
+ * يزرع موديل Claude Sonnet 5.5 (عبر Token Harbor — نفس baseURL ومفاتيح malg-ai):
  * - مدفوع (Pro فقط) + معامل تكلفة ×4.
  * - ON CONFLICT DO NOTHING: آمن على القواعد الموجودة، والأدمن يفعّله من اللوحة.
- * ملحوظة: لو غيّرت مفاتيح malg-a3 بعد البذر، انسخها لصف كلود يدويًا من اللوحة.
+ * ملحوظة: لو غيّرت مفاتيح malg-ai بعد البذر، انسخها لصف كلود يدويًا من اللوحة.
  */
 async function seedClaudeModel() {
   try {
     await sql`
       INSERT INTO ai_models (id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, tier, cost_multiplier, is_active, is_default)
-      SELECT 'claude-sonnet-5-5', 'Claude Sonnet 5.5', 'الأحدث من Anthropic — برمجة ووكلاء (يتطلب Pro).', COALESCE((SELECT base_url FROM ai_models WHERE id = 'malg-a3' LIMIT 1), 'https://tokenharbor.ai/v1/chat/completions'), 'chat_completions', 'claude-sonnet-5.5', COALESCE((SELECT api_keys FROM ai_models WHERE id = 'malg-a3' LIMIT 1), '{}'::text[]), 0.4, 128000, 'paid', 4, FALSE, FALSE
+      SELECT 'claude-sonnet-5-5', 'Claude Sonnet 5.5', 'الأحدث من Anthropic — برمجة ووكلاء (يتطلب Pro).', COALESCE((SELECT base_url FROM ai_models WHERE id = 'malg-ai' LIMIT 1), 'https://tokenharbor.ai/v1/chat/completions'), 'chat_completions', 'claude-sonnet-5.5', COALESCE((SELECT api_keys FROM ai_models WHERE id = 'malg-ai' LIMIT 1), '{}'::text[]), 0.4, 128000, 'paid', 4, FALSE, FALSE
       WHERE NOT EXISTS (SELECT 1 FROM ai_models WHERE id = 'claude-sonnet-5-5')
     `;
   } catch (e) {
@@ -366,6 +366,20 @@ export function ensureSchema(): Promise<void> {
       await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS cost_multiplier DOUBLE PRECISION NOT NULL DEFAULT 1`;
       await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS supports_video BOOLEAN NOT NULL DEFAULT FALSE`;
 
+/**
+ * إعادة تسمية الموديل الافتراضي malg-a3 → malg-ai (مرة واحدة، آمنة للتكرار):
+ * صف ai_models (مع الاسم الظاهر) + مفاتيح API المرتبطة به.
+ */
+async function migrateModelRename() {
+  try {
+    await sql`UPDATE ai_models SET id = 'malg-ai', name = 'MALG AI' WHERE id = 'malg-a3' AND NOT EXISTS (SELECT 1 FROM ai_models WHERE id = 'malg-ai')`;
+    await sql`UPDATE api_keys SET model_id = 'malg-ai' WHERE model_id = 'malg-a3'`;
+  } catch (e) {
+    console.error("migrateModelRename error", e);
+  }
+}
+
+      await migrateModelRename();
       await seedDefaultModel();
       await seedClaudeModel();
 

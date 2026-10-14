@@ -40,7 +40,7 @@ interface ApiModelOption {
 }
 
 const FALLBACK_API_MODELS: ApiModelOption[] = [
-  { id: "malg-a3", name: "Malg-A3", hint: "الموديل الأساسي — أداء قوي وثابت في الفهم والبرمجة", recommended: true },
+  { id: "malg-ai", name: "MALG AI", hint: "الموديل الأساسي — أداء قوي وثابت في الفهم والبرمجة", recommended: true },
 ];
 
 interface ApiKeyRow {
@@ -95,7 +95,7 @@ client = OpenAI(
 )
 
 res = client.chat.completions.create(
-    model="malg-a3",
+    model="malg-ai",
     messages=[{"role": "user", "content": "أهلاً"}],
 )
 print(res.choices[0].message.content)`,
@@ -111,7 +111,7 @@ const client = new OpenAI({
 });
 
 const res = await client.chat.completions.create({
-  model: "malg-a3",
+  model: "malg-ai",
   messages: [{ role: "user", content: "أهلاً" }],
 });
 console.log(res.choices[0].message.content);`,
@@ -121,7 +121,7 @@ console.log(res.choices[0].message.content);`,
         code: `API Provider   OpenAI Compatible
 Base URL       ${url}
 API Key        <مفتاحك>
-Model ID       malg-a3`,
+Model ID       malg-ai`,
         note: "من إعدادات Cline في VS Code أو JetBrains. اسم الـ Model ID شكلي بس — الموديل محدد من المفتاح.",
       };
     case "opencode":
@@ -132,16 +132,16 @@ Model ID       malg-a3`,
       "npm": "@ai-sdk/openai-compatible",
       "name": "MALG AI",
       "options": { "baseURL": "${url}" },
-      "models": { "malg-a3": {} }
+      "models": { "malg-ai": {} }
     }
   }
 }`,
-        note: "حطه في opencode.json، وبعدين opencode auth login ← Other ← اكتب MALG ← الصق مفتاحك، واختار MALG/malg-a3 من /models.",
+        note: "حطه في opencode.json، وبعدين opencode auth login ← Other ← اكتب MALG ← الصق مفتاحك، واختار MALG/malg-ai من /models.",
       };
     case "codex":
       return {
         code: `# ~/.codex/config.toml
-model = "malg-a3"
+model = "malg-ai"
 model_provider = "MALG"
 
 [model_providers.MALG]
@@ -183,7 +183,7 @@ export default function ApiKeysPage() {
   const [apiModels, setApiModels] = useState<ApiModelOption[]>(FALLBACK_API_MODELS);
   const [showCreate, setShowCreate] = useState(false);
   const [newLabel, setNewLabel] = useState("");
-  const [newModelId, setNewModelId] = useState<ModelId>("malg-a3");
+  const [newModelId, setNewModelId] = useState<ModelId>("malg-ai");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 

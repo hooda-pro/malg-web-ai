@@ -253,7 +253,7 @@ export async function updateModelsOrder(ids: string[]): Promise<ModelSummary[]> 
   return listModels(false);
 }
 
-/** id الموديل الافتراضي النشط — أو أول موديل نشط — أو 'malg-a3' كحل أخير */
+/** id الموديل الافتراضي النشط — أو أول موديل نشط — أو 'malg-ai' كحل أخير */
 export async function getDefaultModelId(): Promise<string> {
   try {
     const rows = (await sql`
@@ -266,7 +266,7 @@ export async function getDefaultModelId(): Promise<string> {
   } catch {
     // الجدول لسه متعملش — نكمل للـ fallback
   }
-  return "malg-a3";
+  return "malg-ai";
 }
 
 /**
@@ -276,15 +276,15 @@ export async function getDefaultModelId(): Promise<string> {
  * 3) المسار القديم (provider_settings/env) ملفوفًا كهوية الموديل المطلوب
  */
 export async function getModelProvider(modelId: string): Promise<ModelProviderConfig> {
-  const id = sanitizeModelId(modelId) || "malg-a3";
+  const id = sanitizeModelId(modelId) || "malg-ai";
   const cached = modelCache.get(id);
   if (cached && Date.now() - cached.at < CACHE_MS) return cached.config;
 
   const wrapLegacy = (cfg: ProviderConfig): ModelProviderConfig => ({
     ...cfg,
     modelId: id,
-    displayName: "Malg-A3",
-    isDefault: id === "malg-a3",
+    displayName: "MALG AI",
+    isDefault: id === "malg-ai",
   });
 
   try {
@@ -323,7 +323,7 @@ export async function getModelProvider(modelId: string): Promise<ModelProviderCo
 
 /** آخر إعداد محفوظ لموديل معين حتى لو مش نشط — للعرض في لوحة الأدمن */
 export async function getSavedModelProvider(modelId: string): Promise<ModelProviderConfig | null> {
-  const id = sanitizeModelId(modelId) || "malg-a3";
+  const id = sanitizeModelId(modelId) || "malg-ai";
   try {
     const rows = (await sql`
       SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order

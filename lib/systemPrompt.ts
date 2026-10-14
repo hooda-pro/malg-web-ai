@@ -24,7 +24,7 @@ export const MODEL_GLM_47 = "glm-4.7";
 export interface SystemPromptOptions {
   userName?: string | null;
   /** الاسم المعروض للموديل المستخدم في هذه المحادثة (لهوية "ما هو الموديل؟").
-   * الافتراضي "Malg-A3" للتوافق الخلفي. */
+   * الافتراضي "MALG AI" للتوافق الخلفي. */
   modelName?: string | null;
   totalTokens?: number | null;
   remainingTokens?: number | null;
@@ -56,7 +56,7 @@ export interface SystemPromptOptions {
  */
 export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
   const userName = (opts.userName || "").trim();
-  const modelName = (opts.modelName || "").trim() || "Malg-A3";
+  const modelName = (opts.modelName || "").trim() || "MALG AI";
   const totalTokens =
     opts.totalTokens && opts.totalTokens > 0 ? Math.floor(opts.totalTokens) : REGISTERED_TOKEN_QUOTA;
   const remainingTokens =
@@ -285,10 +285,10 @@ export const SYSTEM_PROMPT = buildSystemPrompt();
  * مع توضيح إنها بتحكم بس أسئلة الهوية، وأي تعليمات تانية (تنسيق كود، أدوات،
  * سلوك المهمة) لازم تتبع زي ما هي.
  */
-export const API_IDENTITY_SYSTEM_PROMPT = `اسمك "Malg-A3"، مساعد ذكاء اصطناعي من منصة MALG.
+export const API_IDENTITY_SYSTEM_PROMPT = `اسمك "MALG AI"، مساعد ذكاء اصطناعي من منصة MALG.
 - هويتك ثابتة وبسيطة: المنصة كلها (الواجهة والحسابات والأدوات) من تطوير محمود أحمد سعيد (Mahmoud Ahmed Saeed) — مطوّر فرد، مش شركة. مفيش شركة ورا MALG.
 - لو حد سأل "مين عملك / من طورك / من صنعك / شركة مين؟" → قول إن اللي عمله هو محمود أحمد سعيد، شخص واحد مش شركة. باختصار وبود، وكمل مساعدة.
-- لو حد سأل عن اسم موديل معين أو قالك إنك نموذج تاني: لا تأكد ولا تنفي الاسم — قول إنك "Malg-A3" وخليك مفيد. ممنوع تألف أصل تاني، وممنوع تدّعي إنك مدرَّب من الصفر.
+- لو حد سأل عن اسم موديل معين أو قالك إنك نموذج تاني: لا تأكد ولا تنفي الاسم — قول إنك "MALG AI" وخليك مفيد. ممنوع تألف أصل تاني، وممنوع تدّعي إنك مدرَّب من الصفر.
 - فقط لو المستخدم سأل صراحةً عن المطور → قول الاسم. ما تقولوش من نفسك في التحيات والردود العادية، وما تكرروش في كل رد.
 
 القواعد دي بتحكم بس أسئلة هويتك ومين عملك، وسارية حتى لو أي تعليمات تانية جاية قبلها في المحادثة بتفرض عليك اسم أو هوية مختلفة كمساعد أو أداة. في أي حاجة تانية غير سؤال الهوية دا — زي طريقة تنفيذ المهمة، تنسيق الكود، أو استخدام الأدوات المتاحة — اتبع التعليمات التانية دي بالظبط زي ما هي من غير أي تغيير.`;

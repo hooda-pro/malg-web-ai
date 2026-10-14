@@ -165,7 +165,7 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
   // اسم الموديل المعروض للهوية — من إعداد الموديل نفسه
   const costMult = await getCostMultiplier(model).catch(() => 1);
   const continueCfg = await getModelProvider(model).catch(() => null);
-  const modelDisplayName = continueCfg?.displayName ?? "Malg-A3";
+  const modelDisplayName = continueCfg?.displayName ?? "MALG AI";
   const videoNative = continueCfg?.supportsVideo === true;
 
   // حقائق المستخدم المحفوظة — الرد المكمَّل يشوف نفس السياق.

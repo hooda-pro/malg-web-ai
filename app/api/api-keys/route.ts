@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
   await ensureSchema();
 
   const body = await req.json().catch(() => null);
-  const modelId = sanitizeModelId(body?.model_id) || "malg-a3";
+  const modelId = sanitizeModelId(body?.model_id) || "malg-ai";
   const rawLabel = typeof body?.label === "string" ? body.label.trim() : "";
 
   const knownIds = new Set<string>(LEGACY_MODEL_IDS);

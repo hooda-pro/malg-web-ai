@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { translate, type Lang } from "@/lib/i18n";
 
 export type Theme = "system" | "light" | "dark";
-/** معرف الموديل = slug من لوحة الأدمن (مثال: malg-a3). أي قيمة غير معروفة
+/** معرف الموديل = slug من لوحة الأدمن (مثال: malg-ai). أي قيمة غير معروفة
  * السيرفر بيقع بها على الموديل الافتراضي تلقائيًا. */
 export type ModelId = string;
 /** أسلوب رد المساعد على الرسائل العربية: فصحى (افتراضي) أو عامية مصرية. */
@@ -22,7 +22,7 @@ export interface ModelOption {
 }
 
 export const FALLBACK_MODELS: ModelOption[] = [
-  { id: "malg-a3", label: "Malg-A3", hint: "", recommended: true },
+  { id: "malg-ai", label: "MALG AI", hint: "", recommended: true },
 ];
 
 /** @deprecated استخدم models من useSettings() — باقٍ كـ fallback للتحميل الأول فقط */
@@ -31,7 +31,7 @@ export const AVAILABLE_MODELS: {
   label: string;
   hintKey: string;
   badgeKey?: string;
-}[] = [{ id: "malg-a3", label: "Malg-A3", hintKey: "modelA3Hint" }];
+}[] = [{ id: "malg-ai", label: "MALG AI", hintKey: "modelA3Hint" }];
 
 export const CUSTOM_INSTRUCTIONS_MAX = 1500;
 
@@ -56,7 +56,7 @@ const DEFAULTS: Settings = {
   theme: "system",
   animations: true,
   showTime: true,
-  model: "malg-a3",
+  model: "malg-ai",
   enterToSend: true,
   customInstructions: "",
   nickname: "",
@@ -97,18 +97,18 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [loaded, setLoaded] = useState(false);
   const [systemDark, setSystemDark] = useState(false);
   const [models, setModels] = useState<ModelOption[] | null>(null);
-  const [defaultModelId, setDefaultModelId] = useState<string>("malg-a3");
+  const [defaultModelId, setDefaultModelId] = useState<string>("malg-ai");
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<Settings>;
-        // ترحيل القيم القديمة (malg-2 / malg-2.1 / malg-2.2) للموديل الافتراضي،
+        // ترحيل القيم القديمة (malg-2 / malg-2.1 / malg-2.2 / malg-a3) للموديل الافتراضي،
         // وأي slug آخر يُقبل كما هو — السيرفر يقع بغير المعروف على الافتراضي،
         // والتحقق النهائي ضد قائمة السيرفر يتم بعد تحميل الموديلات.
-        if (parsed.model === "malg-2" || parsed.model === "malg-2.1" || parsed.model === "malg-2.2") {
-          parsed.model = "malg-a3";
+        if (parsed.model === "malg-2" || parsed.model === "malg-2.1" || parsed.model === "malg-2.2" || parsed.model === "malg-a3") {
+          parsed.model = "malg-ai";
         }
         setSettings((prev) => ({ ...prev, ...parsed }));
       }
@@ -211,7 +211,7 @@ export function useSettings(): SettingsValue {
       ...DEFAULTS,
       models: FALLBACK_MODELS,
       modelsLoading: false,
-      defaultModelId: "malg-a3",
+      defaultModelId: "malg-ai",
       resolvedTheme: "light",
       dir: "rtl",
       update: () => {},

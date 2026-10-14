@@ -303,7 +303,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
 
   // اسم الموديل المعروض للهوية ("ما هو الموديل؟") — من إعداد الموديل نفسه
   const modelCfg = await getModelProvider(model).catch(() => null);
-  const modelDisplayName = modelCfg?.displayName ?? "Malg-A3";
+  const modelDisplayName = modelCfg?.displayName ?? "MALG AI";
   const costMult = modelCfg && Number.isFinite(modelCfg.costMultiplier) && modelCfg.costMultiplier > 0 ? modelCfg.costMultiplier : 1;
   const videoNative = modelCfg?.supportsVideo === true;
 
