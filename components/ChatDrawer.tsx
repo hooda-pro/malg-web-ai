@@ -256,7 +256,9 @@ export default function ChatDrawer({
                   : "border-hair bg-surface text-ink shadow-1 hover:border-hair-2"
               )}
             >
-              <Mic size={16} className={voiceOpen ? "text-accent" : "text-ink-2"} />
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-accent text-accent-ink shadow-accent">
+                <Mic size={17} />
+              </span>
               <span className="flex-1 text-start">{t("voiceStudio")}</span>
               <span className="shrink-0 rounded-full bg-warn-soft px-2 py-px text-[10.5px] font-bold text-warn">
                 {t("modelProBadge")}
