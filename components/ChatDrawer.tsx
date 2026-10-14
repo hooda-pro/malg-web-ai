@@ -7,6 +7,7 @@ import type { SubscriptionInfo } from "@/lib/plans";
 import { Button, IconButton, Kbd, modKeyLabel } from "./ui/Controls";
 import AccountMenu, { type SettingsTab } from "./AccountMenu";
 import Logo from "./Logo";
+import ProjectsPanel from "./ProjectsPanel";
 import { useSettings } from "./SettingsContext";
 import { cn } from "@/lib/utils";
 
@@ -291,6 +292,11 @@ export default function ChatDrawer({
         </div>
 
         <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+          {user && !inTempMode && (
+            <section className="mt-1" aria-label="المشاريع">
+              <ProjectsPanel sessionId={currentSessionId} />
+            </section>
+          )}
           {sessions.length === 0 ? (
             <p className="px-4 py-10 text-center text-pretty text-[12.5px] leading-5 text-ink-3">
               {user ? t("noSessions") : t("loginOrRegister")}

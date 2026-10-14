@@ -168,12 +168,20 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
   const modelDisplayName = continueCfg?.displayName ?? "Malg-A3";
   const videoNative = continueCfg?.supportsVideo === true;
 
+  // نفس حقن المشاريع والحقائق في /api/chat — الرد المكمَّل يشوف نفس السياق.
+  const { getProjectContext, buildProjectContextBlock } = await import("@/lib/projects");
+  const { getTopFacts, buildFactsBlock } = await import("@/lib/facts");
+  const projectCtx = await getProjectContext(user.id, sessionId).catch(() => null);
+  const projectBlock = (projectCtx ? buildProjectContextBlock(projectCtx) : "").slice(0, 8000);
+  const factsBlock = buildFactsBlock(await getTopFacts(user.id, 10).catch(() => []));
   const apiMessages: ApiMessage[] = [
     {
       role: "system",
       content:
         buildSystemPrompt({ userName: user.displayName, uiLanguage, tone, modelName: modelDisplayName, memory: userMemory }) +
-        (personalization ? `\n\n${personalization}` : ""),
+        (personalization ? `\n\n${personalization}` : "") +
+        (projectBlock ? `\n\n${projectBlock}` : "") +
+        (factsBlock ? `\n\n${factsBlock}` : ""),
     },
     // نفس تخفيف /api/chat: المرفقات قايمة أسماء (+ ملفات صغيرة inline في آخر رسالة)
     // والصور بس في آخر رسالة فيها صور — بدل ما كل محتوى الـ zip يتبعت تاني.

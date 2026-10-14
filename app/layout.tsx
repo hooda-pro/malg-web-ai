@@ -3,6 +3,9 @@ import { IBM_Plex_Sans_Arabic, JetBrains_Mono } from "next/font/google";
 import { getSiteUrl } from "@/lib/site";
 import "./globals.css";
 import "./mobile.css";
+import "./print.css";
+import Analytics from "@/components/Analytics";
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 
 const plexArabic = IBM_Plex_Sans_Arabic({
   subsets: ["arabic", "latin"],
@@ -19,16 +22,37 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL(getSiteUrl()),
-  title: "MALG AI",
+  title: { default: "MALG AI", template: "%s | MALG AI" },
   description:
     "MALG AI — مساعد ذكي يكتب ويبني ويشغّل الكود بجانبك: شات فوري، معاينة حيّة للمشاريع، بيئة تشغيل كود، ومحادثات محفوظة.",
   applicationName: "MALG AI",
-  keywords: ["MALG", "AI", "chat", "coding assistant", "artifacts"],
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "MALG AI", statusBarStyle: "default" },
+  keywords: [
+    "MALG",
+    "MALG AI",
+    "مساعد ذكي",
+    "ذكاء اصطناعي",
+    "شات",
+    "مساعد برمجة",
+    "كتابة الكود",
+    "معاينة حية",
+    "واجهة API",
+    "AI",
+    "chat",
+    "coding assistant",
+    "artifacts",
+  ],
   openGraph: {
     title: "MALG AI",
     description: "مساعد ذكي للمبرمجين: شات فوري، معاينة حيّة للمشاريع، وبيئة تشغيل كود.",
     type: "website",
     siteName: "MALG AI",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "MALG AI",
+    description: "مساعد ذكي للمبرمجين: شات فوري، معاينة حيّة للمشاريع، وبيئة تشغيل كود.",
   },
 };
 
@@ -64,6 +88,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
         <div className="grain" aria-hidden="true" />
         {children}
+        <Analytics />
+        <ServiceWorkerRegister />
       </body>
     </html>
   );

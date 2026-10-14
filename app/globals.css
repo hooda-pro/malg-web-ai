@@ -34,7 +34,7 @@
     /* Ink ----------------------------------------------------------- */
     --ink: #1f1e1d;
     --ink-2: #5f5d59;
-    --ink-3: #9b9893;
+    --ink-3: #6f6c68;
 
     /* Accent + status (color is reserved, never decoration) --------- */
     --accent: #c15f3c;
@@ -99,13 +99,13 @@
 
     --ink: #f5f5f7;
     --ink-2: #a1a1aa;
-    --ink-3: #71717a;
+    --ink-3: #8e8e96;
 
-    --accent: #0a84ff;
-    --accent-hover: #2f96ff;
+    --accent: #d97757;
+    --accent-hover: #e0855f;
     --accent-ink: #ffffff;
-    --accent-soft: rgba(10, 132, 255, 0.16);
-    --accent-line: rgba(10, 132, 255, 0.4);
+    --accent-soft: rgba(217, 119, 87, 0.16);
+    --accent-line: rgba(217, 119, 87, 0.4);
     --live: #32d583;
     --live-soft: rgba(50, 213, 131, 0.14);
     --warn: #ff9f45;
@@ -121,12 +121,12 @@
     --shadow-3: 0 44px 100px -34px rgba(0, 0, 0, 0.95);
     --highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 
-    /* Aurora / glow tints (dark) — blue family only, no purple */
-    --aurora-1: rgba(10, 132, 255, 0.16);
-    --aurora-2: rgba(0, 150, 255, 0.11);
+    /* Aurora / glow tints (dark) — terracotta family, matches brand accent */
+    --aurora-1: rgba(217, 119, 87, 0.16);
+    --aurora-2: rgba(217, 119, 87, 0.11);
     --aurora-3: rgba(50, 213, 131, 0.1);
-    --send-gradient: linear-gradient(135deg, #0a84ff 0%, #0090ff 100%);
-    --send-gradient-hover: linear-gradient(135deg, #2f96ff 0%, #1aa3ff 100%);
+    --send-gradient: linear-gradient(135deg, #c15f3c, #d97757);
+    --send-gradient-hover: linear-gradient(135deg, #cf6f4b 0%, #e0855f 100%);
   }
 
   * {
@@ -329,16 +329,16 @@
     animation-delay: -12s;
   }
 
-  /* Gradient headline text — ink to system blue, no purple */
+  /* Gradient headline text — ink to brand accent, no purple */
   .text-gradient {
-    background: linear-gradient(120deg, var(--ink) 25%, var(--accent) 70%, #0090ff 95%);
+    background: linear-gradient(120deg, var(--ink) 25%, var(--accent) 70%, var(--accent-hover) 95%);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
     color: transparent;
   }
   [data-theme="dark"] .text-gradient {
-    background: linear-gradient(120deg, #f5f5f7 15%, #5eb2ff 60%, #8fd0ff 90%);
+    background: linear-gradient(120deg, #f5f5f7 15%, var(--accent) 60%, var(--accent-hover) 90%);
     -webkit-background-clip: text;
     background-clip: text;
   }
@@ -663,6 +663,24 @@
 .stagger > *:nth-child(6) {
   animation-delay: 300ms;
 }
+.stagger > *:nth-child(7) {
+  animation-delay: 360ms;
+}
+.stagger > *:nth-child(8) {
+  animation-delay: 420ms;
+}
+.stagger > *:nth-child(9) {
+  animation-delay: 480ms;
+}
+.stagger > *:nth-child(10) {
+  animation-delay: 540ms;
+}
+.stagger > *:nth-child(11) {
+  animation-delay: 600ms;
+}
+.stagger > *:nth-child(12) {
+  animation-delay: 660ms;
+}
 
 /* Live caret while tokens stream in */
 .caret::after,
@@ -703,7 +721,30 @@
 .toast-drain {
   transform-origin: inline-start;
   animation: mlag-drain linear forwards;
-  animation-duration: 4.5s;
+  animation-duration: 6s;
+}
+
+/* FAQ open animation — grid-rows 0fr -> 1fr slide for .faq-body.
+   Applied in Landing.tsx: <details class="faq-details"> + <div class="faq-body"><div>…
+   The body always renders (no conditional mount) so the open transition can run. */
+.faq-details > summary {
+  list-style: none;
+}
+.faq-details > summary::-webkit-details-marker {
+  display: none;
+}
+.faq-details .faq-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows var(--dur-3) var(--ease-soft), opacity var(--dur-2) linear;
+}
+.faq-details[open] .faq-body {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.faq-details .faq-body > div {
+  overflow: hidden;
 }
 
 /* ============================================================================

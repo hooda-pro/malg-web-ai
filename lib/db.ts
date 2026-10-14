@@ -412,6 +412,41 @@ export function ensureSchema(): Promise<void> {
         )
       `;
 
+      // ——— المشاريع وملفاتها وحقائق المستخدم (v2-projects) ———
+      await sql`
+        CREATE TABLE IF NOT EXISTS projects (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          instructions TEXT NOT NULL DEFAULT '',
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id)`;
+      await sql`
+        CREATE TABLE IF NOT EXISTS project_files (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          path TEXT NOT NULL,
+          lang TEXT NOT NULL DEFAULT '',
+          content TEXT NOT NULL DEFAULT '',
+          updated_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(project_id, path)
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS idx_project_files_project ON project_files(project_id)`;
+      await sql`
+        CREATE TABLE IF NOT EXISTS user_facts (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          fact TEXT NOT NULL,
+          category TEXT NOT NULL DEFAULT 'عام',
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS idx_user_facts_user ON user_facts(user_id)`;
+      await sql`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS project_id TEXT`;
       // إنشاء حساب الأدمن الافتراضي لو مفيش أي أدمن في القاعدة
       await seedDefaultAdmin();
     })().catch((e) => {

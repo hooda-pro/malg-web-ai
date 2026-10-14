@@ -20,7 +20,7 @@ export default function Toast({
         <div className="flex items-start gap-2.5">
           <Info size={16} className="mt-1 shrink-0 text-accent" />
           <p className="min-w-0 flex-1 text-pretty text-[13px] leading-6 text-ink">{message}</p>
-          <IconButton label="Close" onClick={onClose} size="sm" className="-me-1.5 -mt-1">
+          <IconButton label="إغلاق" onClick={onClose} size="sm" className="-me-1.5 -mt-1">
             <X size={14} />
           </IconButton>
         </div>

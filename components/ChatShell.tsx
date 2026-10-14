@@ -186,7 +186,7 @@ export default function ChatShell() {
     toastSeqRef.current = mySeq;
     setTimeout(() => {
       if (toastSeqRef.current === mySeq) setToast(null);
-    }, 4500);
+    }, 6000);
   }, []);
 
   const lockSessionModel = useCallback((sessionId: string, m: ModelId) => {

@@ -4,11 +4,13 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import {
   ArrowUpRight,
+  Brain,
   Check,
   ChevronDown,
   Coins,
   Database,
   Download,
+  FolderKanban,
   KeyRound,
   LogOut,
   RefreshCw,
@@ -30,10 +32,14 @@ import {
   type ModelId,
 } from "./SettingsContext";
 import { cn } from "@/lib/utils";
+import ProjectsPanel from "./ProjectsPanel";
+import FactsManager from "./FactsManager";
 
 const TABS: { id: SettingsTab; icon: typeof Settings2; labelKey: string; needsUser?: boolean }[] = [
   { id: "general", icon: Settings2, labelKey: "settingsGeneral" },
   { id: "personalization", icon: Wand2, labelKey: "settingsPersonalization" },
+  { id: "projects", icon: FolderKanban, labelKey: "settingsProjectsTab", needsUser: true },
+  { id: "facts", icon: Brain, labelKey: "settingsFactsTab", needsUser: true },
   { id: "billing", icon: Coins, labelKey: "settingsBilling", needsUser: true },
   { id: "data", icon: Database, labelKey: "settingsData", needsUser: true },
   { id: "account", icon: UserRound, labelKey: "settingsAccountTab", needsUser: true },
@@ -114,6 +120,8 @@ export default function SettingsModal({
           <div key={tab} className="animate-fade">
             {tab === "general" && <GeneralTab />}
             {tab === "personalization" && <PersonalizationTab />}
+            {tab === "projects" && user && <ProjectsPanel sessionId={null} />}
+            {tab === "facts" && user && <FactsManager />}
             {tab === "billing" && user && (
               <BillingTab
                 user={user}

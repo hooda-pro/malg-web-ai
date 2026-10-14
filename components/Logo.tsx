@@ -12,8 +12,7 @@ export default function Logo({ size = 20, className }: { size?: number; classNam
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src="/logo.png"
-      alt=""
-      aria-hidden="true"
+      alt="MALG"
       draggable={false}
       decoding="async"
       width={size}

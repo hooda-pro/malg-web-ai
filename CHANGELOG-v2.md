@@ -1,0 +1,40 @@
+# MALG Web v2 — سجل التحسينات (14 أكتوبر 2026)
+
+كل البنود مطبقة ومتحقق منها: `tsc --noEmit` نظيف + `next build` ناجح.
+المستثنى الوحيد حسب طلبك: توليد الصور والوضع الصوتي (تكلفة API إضافية).
+
+## 1) الهوية والثقة (P0)
+- توحيد لون البراند: الداكن كان أزرق iOS `#0a84ff` → أصبح terracotta `#d97757` من نفس عائلة الفاتح (`app/globals.css` + `app/mobile.css`).
+- تباين `ink-3`: فاتح `#9b9893`→`#6f6c68`، داكن `#71717a`→`#8e8e96`.
+- صفحات حقيقية: `/privacy` `/terms` `/pricing` (عربية + metadata + مربوطة من فوتر اللاندنج + `sitemap.ts`).
+- صورة مشاركة OG مولّدة: `app/opengraph-image.tsx` (1200×630 PNG) + `twitter: summary_large_image` + كلمات عربية.
+- إتاحة: `aria-label` عربية للأزرار الأيقونية، `alt="MALG"` للوجو، التوست 4.5s→6s، `stagger` حتى 12 عنصر، أنيميشن فتح للأسئلة الشائعة.
+- تفاصيل: `CHANGELOG-v2-trust.md`.
+
+## 2) المنصة (P1)
+- PWA: `public/manifest.webmanifest` + `public/sw.js` (كاش + `/offline`) + `app/offline/page.tsx` + تسجيل تلقائي إنتاج فقط.
+- تحليلات اختيارية بدون اعتماديات: `components/Analytics.tsx` (PostHog/Umami عبر env فقط، يتتبع تنقل الـ hash).
+- طباعة/PDF: `app/print.css` (إخفاء الزخارف، أسود على أبيض، عدم كسر الرسائل).
+- توثيق env للسيرفر فقط (Stripe لاحقًا + تحليلات) بدون أي سر في الملفات: `.env.example`.
+- تفاصيل: `CHANGELOG-v2-platform.md`.
+
+## 3) المشاريع والذاكرة (P0)
+- جداول جديدة: `projects` + `project_files` (حتى 20 ملف، 12k حرف/ملف) + `user_facts` (حتى 100 حقيقة، 300 حرف) + عمود `chat_sessions.project_id` (`lib/db.ts`).
+- منطق: `lib/projects.ts` (CRUD + سياق بميزانية 24k حرف) + `lib/facts.ts` (أعلى 10 حقائق).
+- API: `/api/projects` (GET/POST)، `/api/projects/[id]` (GET/PATCH/DELETE)، `/api/projects/[id]/files` (GET/PUT)، `/api/projects/[id]/attach` (ربط/فك)، `/api/facts` (GET/POST)، `/api/facts/[id]` (DELETE) — كلها 401 بدون جلسة.
+- حقن تلقائي في الـ system prompt (بحد 8000 حرف) في `/api/chat` و `/api/chat/continue`.
+- واجهة: قسم مشاريع أعلى درج المحادثات + تبويبا «المشاريع» و«حقائقي» في الإعدادات (4 لغات).
+- تفاصيل: `CHANGELOG-v2-projects.md`.
+
+## التشغيل
+```bash
+npm install
+cp .env.example .env.local   # ثم املأ القيم على السيرفر فقط
+npm run dev
+```
+المفاتيح تُرفع على الاستضافة (Vercel/Render) ولا تُحفظ في الملفات — كما طلبت.
+
+## المتبقي المقترح (يتطلب مفاتيح مدفوعة أو قرار منك)
+- توليد صور + وضع صوتي (مؤجل بقرارك).
+- دفع آلي Stripe/Paymob (البنية جاهزة عبر `lib/subscription.ts` — أخبرني عند توفر المفاتيح).
+- بحث دلالي عبر المحادثات (يحتاج `pgvector` على Neon).

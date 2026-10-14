@@ -335,14 +335,18 @@ export default function Landing() {
           <div className="mt-6 space-y-3">
             {FAQS.map(({ q, a }, i) => (
               <Reveal key={q} delay={i * 60}>
-                <details className="group rounded-2xl border border-hair bg-surface px-6 py-4 shadow-1">
+                <details className="faq-details group rounded-2xl border border-hair bg-surface px-6 py-4 shadow-1">
                   <summary className="cursor-pointer list-none text-[15px] font-semibold marker:hidden [&::-webkit-details-marker]:hidden">
                     <span className="flex items-center justify-between gap-4">
                       {q}
                       <span className="tnum shrink-0 text-[18px] font-normal text-accent transition-transform duration-2 group-open:rotate-45">+</span>
                     </span>
                   </summary>
-                  <p className="mt-2 text-[14.5px] leading-7 text-ink-2">{a}</p>
+                  <div className="faq-body">
+                    <div>
+                      <p className="mt-2 text-[14.5px] leading-7 text-ink-2">{a}</p>
+                    </div>
+                  </div>
                 </details>
               </Reveal>
             ))}
@@ -385,11 +389,20 @@ export default function Landing() {
             <a href="#plans" className="transition-colors duration-1 hover:text-ink">
               الأسعار
             </a>
+            <a href="/pricing" className="transition-colors duration-1 hover:text-ink">
+              الباقات
+            </a>
             <a href="#faq" className="transition-colors duration-1 hover:text-ink">
               الأسئلة الشائعة
             </a>
             <a href="/#/api" className="transition-colors duration-1 hover:text-ink">
               الـ API
+            </a>
+            <a href="/privacy" className="transition-colors duration-1 hover:text-ink">
+              الخصوصية
+            </a>
+            <a href="/terms" className="transition-colors duration-1 hover:text-ink">
+              الشروط
             </a>
           </nav>
         </div>

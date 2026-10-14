@@ -307,6 +307,13 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   const costMult = modelCfg && Number.isFinite(modelCfg.costMultiplier) && modelCfg.costMultiplier > 0 ? modelCfg.costMultiplier : 1;
   const videoNative = modelCfg?.supportsVideo === true;
 
+  // سياق المشروع المرتبط بالمحادثة + حقائق المستخدم (Projects v1) — قراءات DB
+  // رخيصة، وفشلها لا يوقف الرد. السقف 8000 حرف لحماية ميزانية التوكنز.
+  const { getProjectContext, buildProjectContextBlock } = await import("@/lib/projects");
+  const { getTopFacts, buildFactsBlock } = await import("@/lib/facts");
+  const projectCtx = await getProjectContext(user.id, sessionId).catch(() => null);
+  const projectBlock = (projectCtx ? buildProjectContextBlock(projectCtx) : "").slice(0, 8000);
+  const factsBlock = buildFactsBlock(await getTopFacts(user.id, 10).catch(() => []));
   const systemPromptContent =
     buildSystemPrompt({
       userName: user.displayName,
@@ -326,6 +333,8 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
       closeConfirmationPending: closePendingAtStart,
     }) +
     (personalization ? `\n\n${personalization}` : "") +
+    (projectBlock ? `\n\n${projectBlock}` : "") +
+    (factsBlock ? `\n\n${factsBlock}` : "") +
     (deepSearch.performed && deepSearch.contextBlock ? `\n\n${deepSearch.contextBlock}` : "");
 
   // آخر 10 رسائل. المرفقات مبتتبعتش كاملة: الملفات الصغيرة inline (ميزانية محدودة)

@@ -148,6 +148,7 @@ function TokensBadge({
         aria-haspopup="dialog"
         aria-expanded={open}
         title={t("topbarTokensHint")}
+        aria-label={t("topbarTokensHint")}
         className="relative grid h-5 w-5 shrink-0 place-items-center rounded-full transition-opacity duration-1 before:absolute before:-inset-2 before:content-[''] hover:opacity-80"
       >
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
