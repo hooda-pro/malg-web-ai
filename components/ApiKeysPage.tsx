@@ -34,12 +34,13 @@ type ModelId = string;
 
 interface ApiModelOption {
   id: string;
+  name: string;
   hint: string;
   recommended?: boolean;
 }
 
 const FALLBACK_API_MODELS: ApiModelOption[] = [
-  { id: "malg-a3", hint: "الموديل الأساسي — أداء قوي وثابت في الفهم والبرمجة", recommended: true },
+  { id: "malg-a3", name: "Malg-A3", hint: "الموديل الأساسي — أداء قوي وثابت في الفهم والبرمجة", recommended: true },
 ];
 
 interface ApiKeyRow {
@@ -207,8 +208,9 @@ export default function ApiKeysPage() {
         const list = Array.isArray(data?.models) ? data.models : [];
         if (list.length === 0) return;
         const mapped: ApiModelOption[] = list.map(
-          (m: { id: string; description?: string; isDefault?: boolean }) => ({
+          (m: { id: string; name?: string; description?: string; isDefault?: boolean }) => ({
             id: String(m.id),
+            name: String(m.name || m.id),
             hint: typeof m.description === "string" && m.description ? m.description : "",
             recommended: !!m.isDefault,
           })
@@ -509,8 +511,8 @@ export default function ApiKeysPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="truncate text-[14px] font-medium text-ink">{k.label}</span>
-                        <span className="rounded-full border border-hair px-2 py-px font-mono text-[11px] text-ink-2" dir="ltr">
-                          {k.modelId}
+                        <span className="rounded-full border border-hair px-2 py-px text-[11px] text-ink-2" title={k.modelId}>
+                          {apiModels.find((m) => m.id === k.modelId)?.name ?? k.modelId}
                         </span>
                         <span
                           className={cn(
@@ -696,16 +698,19 @@ export default function ApiKeysPage() {
                   />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
-                      <span className="font-mono text-[13px] text-ink" dir="ltr">
-                        {m.id}
+                      <span className="truncate text-[13.5px] font-medium text-ink">
+                        {m.name}
                       </span>
                       {m.recommended && (
-                        <span className="rounded-full bg-accent-soft px-2 py-px text-[10.5px] font-medium text-accent">
+                        <span className="shrink-0 rounded-full bg-accent-soft px-2 py-px text-[10.5px] font-medium text-accent">
                           موصى به
                         </span>
                       )}
                     </span>
-                    <span className="mt-0.5 block text-[12px] text-ink-3">{m.hint}</span>
+                    <span className="mt-0.5 block truncate text-[12px] text-ink-3">
+                      <span className="font-mono" dir="ltr">{m.id}</span>
+                      {m.hint ? ` · ${m.hint}` : ""}
+                    </span>
                   </span>
                 </label>
               ))}
