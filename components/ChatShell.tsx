@@ -140,7 +140,8 @@ export default function ChatShell() {
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [showRecharge, setShowRecharge] = useState(false);
   const [showPlans, setShowPlans] = useState(false);
-  const [showVoice, setShowVoice] = useState(false);
+  /** عرض استوديو الصوت كصفحة كاملة بدل الشات */
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
 
   // الرد الحيّ بيتربط بالشات اللي اتبعت منه (لو المستخدم فتح شات تاني ما يظهرش فيه)
@@ -457,6 +458,7 @@ export default function ChatShell() {
       setShowAuthModal(true);
       return;
     }
+    setVoiceOpen(false);
     if (tempSessionId) await dropTempSession(tempSessionId);
     try {
       const res = await fetch("/api/sessions", {
@@ -494,6 +496,7 @@ export default function ChatShell() {
       setShowAuthModal(true);
       return;
     }
+    setVoiceOpen(false);
     if (tempSessionId) {
       const tid = tempSessionId;
       setTempSessionId(null);
@@ -523,6 +526,7 @@ export default function ChatShell() {
   }, [user, currentSessionId, messages.length, showToast, t, markLoaded]);
 
   const handleSelectSession = (id: string) => {
+    setVoiceOpen(false);
     if (tempSessionId && tempSessionId !== id) {
       const tid = tempSessionId;
       setTempSessionId(null);
@@ -1234,8 +1238,9 @@ export default function ChatShell() {
         }}
         onOpenVoice={() => {
           setDrawerOpen(false);
-          setShowVoice(true);
+          setVoiceOpen(true);
         }}
+        voiceOpen={voiceOpen}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
@@ -1246,7 +1251,7 @@ export default function ChatShell() {
           totalTokens={quota?.total ?? null}
           onOpenRecharge={openRecharge}
           onNewChat={handleNewChat}
-          onShare={currentSessionId && !inTempMode ? () => setShareOpen(true) : undefined}
+          onShare={currentSessionId && !inTempMode && !voiceOpen ? () => setShareOpen(true) : undefined}
         />
 
         {inTempMode && (
@@ -1259,7 +1264,13 @@ export default function ChatShell() {
           </div>
         )}
 
-        {currentSessionEnded && !isGenerating ? (
+        {voiceOpen ? (
+          <VoiceStudio
+            onOpenPlans={() => {
+              setShowPlans(true);
+            }}
+          />
+        ) : currentSessionEnded && !isGenerating ? (
           <ChatEndedNotice endedBy={currentSession?.endedBy ?? null} onNewChat={handleNewChat} />
         ) : quotaExhausted && !isGenerating ? (
           <QuotaExhaustedNotice renewsAt={quotaRenewsAt} onRecharge={openRecharge} />
@@ -1405,16 +1416,6 @@ export default function ChatShell() {
 
       {showPlans && (
         <PlansModal user={user} subscription={subscription} onClose={() => setShowPlans(false)} />
-      )}
-
-      {showVoice && (
-        <VoiceStudio
-          onClose={() => setShowVoice(false)}
-          onOpenPlans={() => {
-            setShowVoice(false);
-            setShowPlans(true);
-          }}
-        />
       )}
 
       {toast && <Toast key={toastSeq} message={toast} onClose={() => setToast(null)} />}
