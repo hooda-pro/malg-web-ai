@@ -73,6 +73,13 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const [reordering, setReordering] = useState(false);
 
+  // ملخص الموديل المحدد + مزامنة خانة الصوت — قبل أي return مبكر (قواعد الـ hooks)
+  const selectedSummary = (models ?? []).find((m) => m.id === selectedId) ?? null;
+  useEffect(() => {
+    setVoice(selectedSummary?.ttsVoice ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
   const loadModels = async (keepId?: string | null): Promise<ModelSummary[]> => {
     const res = await fetch("/api/admin/models");
     const data = await res.json();
@@ -486,12 +493,6 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
   const inputCls = "w-full rounded-md border border-hair bg-surface-2 px-3 py-2 text-[13px] text-ink placeholder:text-ink-3 focus:outline-none";
   const masked = loaded.active.maskedKeys ?? [];
   const busy = saving || testing || addingKey || adding || actingId !== null || reordering;
-  const selectedSummary = (models ?? []).find((m) => m.id === selectedId) ?? null;
-
-  useEffect(() => {
-    setVoice(selectedSummary?.ttsVoice ?? "");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId]);
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
