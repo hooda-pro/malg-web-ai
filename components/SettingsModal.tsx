@@ -44,7 +44,7 @@ const TABS: { id: SettingsTab; icon: typeof Settings2; labelKey: string; needsUs
 
 const selectClass = cn(
   "h-9 min-w-[150px] cursor-pointer appearance-none rounded-full border border-hair bg-surface pe-9 ps-3.5 text-[13px] font-medium text-ink shadow-1",
-  "transition-colors duration-1 hover:border-hair-2 focus:border-accent focus:outline-none"
+  "transition-colors duration-1 hover:border-hair-2 focus:outline-none"
 );
 
 export default function SettingsModal({
@@ -294,7 +294,7 @@ function PersonalizationTab() {
             className={cn(
               "h-11 w-full rounded-md border border-hair bg-surface px-3.5 text-[14.5px] text-ink shadow-1",
               "placeholder:text-ink-3 transition-all duration-1 hover:border-hair-2",
-              "focus:border-accent focus:outline-none"
+              "focus:outline-none"
             )}
           />
         </label>
@@ -314,7 +314,7 @@ function PersonalizationTab() {
             className={cn(
               "w-full resize-y rounded-md border border-hair bg-surface px-3.5 py-3 text-[14px] leading-6 text-ink shadow-1",
               "placeholder:text-ink-3 transition-all duration-1 hover:border-hair-2",
-              "focus:border-accent focus:outline-none"
+              "focus:outline-none"
             )}
           />
           <span className="mt-1.5 flex items-center justify-between text-[12px] text-ink-3">
@@ -662,7 +662,7 @@ function AccountTab({
               className={cn(
                 "h-10 min-w-0 flex-1 rounded-md border border-hair bg-surface-2 px-3",
                 "text-[14px] text-ink placeholder:text-ink-3 transition-all duration-1",
-                "hover:border-hair-2 focus:border-accent focus:bg-surface focus:outline-none",
+                "hover:border-hair-2 focus:bg-surface focus:outline-none",
                 ""
               )}
             />

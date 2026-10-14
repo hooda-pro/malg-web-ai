@@ -140,7 +140,7 @@ export default function AccountMenu({
           <button
             role="menuitem"
             onClick={run(onOpenRecharge)}
-            className="mx-2 mb-1 block w-[calc(100%-16px)] rounded-md border border-hair bg-surface px-3 py-2.5 text-start shadow-1 transition-colors duration-1 hover:border-accent-line focus-visible:border-accent-line"
+            className="mx-2 mb-1 block w-[calc(100%-16px)] rounded-md border border-hair bg-surface px-3 py-2.5 text-start shadow-1 transition-colors duration-1 hover:border-accent-line"
           >
             <span className="flex items-center justify-between gap-2">
               <span className="text-[12px] font-medium text-ink-2">

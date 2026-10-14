@@ -59,7 +59,7 @@ export default function AdminLogin({ onLogin }: { onLogin: (admin: SessionUser) 
 
         <div className="px-6 py-6">
           <div className="space-y-3">
-            <div className="flex items-center gap-2.5 rounded-lg border border-hair bg-surface-2 px-3.5 py-2.5 transition-[border-color] duration-1 focus-within:!border-accent-line">
+            <div className="flex items-center gap-2.5 rounded-lg border border-hair bg-surface-2 px-3.5 py-2.5 transition-[border-color] duration-1">
               <Mail size={15} className="shrink-0 text-ink-3" />
               <input
                 value={email}
@@ -71,7 +71,7 @@ export default function AdminLogin({ onLogin }: { onLogin: (admin: SessionUser) 
               />
             </div>
 
-            <div className="flex items-center gap-2.5 rounded-lg border border-hair bg-surface-2 px-3.5 py-2.5 transition-[border-color] duration-1 focus-within:!border-accent-line">
+            <div className="flex items-center gap-2.5 rounded-lg border border-hair bg-surface-2 px-3.5 py-2.5 transition-[border-color] duration-1">
               <Lock size={15} className="shrink-0 text-ink-3" />
               <input
                 value={password}

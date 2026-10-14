@@ -1485,7 +1485,7 @@ function EditMessageDialog({
             dir="auto"
             disabled={busy}
             placeholder={t("placeholder")}
-            className="max-h-[40dvh] w-full resize-y rounded-md border border-hair bg-surface-2 px-3 py-2.5 text-[14px] leading-7 text-ink placeholder:text-ink-3 focus:border-accent-line focus:outline-none disabled:opacity-60"
+            className="max-h-[40dvh] w-full resize-y rounded-md border border-hair bg-surface-2 px-3 py-2.5 text-[14px] leading-7 text-ink placeholder:text-ink-3 focus:outline-none disabled:opacity-60"
           />
         </div>
         <div className="flex gap-2 border-t border-hair px-4 py-3">

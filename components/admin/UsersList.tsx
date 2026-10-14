@@ -51,7 +51,7 @@ export default function UsersList({ onSelect }: { onSelect: (id: string) => void
     <div className="space-y-4">
       {/* شريط البحث */}
       <div className="flex items-center gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-hair bg-surface px-3 py-2 focus-within:border-accent-line">
+        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-hair bg-surface px-3 py-2">
           <Search size={15} className="shrink-0 text-ink-3" />
           <input
             value={q}

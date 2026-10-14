@@ -82,7 +82,7 @@ export default function ConfirmModal({
               dir="ltr"
               className={cn(
                 "h-11 w-full rounded-md border border-hair bg-surface-2 px-3.5 font-mono text-[13.5px] text-ink",
-                "transition-all duration-1 focus:border-danger focus:bg-surface focus:outline-none"
+                "transition-all duration-1 focus:bg-surface focus:outline-none"
               )}
             />
           </label>

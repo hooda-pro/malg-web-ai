@@ -98,7 +98,7 @@ export default function FactsManager() {
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            className="h-9 rounded-md border border-hair bg-surface-2 px-3 text-[13.5px] text-ink focus:border-accent focus:outline-none"
+            className="h-9 rounded-md border border-hair bg-surface-2 px-3 text-[13.5px] text-ink focus:outline-none"
           >
             {CATEGORIES.map((c) => (
               <option key={c} value={c}>

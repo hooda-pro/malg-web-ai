@@ -164,35 +164,12 @@
     color: var(--ink);
   }
 
-  /* حلقة الفوكس: بتتبع شكل العنصر نفسه (من غير ما نغيّر الـ border-radius بتاعه —
-     الكود القديم كان بيفرض 8px على أي عنصر ياخد فوكس فالأزرار الدايرية تتحول لمربع). */
-  :focus {
-    outline: none;
-  }
+  /* لا توجد أي إطارات تركيز في أي مكان (بطلب صريح): لا حلقة ولا توهّج ولا
+     تغيّر بوردر — الحقل النشط يُميَّز بتغيّر الخلفية فقط حيث وُجد. */
+  :focus,
   :focus-visible {
-    outline: 2px solid var(--accent-line);
-    outline-offset: 2px;
-  }
-  /* الحقول ليها حدّ/توهّج خاص بيها عند الفوكس، فمفيش حلقة إضافية ولا إطار أبيض */
-  input:focus-visible,
-  textarea:focus-visible,
-  select:focus-visible {
-    outline: none;
-  }
-  /* ظهور ناعم لحلقة التركيز: يمنع الومضة البيضا في التسجيلات المضغوطة.
-     الـ hover يفضل بسرعته الطبيعية — البطء هنا لحظة التركيز فقط. */
-  input:focus,
-  textarea:focus,
-  select:focus,
-  button:focus-visible {
-    transition-duration: 350ms !important;
-  }
-  /* العناصر اللي جوه حاويات overflow-hidden: الحلقة جوّه مش برّه عشان ما تتقصّش */
-  [role="dialog"] button:focus-visible,
-  [role="dialog"] a:focus-visible,
-  .overflow-hidden > button:focus-visible,
-  .overflow-hidden a:focus-visible {
-    outline-offset: -2px;
+    outline: none !important;
+    outline-offset: 0;
   }
 
   * {

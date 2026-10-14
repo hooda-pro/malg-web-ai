@@ -283,7 +283,7 @@ export default function ChatDrawer({
                 placeholder={t("searchChats")}
                 className={cn(
                   "h-9 w-full rounded-md border border-transparent bg-surface-3 pe-3 ps-8 text-[13px] text-ink",
-                  "placeholder:text-ink-3 transition-colors duration-1 focus:border-accent-line focus:bg-surface focus:outline-none"
+                  "placeholder:text-ink-3 transition-colors duration-1 focus:bg-surface focus:outline-none"
                 )}
               />
             </label>
