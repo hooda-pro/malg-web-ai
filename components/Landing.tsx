@@ -1,5 +1,5 @@
 import { ArrowLeft, Check, Code2, Globe, KeyRound, MessageCircle, PanelRight, Paperclip, PenLine, Zap } from "lucide-react";
-import { getSiteUrl } from "@/lib/site";
+import { getRequestSiteUrl } from "@/lib/site";
 import { FREE_PLAN, PRO_PLAN, formatUSD } from "@/lib/plans";
 import Reveal from "./Reveal";
 import Showcase from "./Showcase";
@@ -55,8 +55,9 @@ function fmtTokens(n: number): string {
   return `${new Intl.NumberFormat("en-US").format(n)} توكن`;
 }
 
-export default function Landing() {
-  const site = getSiteUrl();
+export default async function Landing() {
+  // الدومين الفعلي من الطلب — مثال الـ curl يعرض رابط موقعك الحقيقي مش localhost.
+  const site = await getRequestSiteUrl();
   const curl = `curl ${site}/api/malg/v1/chat/completions \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
