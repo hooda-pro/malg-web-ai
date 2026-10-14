@@ -6,40 +6,40 @@ import Showcase from "./Showcase";
 import Logo from "./Logo";
 
 const CAPABILITIES = [
-  { icon: MessageCircle, title: "إجابات فورية موثقة", body: "اسأل عن أي شيء — وعند الحاجة يبحث في الويب ويوثّق مصادره بروابط داخل الإجابة." },
-  { icon: PenLine, title: "كتابة وصياغة", body: "مقالات ورسائل ومحتوى بأسلوب عربي واضح، مع تدقيق وتحسين ما تكتبه." },
-  { icon: Code2, title: "يبني ويشغّل الكود", body: "اطلب موقعًا أو أداة، وشاهد كل أمر يُنفَّذ في بيئة معزولة مع مخرجاته خطوة بخطوة." },
-  { icon: PanelRight, title: "معاينة حيّة بجانب المحادثة", body: "الصفحة أو الملفات تُفتح في لوحة عمل، وتتحدث تلقائيًا مع كل رد." },
-  { icon: Paperclip, title: "ملفات ومرفقات", body: "ارفع صورًا وملفات مضغوطة، واقرأ منها وناقش محتواها بدل نسخه ولصقه." },
-  { icon: KeyRound, title: "API للمطورين", body: "استخدم MALG داخل تطبيقاتك وأدواتك مثل Cline وOpenCode بمفتاح API." },
+  { icon: MessageCircle, title: "إجابات فورية موثّقة", body: "اطرح أي سؤال — وعند الحاجة يبحث MALG في الويب لحظيًا ويوثّق إجابته بروابط المصادر داخل النص." },
+  { icon: PenLine, title: "كتابة وصياغة احترافية", body: "مقالات ورسائل وتقارير ومحتوى بأسلوب عربي سليم، مع تدقيق لغوي وتحسين لما تكتبه." },
+  { icon: Code2, title: "بناء الأكواد وتنفيذها", body: "اطلب موقعًا أو أداة برمجية، وشاهد خطوات التنفيذ في بيئة معزولة مع عرض المخرجات أولًا بأول." },
+  { icon: PanelRight, title: "معاينة حيّة بجانب المحادثة", body: "الصفحات والملفات تُفتح في لوحة جانبية، وتتحدّث تلقائيًا مع كل رد — بالضبط كما ستظهر." },
+  { icon: Paperclip, title: "التعامل مع الملفات", body: "ارفع الصور والمستندات والملفات المضغوطة، وناقش محتواها بدل نسخه ولصقه." },
+  { icon: KeyRound, title: "واجهة برمجية للمطورين", body: "ادمج MALG في تطبيقاتك وأدواتك مثل Cline وOpenCode عبر واجهة متوافقة مع OpenAI." },
 ];
 
 const STEPS = [
-  { title: "أنشئ حسابك مجانًا", body: "بحساب Google خلال ثوانٍ — دون بطاقة ائتمانية." },
-  { title: "صِف ما تريد", body: "اكتب ما تريد بناءه، أو اسأل عمّا تريد معرفته." },
-  { title: "راجع النتيجة", body: "تابع خطوات التنفيذ وشاهد المعاينة، ثم عدّل حتى تصل إلى ما تريد." },
+  { title: "أنشئ حسابك مجانًا", body: "سجّل الدخول بحساب Google خلال ثوانٍ — دون بطاقة ائتمانية." },
+  { title: "صِف ما تريد", body: "اكتب سؤالك أو اشرح المشروع الذي تريد بناءه." },
+  { title: "راجع النتيجة وطوّرها", body: "تابع خطوات التنفيذ وعاين النتيجة، ثم اطلب التعديل حتى تصل إلى ما تريد." },
 ];
 
 const FAQS = [
   {
     q: "هل استخدام MALG مجاني؟",
-    a: "نعم. تحصل عند التسجيل على رصيد مجاني يكفي لتجربة المنتج، ويتجدد تلقائيًا بعد النفاد. وإذا احتجت المزيد يمكنك الاشتراك في باقة Pro أو شحن رصيد إضافي.",
+    a: "نعم — تحصل عند التسجيل على رصيد مجاني للتجربة يتجدد تلقائيًا، ويمكنك الترقية إلى باقة Pro أو شحن رصيد إضافي عند الحاجة.",
   },
   {
     q: "بأي لغة يتحدث MALG؟",
-    a: "بالعربية الفصحى افتراضيًا، ويمكنك اختيار العامية المصرية من الإعدادات. كما يدعم الإنجليزية والفرنسية والإسبانية كلغة واجهة وردود.",
+    a: "يتحدث MALG بالعربية الفصحى افتراضيًا، مع إمكانية اختيار العامية المصرية من الإعدادات، ويدعم الإنجليزية والفرنسية والإسبانية لغةً للواجهة والردود.",
   },
   {
     q: "هل يساعدني في البرمجة وبناء المواقع؟",
-    a: "نعم — يكتب المواقع والتطبيقات كاملة، وينفّذ الكود في بيئة معزولة، ويعرض النتيجة في معاينة حية بجانب المحادثة.",
+    a: "نعم — يكتب المواقع والتطبيقات، وينفّذ الأكواد في بيئة معزولة، ويعرض النتيجة في معاينة حية بجانب المحادثة.",
   },
   {
     q: "هل يمكنني استخدام MALG داخل أدواتي الخاصة؟",
-    a: "نعم، عبر واجهة API متوافقة مع OpenAI تعمل مع أدوات مثل Cline وOpenCode.",
+    a: "نعم — عبر واجهة برمجية متوافقة مع OpenAI تعمل مع أدوات مثل Cline وOpenCode.",
   },
   {
     q: "هل محادثاتي محفوظة؟",
-    a: "نعم، تُحفظ محادثاتك على حسابك ويمكنك الرجوع إليها في أي وقت. كما يوجد وضع مؤقت لا يحفظ أي شيء.",
+    a: "نعم — تُحفظ محادثاتك في حسابك للرجوع إليها في أي وقت، مع توفر وضع مؤقت لا يحفظ أي شيء.",
   },
 ];
 
@@ -122,13 +122,13 @@ export default function Landing() {
           </div>
           <p className="relative mx-auto mb-4 inline-flex items-center gap-1.5 rounded-full border border-hair bg-surface px-3.5 py-1.5 text-[12.5px] font-medium text-ink-2 shadow-1">
             <Zap size={13} className="text-accent" />
-            مساعد ذكي يتقن العربية
+            مساعد ذكاء اصطناعي باللغة العربية
           </p>
           <h1 className="relative mx-auto max-w-[24ch] text-balance text-[clamp(32px,5.2vw,58px)] font-semibold leading-[1.15] tracking-display">
             كل أسئلتك وأعمالك، <span className="text-gradient">في مكان واحد</span>
           </h1>
           <p className="relative mx-auto mt-4 max-w-[58ch] text-pretty text-[clamp(15px,1.7vw,18px)] leading-8 text-ink-2">
-            MALG يجيب عن أسئلتك، يكتب معك، يبني المواقع وينفّذ الكود، ويبحث في الويب موثقًا مصادره — بالعربية الفصحى وبلغات أخرى.
+            MALG يجيب عن أسئلتك، ويساعدك في الكتابة والدراسة والعمل، ويبني المواقع وينفّذ الأكواد، ويبحث في الويب موثقًا مصادره — باللغة العربية وبلغات أخرى.
           </p>
           <div className="relative mt-6 flex flex-wrap items-center justify-center gap-3">
             <a href="/#/chat" className={`${btnPrimary} btn-sheen`}>
@@ -148,16 +148,16 @@ export default function Landing() {
               <ArrowLeft size={17} />
             </span>
           </a>
-          <p className="relative mt-3 text-[13px] text-ink-3">مجاني للبدء — سجّل الدخول بحساب Google فقط</p>
+          <p className="relative mt-3 text-[13px] text-ink-3">ابدأ مجانًا — كل ما تحتاجه حساب Google</p>
         </section>
 
         <section className={section} aria-label="أبرز القدرات">
           <div className="flex flex-wrap items-center justify-center gap-2.5">
             {[
-              { icon: Zap, label: "شات فوري بالبث الحي" },
-              { icon: Globe, label: "بحث الويب بالمصادر" },
-              { icon: Code2, label: "بناء الكود وتنفيذه" },
-              { icon: KeyRound, label: "واجهة API للمطورين" },
+              { icon: Zap, label: "ردود فورية لحظة بلحظة" },
+              { icon: Globe, label: "بحث موثّق بالمصادر" },
+              { icon: Code2, label: "بناء الأكواد وتنفيذها" },
+              { icon: KeyRound, label: "واجهة برمجية للمطورين" },
             ].map(({ icon: Icon, label }) => (
               <span
                 key={label}
@@ -182,12 +182,12 @@ export default function Landing() {
             />
             <Showcase />
           </div>
-          <p className="mt-3 text-center text-[13px] text-ink-3">عرض توضيحي لتجربة الاستخدام</p>
+          <p className="mt-3 text-center text-[13px] text-ink-3">جولة سريعة داخل تجربة MALG</p>
         </section>
 
         <section id="features" className={`${section} scroll-mt-20`} aria-labelledby="features-title">
           <h2 id="features-title" className={h2}>
-            ماذا يقدم MALG؟
+            ماذا تقدّم منصة MALG؟
           </h2>
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {CAPABILITIES.map(({ icon: Icon, title, body }, i) => (
@@ -223,10 +223,10 @@ export default function Landing() {
 
         <section id="plans" className={`${section} scroll-mt-20`} aria-labelledby="plans-title">
           <h2 id="plans-title" className={h2}>
-            باقة تناسب الجميع
+            خطط مرنة للجميع
           </h2>
           <p className="mt-3 max-w-[52ch] text-[15.5px] leading-8 text-ink-2">
-            ابدأ مجانًا، وعندما تحتاج more انتقل إلى Pro — الاشتراك والشحن من داخل حسابك.
+            ابدأ مجانًا، وانتقل إلى Pro عندما تحتاج إلى المزيد — الاشتراك والشحن من داخل حسابك.
           </p>
           <div className="mt-6 grid gap-3 md:grid-cols-2">
             <Reveal className={`${cell} lift rounded-2xl border border-hair shadow-1`}>
@@ -238,15 +238,15 @@ export default function Landing() {
               <ul className="mt-4 space-y-2.5 text-[14.5px] leading-7 text-ink-2">
                 <li className="flex items-start gap-2">
                   <Check size={16} className="mt-1.5 shrink-0 text-accent" />
-                  {fmtTokens(FREE_PLAN.monthlyTokens)} للتجربة
+                  {fmtTokens(FREE_PLAN.monthlyTokens)} رصيد مجاني للتجربة
                 </li>
                 <li className="flex items-start gap-2">
                   <Check size={16} className="mt-1.5 shrink-0 text-accent" />
-                  الموديلات المجانية
+                  الوصول إلى الموديلات المجانية
                 </li>
                 <li className="flex items-start gap-2">
                   <Check size={16} className="mt-1.5 shrink-0 text-accent" />
-                  تجديد تلقائي للرصيد الأساسي
+                  تجديد تلقائي للرصيد
                 </li>
               </ul>
               <a href="/#/chat" className={`${btnGhost} mt-6 w-full`}>
@@ -269,11 +269,11 @@ export default function Landing() {
                 </li>
                 <li className="flex items-start gap-2">
                   <Check size={16} className="mt-1.5 shrink-0 text-accent" />
-                  كل الموديلات بما فيها المدفوعة
+                  الوصول إلى جميع الموديلات بما فيها المدفوعة
                 </li>
                 <li className="flex items-start gap-2">
                   <Check size={16} className="mt-1.5 shrink-0 text-accent" />
-                  شحن إضافي في أي وقت
+                  إمكانية شحن رصيد إضافي في أي وقت
                 </li>
               </ul>
               <a href="/#/chat" className={`${btnPrimary} mt-6 w-full`}>
@@ -287,10 +287,10 @@ export default function Landing() {
           <div className="grid items-center gap-8 lg:grid-cols-2 lg:gap-10">
             <Reveal>
               <h2 id="api-title" className={h2}>
-                للمطورين: استخدم MALG بكامل قدراته
+                للمطورين: ادمج MALG في أدواتك
               </h2>
               <p className="mt-3 max-w-[52ch] text-[15.5px] leading-8 text-ink-2">
-                اربط MALG بأدواتك عبر واجهة متوافقة مع OpenAI، مثل Cline وOpenCode، أو داخل أي تطبيق تبنيه.
+                اربط MALG بتطبيقاتك وأدواتك مثل Cline وOpenCode عبر واجهة متوافقة مع OpenAI.
               </p>
               <a href="/#/api" className={`${btnGhost} mt-5`}>
                 احصل على مفتاح API
@@ -309,19 +309,19 @@ export default function Landing() {
 
           <Reveal className="mt-8 overflow-hidden rounded-2xl border border-accent-line bg-accent-soft">
             <p className="flex items-center gap-2.5 px-6 py-4 text-[15.5px] font-semibold">
-              ملاحظة: للاستخدام الكامل، استخدم الـ API
+              ملاحظة: الموقع أم الواجهة البرمجية؟
             </p>
             <dl className="grid border-t border-accent-line text-[14.5px] leading-7 sm:grid-cols-2">
               <div className="px-6 py-5">
                 <dt className="font-semibold">على الموقع</dt>
                 <dd className="mt-1 text-ink-2">
-                  يعمل الكود في بيئة معزولة بموارد محدودة، لذلك قد تفشل بعض الأوامر، وقد لا يعمل مشروعك كما يعمل في بيئتك.
+                  يعمل الكود داخل الموقع في بيئة معزولة بموارد محدودة، لذلك قد تفشل بعض الأوامر المتقدمة.
                 </dd>
               </div>
               <div className="border-t border-accent-line px-6 py-5 sm:border-s sm:border-t-0">
-                <dt className="font-semibold">عبر الـ API</dt>
+                <dt className="font-semibold">عبر الواجهة البرمجية</dt>
                 <dd className="mt-1 text-ink-2">
-                  تشغّل MALG داخل أداة على جهازك، فتتحكم في بيئة التنفيذ، وتجرّب مشروعك بنفسك، وتحصل على أفضل نتيجة.
+                  يعمل MALG داخل بيئتك الخاصة، فتتحكم في الموارد وتحصل على أفضل نتيجة.
                 </dd>
               </div>
             </dl>
@@ -381,7 +381,7 @@ export default function Landing() {
 
       <footer className="border-t border-hair pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-6 text-[13px] text-ink-3">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5">
-          <span>© {new Date().getFullYear()} MALG</span>
+          <span>© {new Date().getFullYear()} MALG — جميع الحقوق محفوظة</span>
           <nav className="flex gap-5">
             <a href="/#/chat" className="transition-colors duration-1 hover:text-ink">
               المحادثة
