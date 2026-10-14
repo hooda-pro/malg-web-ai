@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
 import {
   ArrowUpRight,
@@ -165,22 +166,49 @@ function SettingSelect({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; width: number } | null>(null);
+
+  // القايمة بتترسم في portal بمقاس ثابت من الشاشة — لأن المودال فيه overflow-y-auto
+  // فالقايمة المطلقة جواه كانت بتتقص. المقاس بيتحسب مع الفتح وبيتابع السكرول والتحجيم،
+  // وبيتقلب لفوق لو مفيش مساحة تحت.
+  const updatePos = useCallback(() => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const w = Math.max(r.width, 200);
+    const estH = Math.min(320, options.length * 44 + 12);
+    const up = window.innerHeight - r.bottom < estH && r.top > window.innerHeight / 2;
+    setPos(
+      up
+        ? { bottom: Math.max(8, window.innerHeight - r.top + 6), left: Math.max(8, r.right - w), width: w }
+        : { top: r.bottom + 6, left: Math.max(8, r.right - w), width: w }
+    );
+  }, [options.length]);
 
   useEffect(() => {
     if (!open) return;
+    updatePos();
+    const target = (e: MouseEvent) => e.target as Node;
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current?.contains(target(e))) return;
+      if (listRef.current?.contains(target(e))) return;
+      setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", updatePos);
+    document.addEventListener("scroll", updatePos, true);
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", updatePos);
+      document.removeEventListener("scroll", updatePos, true);
     };
-  }, [open ]);
+  }, [open, updatePos]);
 
   const selected = options.find((o) => o.value === value) ?? options[0];
 
@@ -188,6 +216,7 @@ function SettingSelect({
     <div className="relative" ref={ref}>
       <button
         type="button"
+        ref={btnRef}
         onClick={() => setOpen((o) => !o)}
         disabled={options.length === 0}
         aria-haspopup="listbox"
@@ -203,11 +232,13 @@ function SettingSelect({
         />
       </button>
 
-      {open && options.length > 0 && (
+      {open && options.length > 0 && pos && createPortal(
         <div
+          ref={listRef}
           role="listbox"
           aria-label={label}
-          className="animate-materialize glass absolute end-0 top-[calc(100%+6px)] z-modal min-w-[200px] overflow-hidden rounded-lg border border-hair p-1.5 shadow-3"
+          className="animate-materialize glass fixed z-[80] overflow-y-auto rounded-lg border border-hair p-1.5 shadow-3"
+          style={{ top: pos.top, bottom: pos.bottom, left: pos.left, width: pos.width, maxHeight: 320 }}
         >
           {options.map((o) => {
             const active = o.value === value;
@@ -246,7 +277,8 @@ function SettingSelect({
               </button>
             );
           })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
