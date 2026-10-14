@@ -11,6 +11,7 @@ interface Loaded {
 }
 
 const PRESETS: { label: string; name: string; baseUrl: string; model: string; protocol: ProviderProtocol }[] = [
+  { label: "Z.AI — GLM-4.7-Flash (Free)", name: "Z.AI", baseUrl: "https://api.z.ai/api/paas/v4", model: "glm-4.7-flash", protocol: "chat_completions" },
   { label: "Token Harbor — DeepSeek V4.1", name: "Token Harbor", baseUrl: "https://tokenharbor.ai/v1", model: "deepseek-v4.1-flash:free", protocol: "chat_completions" },
   { label: "OpenRouter", name: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1", model: "deepseek/deepseek-chat-v3-0324:free", protocol: "chat_completions" },
   { label: "DeepSeek", name: "DeepSeek", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat", protocol: "chat_completions" },
