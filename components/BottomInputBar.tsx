@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, FileArchive, FileText, Paperclip, Square, X } from "lucide-react";
+import { ArrowUp, FileArchive, FileText, Paperclip, Plus, Square, X } from "lucide-react";
 import {
   ATTACHMENTS_ENABLED,
   detectAttachmentKind,
@@ -36,7 +36,7 @@ export interface ComposerAttachment {
  * style.height يدويًا وبتعمل قفزة في القايمة اللي فوقها مع كل حرف.)
  * الخط 16px على الموبايل عشان iOS ما يعملش zoom تلقائي أول ما تضغط على الخانة.
  */
-const FIELD_TEXT = "px-4 pb-1 pt-3.5 text-[16px] leading-7 sm:text-[15px]";
+const FIELD_TEXT = "px-4 pb-1 pt-3 text-[16px] leading-7 sm:text-[15px]";
 
 // Above this length, a paste turns into a .txt attachment instead of composer text.
 const PASTE_AS_FILE_CHARS = 3000;
@@ -354,7 +354,7 @@ export default function BottomInputBar({
           />
         </div>
 
-        <div className="flex items-center gap-1.5 px-2.5 pb-2.5 pt-1">
+        <div className="flex items-center gap-1.5 px-2.5 pb-2 pt-1 rtl:flex-row-reverse">
           {ATTACHMENTS_ENABLED && (
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -363,7 +363,7 @@ export default function BottomInputBar({
               aria-label={t("attachFiles")}
               className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-3 transition-colors duration-1 hover:bg-surface-3 hover:text-ink disabled:opacity-40"
             >
-              <Paperclip size={16} />
+              <Plus size={17} />
             </button>
           )}
 
@@ -375,9 +375,9 @@ export default function BottomInputBar({
               onClick={onStop}
               title={t("stop")}
               aria-label={t("stop")}
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ink text-ground transition-transform duration-1 ease-soft active:scale-[0.92]"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-ink text-ground transition-transform duration-1 ease-soft active:scale-[0.92]"
             >
-              <Square size={12} fill="currentColor" />
+              <Square size={11} fill="currentColor" />
             </button>
           ) : (
             <button
@@ -387,12 +387,12 @@ export default function BottomInputBar({
               title={t("send")}
               aria-label={t("send")}
               className={cn(
-                "btn-send grid h-9 w-9 shrink-0 place-items-center rounded-full text-accent-ink",
+                "btn-send grid h-8 w-8 shrink-0 place-items-center rounded-full text-accent-ink",
                 "transition-all duration-1 ease-soft",
                 "active:scale-[0.94] disabled:bg-surface-3 disabled:text-ink-3 disabled:shadow-none"
               )}
             >
-              <ArrowUp size={17} strokeWidth={2.4} />
+              <ArrowUp size={16} strokeWidth={2.4} />
             </button>
           )}
         </div>
@@ -407,7 +407,7 @@ export default function BottomInputBar({
           onPickModel={onPickModel}
           onLockedModel={onLockedModel}
         />
-        <p className="min-w-0 flex-1 text-end text-[11px] leading-4 text-ink-3">
+        <p className="min-w-0 flex-1 text-center text-[11px] leading-4 text-ink-3">
           {t("disclaimer")}
         </p>
       </div>

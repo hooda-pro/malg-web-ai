@@ -147,9 +147,9 @@ function MessageItem({
 
   if (isUser) {
     return (
-      <div className={cn("group flex w-full flex-col items-end px-4 py-3 sm:px-6", animateIn && "animate-rise")}>
+      <div className={cn("group flex w-full flex-col items-end px-4 py-3 rtl:items-start sm:px-6", animateIn && "animate-rise")}>
         {imageAttachments.length > 0 && (
-          <div className="mb-1.5 flex max-w-[85%] flex-wrap justify-end gap-1.5">
+          <div className="mb-1.5 flex max-w-[85%] flex-wrap justify-end gap-1.5 rtl:justify-start">
             {imageAttachments.map((a, i) =>
               (a.previewUrl || a.remoteUrl) ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -203,7 +203,7 @@ function MessageItem({
         )}
 
         {fileAttachments.length > 0 && (
-          <div className="mb-1.5 flex max-w-[85%] flex-wrap justify-end gap-1.5">
+          <div className="mb-1.5 flex max-w-[85%] flex-wrap justify-end gap-1.5 rtl:justify-start">
             {fileAttachments.map((a, i) => (
               <span
                 key={i}
@@ -225,8 +225,8 @@ function MessageItem({
         {userMainText && (
           <div
             className={cn(
-              "msg-in max-w-[85%] whitespace-pre-wrap break-words rounded-xl border border-hair",
-              "bg-surface-3 px-4 py-2.5 text-[15px] leading-7 text-ink shadow-1"
+              "msg-in max-w-[85%] whitespace-pre-wrap break-words rounded-2xl",
+              "bg-surface-3 px-4 py-2.5 text-[15px] leading-7 text-ink"
             )}
             dir="auto"
           >
