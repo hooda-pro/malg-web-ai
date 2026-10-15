@@ -29,12 +29,11 @@ export default function WelcomeHero({
   return (
     <div className="relative flex min-h-0 flex-1 items-center justify-center px-5 pb-6 pt-10">
       <div className="stagger relative flex w-full max-w-[680px] flex-col items-center text-center">
-        <span className="grid h-11 w-11 place-items-center rounded-xl bg-accent text-accent-ink shadow-accent">
-          <Logo size={26} />
-        </span>
-
-        <h1 className="mt-6 text-balance text-[clamp(28px,5.2vw,40px)] font-semibold leading-[1.1] tracking-display text-ink">
-          {name ? t(dayPart, { name }) : t("heroTitle")}
+        <h1 className="flex items-center justify-center gap-3 text-balance text-[clamp(28px,5.2vw,40px)] font-semibold leading-[1.1] tracking-display text-ink">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent text-accent-ink shadow-accent">
+            <Logo size={24} />
+          </span>
+          <span>{name ? t(dayPart, { name }) : t("heroTitle")}</span>
         </h1>
         <p className="mt-3 max-w-[46ch] text-pretty text-[15.5px] leading-7 text-ink-2">
           {t("heroSubtitle")}
