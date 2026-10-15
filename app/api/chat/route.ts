@@ -179,6 +179,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   }
   const isAdmin = flags.isAdmin;
   if (flags.isBanned) {
+    console.warn("[chat-reject] banned user=", user.id);
     return NextResponse.json(
       { error: "تم حظر حسابك من إدارة المنصة — لا يمكنك إرسال رسائل حاليًا." },
       { status: 403 }
@@ -206,6 +207,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
 
   const quotaCheck = await checkAndMaybeRenewQuota(user.id, isAdmin);
   if (quotaCheck.blocked) {
+    console.warn("[chat-reject] quota user=", user.id);
     return NextResponse.json({ error: quotaCheck.message, quotaExhausted: true }, { status: 403 });
   }
   // التوكنز المتبقية للمستخدم قبل الرد ده (null = أدمن، مفيش حد) — بنقطع الرد في نصه لو خلصت.
@@ -213,6 +215,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
 
   // موديلات الباقات المدفوعة: محجوبة عن الخطة المجانية (الأدمن والمشتركون فقط)
   if (!isAdmin && (await isModelPaid(model).catch(() => false)) && !(await hasPaidSubscription(user.id).catch(() => false))) {
+    console.warn("[chat-reject] paid-model user=", user.id, "model=", model);
     return NextResponse.json(
       { error: "هذا الموديل متاح لمشتركي باقة Pro فقط — اشترك من حسابك لاستخدامه.", subscriptionRequired: true },
       { status: 403 }
