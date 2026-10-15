@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AudioLines, Crown, Download, Loader2, Play, X } from "lucide-react";
+import { AudioLines, Check, ChevronDown, Crown, Download, Loader2, Play, X } from "lucide-react";
 import { Button } from "./ui/Controls";
 import { useSettings } from "./SettingsContext";
 
@@ -196,6 +196,11 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
                             </option>
                           ))}
                         </select>
+                        <ChevronDown
+                          size={16}
+                          className="pointer-events-none absolute end-3.5 top-1/2 -translate-y-1/2 text-ink-3"
+                          aria-hidden="true"
+                        />
                       </span>
                     </label>
                     <div className="tnum hidden items-center justify-end gap-1.5 pb-3 text-[12px] text-ink-3 sm:flex" aria-hidden="true">
@@ -203,6 +208,22 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
                       {selected?.voice || selected?.name || ""}
                     </div>
                   </div>
+
+                  {selected && (
+                    <div className="mt-3 flex items-center gap-2 rounded-2xl border border-accent-line bg-accent-soft px-3.5 py-2.5">
+                      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-accent text-accent-ink">
+                        <Check size={13} strokeWidth={3} />
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-ink" dir="auto">
+                        {selected.name}
+                      </span>
+                      {!!selected.voice && (
+                        <span className="tnum shrink-0 rounded-full bg-surface px-2 py-px text-[11px] text-ink-2" dir="ltr">
+                          {selected.voice}
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   <label className="mt-3 block">
                     <span className="mb-1.5 flex items-center justify-between text-[12.5px] font-medium text-ink-2">
