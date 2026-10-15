@@ -906,7 +906,11 @@ export async function uploadAttachmentFile(file: File): Promise<RemoteUploadResu
     body: form,
   });
   const data = await res.json().catch(() => null);
-  if (!res.ok || !data?.secure_url) throw new Error("تعذّر رفع الملف — حاول مجددًا");
+  if (!res.ok || !data?.secure_url) {
+    const detail = data?.error?.message ? String(data.error.message) : "";
+    console.error("[upload-failed]", res.status, detail || data);
+    throw new Error(detail ? `Cloudinary: ${detail}` : "تعذّر رفع الملف — حاول مجددًا");
+  }
   if (String(data.resource_type || "") === "video") throw new Error("رفع الفيديو متوقف حاليا");
   return {
     url: String(data.secure_url),

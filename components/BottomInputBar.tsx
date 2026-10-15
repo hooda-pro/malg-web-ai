@@ -144,11 +144,18 @@ export default function BottomInputBar({
               : a
           )
         );
-      } catch {
+      } catch (e) {
         setAttachments((prev) =>
           prev.map((a) =>
             a.id === placeholder.id
-              ? { ...a, loading: false, error: "تعذّر رفع الملف — حاول مجددًا" }
+              ? {
+                  ...a,
+                  loading: false,
+                  error:
+                    e instanceof Error && e.message
+                      ? e.message
+                      : "تعذّر رفع الملف — حاول مجددًا",
+                }
               : a
           )
         );
