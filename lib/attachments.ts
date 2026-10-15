@@ -70,7 +70,7 @@ const IMAGE_JPEG_QUALITY = 0.82;
 export const MAX_CHAT_PAYLOAD_CHARS = 3_000_000;
 // المفتاح الرئيسي لرفع الملفات — false = معطّل مؤقتًا من الواجهة
 // (زر الإرفاق + السحب والإفلات + لصق الملفات). رجّعه true لإعادة التفعيل.
-export const ATTACHMENTS_ENABLED = false;
+export const ATTACHMENTS_ENABLED = true;
 // سقف حجم الملف الواحد عند الاختيار — فوقه بنرفض فورًا من غير ما نقراه في الذاكرة.
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
