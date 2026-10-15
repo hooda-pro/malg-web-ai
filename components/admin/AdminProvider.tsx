@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AudioLines, ChevronDown, ChevronUp, Crown, FlaskConical, GripVertical, KeyRound, Layers, Loader2, Mic, PlugZap, Plus, RefreshCw, Save, Star, Trash2 } from "lucide-react";
+import { AudioLines, Check, ChevronDown, ChevronUp, Crown, FlaskConical, GripVertical, KeyRound, Layers, Loader2, Mic, Pencil, PlugZap, Plus, RefreshCw, Save, Star, Trash2, X } from "lucide-react";
 import type { ModelSummary, ProviderConfigPublic, ProviderProtocol } from "@/lib/provider";
 
 interface Loaded {
@@ -67,6 +67,8 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
   // إجراءات على صف موديل (حذف/افتراضي)
   const [actingId, setActingId] = useState<string | null>(null);
   const [confirmDeleteModel, setConfirmDeleteModel] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   // إعادة الترتيب اليدوي (سحب وإفلات + أسهم)
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -418,6 +420,31 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
     }
   };
 
+  const renameModel = async (id: string, name: string) => {
+    const nm = name.trim();
+    if (!nm) {
+      notify("err", "اسم الموديل لا يمكن أن يكون فارغًا");
+      return;
+    }
+    setActingId(id);
+    try {
+      const res = await fetch(`/api/admin/models/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: nm }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "فشل التحديث");
+      setModels(data.models ?? []);
+      setRenamingId(null);
+      notify("ok", `تم تغيير اسم الموديل إلى ${nm}`);
+    } catch (e) {
+      notify("err", e instanceof Error ? e.message : "فشل التحديث");
+    } finally {
+      setActingId(null);
+    }
+  };
+
   const deleteModel = async (id: string) => {
     if (confirmDeleteModel !== id) {
       setConfirmDeleteModel(id);
@@ -609,7 +636,50 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
                   </span>
                   <button onClick={() => onSelectModel(m.id)} disabled={busy} title={`إدارة ${m.name}`} className="min-w-0 flex-1 text-start disabled:opacity-40">
                     <span className="flex items-center gap-2">
-                      <span className="truncate text-[13px] font-semibold text-ink">{m.name}</span>
+                      {renamingId === m.id ? (
+                        <span className="flex min-w-0 flex-1 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") void renameModel(m.id, renameValue);
+                              if (e.key === "Escape") setRenamingId(null);
+                            }}
+                            autoFocus
+                            maxLength={60}
+                            aria-label="اسم الموديل الجديد"
+                            className="h-7 min-w-0 flex-1 rounded-md border border-accent-line bg-surface px-2 text-[13px] font-semibold text-ink focus:outline-none"
+                          />
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => void renameModel(m.id, renameValue)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") void renameModel(m.id, renameValue);
+                            }}
+                            title="حفظ الاسم"
+                            aria-label="حفظ الاسم"
+                            className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-live hover:bg-surface-3 disabled:opacity-40"
+                          >
+                            {acting ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                          </span>
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setRenamingId(null)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") setRenamingId(null);
+                            }}
+                            title="إلغاء"
+                            aria-label="إلغاء"
+                            className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-ink-3 hover:bg-surface-3 hover:text-ink"
+                          >
+                            <X size={13} />
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="truncate text-[13px] font-semibold text-ink">{m.name}</span>
+                      )}
                       {m.isDefault && (
                         <span className="shrink-0 rounded-full bg-accent-soft px-1.5 py-px text-[10.5px] font-medium text-accent">
                           افتراضي
@@ -728,6 +798,18 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
                       <ChevronDown size={12} />
                     </button>
                   </span>
+                  <button
+                    onClick={() => {
+                      setRenamingId(m.id);
+                      setRenameValue(m.name);
+                    }}
+                    disabled={busy}
+                    title="تعديل اسم الموديل"
+                    aria-label={`تعديل اسم ${m.name}`}
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-ink-3 transition-colors duration-1 hover:bg-surface-3 hover:text-ink disabled:opacity-40"
+                  >
+                    <Pencil size={13} />
+                  </button>
                   <button
                     onClick={() => deleteModel(m.id)}
                     disabled={busy}
