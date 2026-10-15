@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
-  Brain,
   Check,
   ChevronRight,
   Copy,
@@ -24,6 +23,7 @@ import {
 import type { AgentStep } from "@/lib/agentEvents";
 import { agentStepLabel, stepHasDetail } from "@/lib/agentEvents";
 import { renderFormattedText } from "@/lib/markdown";
+import LatticeLoader from "./LatticeLoader";
 import { useSettings } from "./SettingsContext";
 import { cn } from "@/lib/utils";
 
@@ -368,27 +368,27 @@ function ThinkingRow({
   open: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useSettings();
   const expandable = !!thinking.body?.trim();
-  const secs = thinking.durationMs != null && thinking.durationMs > 0 ? (thinking.durationMs / 1000).toFixed(0) : null;
 
+  // مؤشر التفكير الحي: موجة شبكية + فعل + ستوب ووتش (LatticeLoader) —
+  // وبعد الانتهاء علامة صح خضراء مع الزمن المجمّد. المؤقت المدمج يغني عن شارة الثواني.
   const label = (
-    <>
-      {thinking.live ? (
-        <span className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full bg-accent-soft text-accent">
-          <Brain size={11} />
-        </span>
-      ) : (
-        <StatusIcon status="done" />
-      )}
-      <span dir="auto" className="min-w-0 flex-1 truncate text-start text-ink-2">
-        {thinking.label}
-      </span>
-      {secs !== null && !thinking.live && (
-        <span className="tnum shrink-0 rounded-full bg-surface-3 px-1.5 py-px text-[10.5px] text-ink-3">
-          {secs}s
-        </span>
-      )}
-    </>
+    <span className="min-w-0 flex-1 text-accent" dir="auto">
+      <LatticeLoader
+        status={thinking.live ? "working" : "done"}
+        label={thinking.live ? thinking.label : ""}
+        doneLabel={t("latticeDone")}
+        showTimer
+        elapsed={!thinking.live && thinking.durationMs != null ? thinking.durationMs / 1000 : undefined}
+        fontSize={12.5}
+        cellSize={5}
+        gap={2}
+        pattern="orbit"
+        grid={3}
+        shape="round"
+      />
+    </span>
   );
 
   if (!expandable) {
