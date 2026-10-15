@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AudioLines, Check, ChevronDown, Crown, Download, Loader2, Play, X } from "lucide-react";
 import { Button } from "./ui/Controls";
+import { cn } from "@/lib/utils";
 import { useSettings } from "./SettingsContext";
 
 /** الحد الأقصى لحروف النص — لازم يطابق TTS_TEXT_MAX_CHARS في lib/tts.ts (السيرفر هو المرجع) */
@@ -35,6 +36,8 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
   const [models, setModels] = useState<TtsModel[] | null>(null);
   const [hasAccess, setHasAccess] = useState(false);
   const [modelId, setModelId] = useState("");
+  const [modelOpen, setModelOpen] = useState(false);
+  const modelRef = useRef<HTMLDivElement>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,6 +70,22 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
       urls.forEach((u) => URL.revokeObjectURL(u));
     };
   }, [load]);
+
+  useEffect(() => {
+    if (!modelOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (modelRef.current && !modelRef.current.contains(e.target as Node)) setModelOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setModelOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [modelOpen]);
 
   function removeClip(id: number) {
     setClips((prev) => {
@@ -179,51 +198,87 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
                 <p className="rounded-2xl bg-warn-soft px-4 py-3 text-[13px] leading-6 text-warn">{t("ttsNoModels")}</p>
               ) : (
                 <div className="rounded-3xl border border-hair bg-surface-2 p-4 shadow-2 sm:p-5">
-                  <div className="grid gap-3 sm:grid-cols-[1fr_180px] sm:items-end">
-                    <label className="block min-w-0">
-                      <span className="mb-1.5 block text-[12.5px] font-medium text-ink-2">{t("ttsModelLabel")}</span>
-                      <span className="relative block">
-                        <select
-                          value={modelId}
-                          onChange={(e) => setModelId(e.target.value)}
-                          className="h-12 w-full cursor-pointer appearance-none rounded-2xl border border-hair bg-surface pe-9 ps-3.5 text-[14px] font-medium text-ink shadow-1 focus:outline-none"
-                          dir="auto"
-                        >
-                          {models.map((m) => (
-                            <option key={m.id} value={m.id} disabled={m.locked}>
-                              {m.name}
-                              {m.locked ? ` (${t("modelProBadge")})` : ""}
-                            </option>
-                          ))}
-                        </select>
+                  <div>
+                    <span className="mb-1.5 block text-[12.5px] font-medium text-ink-2">{t("ttsModelLabel")}</span>
+                    <div className="relative" ref={modelRef}>
+                      <button
+                        type="button"
+                        onClick={() => setModelOpen((o) => !o)}
+                        aria-haspopup="listbox"
+                        aria-expanded={modelOpen}
+                        className="flex h-12 w-full items-center gap-2 rounded-2xl border border-hair bg-surface px-3.5 text-[14px] shadow-1 transition-colors hover:border-hair-2"
+                      >
+                        <AudioLines size={15} className="shrink-0 text-accent" aria-hidden="true" />
+                        <span className="min-w-0 flex-1 truncate text-start font-medium text-ink" dir="auto">
+                          {selected?.name ?? ""}
+                        </span>
+                        {!!selected?.voice && (
+                          <span className="tnum hidden shrink-0 rounded-full bg-surface-3 px-2 py-px text-[11px] text-ink-2 sm:inline" dir="ltr">
+                            {selected.voice}
+                          </span>
+                        )}
                         <ChevronDown
                           size={16}
-                          className="pointer-events-none absolute end-3.5 top-1/2 -translate-y-1/2 text-ink-3"
                           aria-hidden="true"
+                          className={cn("shrink-0 text-ink-3 transition-transform duration-2", modelOpen && "rotate-180")}
                         />
-                      </span>
-                    </label>
-                    <div className="tnum hidden items-center justify-end gap-1.5 pb-3 text-[12px] text-ink-3 sm:flex" aria-hidden="true">
-                      <AudioLines size={14} />
-                      {selected?.voice || selected?.name || ""}
-                    </div>
-                  </div>
-
-                  {selected && (
-                    <div className="mt-3 flex items-center gap-2 rounded-2xl border border-accent-line bg-accent-soft px-3.5 py-2.5">
-                      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-accent text-accent-ink">
-                        <Check size={13} strokeWidth={3} />
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-ink" dir="auto">
-                        {selected.name}
-                      </span>
-                      {!!selected.voice && (
-                        <span className="tnum shrink-0 rounded-full bg-surface px-2 py-px text-[11px] text-ink-2" dir="ltr">
-                          {selected.voice}
-                        </span>
+                      </button>
+                      {modelOpen && (
+                        <div
+                          role="listbox"
+                          aria-label={t("ttsModelLabel")}
+                          className="animate-materialize glass absolute inset-x-0 top-[calc(100%+6px)] z-modal max-h-[280px] overflow-y-auto rounded-2xl border border-hair p-1.5 shadow-3"
+                        >
+                          {models.map((m) => {
+                            const sel = m.id === modelId;
+                            return (
+                              <button
+                                key={m.id}
+                                type="button"
+                                role="option"
+                                aria-selected={sel}
+                                disabled={m.locked}
+                                onClick={() => {
+                                  setModelId(m.id);
+                                  setModelOpen(false);
+                                }}
+                                className={cn(
+                                  "flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-start transition-colors duration-1 disabled:opacity-60",
+                                  sel ? "bg-accent-soft" : "hover:bg-surface-3"
+                                )}
+                              >
+                                <span className="min-w-0 flex-1">
+                                  <span className="flex items-center gap-1.5">
+                                    <span className="truncate text-[13.5px] font-medium text-ink" dir="auto">
+                                      {m.name}
+                                    </span>
+                                    {m.locked && (
+                                      <span className="flex shrink-0 items-center gap-1 rounded-full bg-warn-soft px-1.5 py-px text-[10.5px] font-bold text-warn">
+                                        <Crown size={10} />
+                                        {t("modelProBadge")}
+                                      </span>
+                                    )}
+                                  </span>
+                                  {!!m.voice && (
+                                    <span className="tnum mt-0.5 block truncate text-[11.5px] text-ink-3" dir="ltr">
+                                      {m.voice}
+                                    </span>
+                                  )}
+                                </span>
+                                <span className="grid h-6 w-6 shrink-0 place-items-center">
+                                  {sel ? (
+                                    <Check size={15} strokeWidth={3} className="text-accent" />
+                                  ) : m.locked ? (
+                                    <Crown size={13} className="text-ink-3" />
+                                  ) : null}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
-                  )}
+                  </div>
 
                   <label className="mt-3 block">
                     <span className="mb-1.5 flex items-center justify-between text-[12.5px] font-medium text-ink-2">
