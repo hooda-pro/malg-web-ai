@@ -165,11 +165,26 @@
   }
 
   /* لا توجد أي إطارات تركيز في أي مكان (بطلب صريح): لا حلقة ولا توهّج ولا
-     تغيّر بوردر — الحقل النشط يُميَّز بتغيّر الخلفية فقط حيث وُجد. */
+     تغيّر بوردر — الحقل النشط يُميَّز بتغيّر الخلفية فقط حيث وُجد.
+     ملحوظة: longhands صريحة بعرض صفري — لحظة التحويل بين :focus وغيرها كان
+     المتصفح يرسم فريمًا وسيطًا مرئيًا (style من كلاس + width/color من القاعدة)،
+     فالعرض الصفري يقتله في كل الحالات. */
   :focus,
   :focus-visible {
     outline: none !important;
+    outline-width: 0 !important;
+    outline-color: transparent !important;
     outline-offset: 0;
+  }
+
+  /* خانة الكتابة تحديدًا: تأكيد إضافي بأعلى أولوية (id) + إلغاء أي ظل. */
+  #mlag-composer,
+  #mlag-composer:focus,
+  #mlag-composer:focus-visible {
+    outline-style: none !important;
+    outline-width: 0 !important;
+    outline-color: transparent !important;
+    box-shadow: none !important;
   }
 
   * {
