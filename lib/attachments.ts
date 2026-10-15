@@ -60,6 +60,48 @@ export const API_INLINE_FILE_MAX_CHARS = 12_000;
 export const API_INLINE_TOTAL_MAX_CHARS = 24_000;
 export const API_MANIFEST_MAX_ENTRIES = 200;
 
+// الصور من الموبايل بتيجي كبيرة (5-12MB) — إرسالها base64 كاملة بيخلي طلب
+// /api/chat ضخمًا فطبقة الاستضافة بترفضه (403 من غير JSON). أكبر ضلع بيتصغّر
+// لـ 1600px قبل الإرسال — الموديل مش محتاج أكتر من كده لرؤية المحتوى.
+export const MAX_IMAGE_DIMENSION = 1600;
+const IMAGE_JPEG_QUALITY = 0.82;
+// سقف حجم طلب /api/chat بالحروف — فوقه الاستضافة بترفض الطلب قبل ما يوصل
+// للتطبيق، فبنمنعه من الواجهة برسالة واضحة بدل فشل غامض.
+export const MAX_CHAT_PAYLOAD_CHARS = 3_000_000;
+// سقف حجم الملف الواحد عند الاختيار — فوقه بنرفض فورًا من غير ما نقراه في الذاكرة.
+export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+
+function loadImageElement(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("img-load-failed"));
+    img.src = src;
+  });
+}
+
+/** بيصغّر صورة data URL لو أكبر من الحد — بيرجّع الأصل لو صغيرة أو GIF (عشان الحركة) أو فشل التصغير. */
+export async function downscaleImageDataUrl(dataUrl: string): Promise<string> {
+  if (dataUrl.startsWith("data:image/gif")) return dataUrl;
+  try {
+    const img = await loadImageElement(dataUrl);
+    const w = img.naturalWidth || img.width;
+    const h = img.naturalHeight || img.height;
+    if (!w || !h || Math.max(w, h) <= MAX_IMAGE_DIMENSION) return dataUrl;
+    const scale = MAX_IMAGE_DIMENSION / Math.max(w, h);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(2, Math.round(w * scale));
+    canvas.height = Math.max(2, Math.round(h * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return dataUrl;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    // JPEG أصغر بكتير من PNG للصور الفوتوغرافية.
+    return canvas.toDataURL("image/jpeg", IMAGE_JPEG_QUALITY);
+  } catch {
+    return dataUrl;
+  }
+}
+
 function extOf(name: string): string {
   const parts = name.toLowerCase().split(".");
   return parts.length > 1 ? parts[parts.length - 1] : "";
@@ -424,7 +466,7 @@ export async function processFile(file: File): Promise<PendingAttachment> {
   if (isImageFile(file)) {
     const att: PendingAttachment = { id, file, kind: "image", loading: true };
     try {
-      att.previewUrl = await readAsDataURL(file);
+      att.previewUrl = await downscaleImageDataUrl(await readAsDataURL(file));
     } catch {
       att.error = "تعذّر تحميل الصورة";
     }

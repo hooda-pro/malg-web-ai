@@ -24,7 +24,7 @@ import Toast from "./Toast";
 import WelcomeHero from "./WelcomeHero";
 import type { SettingsTab } from "./AccountMenu";
 import { useSettings, type ModelId } from "./SettingsContext";
-import { buildAttachmentsMetaBlock, buildAttachmentsPromptBlock, extractAttachmentsMeta, extractAttachmentsPromptSection } from "@/lib/attachments";
+import { buildAttachmentsMetaBlock, buildAttachmentsPromptBlock, extractAttachmentsMeta, extractAttachmentsPromptSection, MAX_CHAT_PAYLOAD_CHARS } from "@/lib/attachments";
 import type { AgentEvent } from "@/lib/agentEvents";
 import { extractAgentStepsMeta } from "@/lib/agentEvents";
 import { Timer } from "lucide-react";
@@ -682,6 +682,13 @@ export default function ChatShell() {
         }))
       );
       const storedContent = trimmed + attachmentsMeta + attachmentsPromptBlock;
+
+      // طلبات المرفقات الضخمة (صور base64...) بتترفض من طبقة الاستضافة قبل ما
+      // توصل للتطبيق (403 من غير JSON) — نمنعها هنا برسالة واضحة بدل الفشل الغامض.
+      if (storedContent.length > MAX_CHAT_PAYLOAD_CHARS) {
+        showToast(t("toastTooLarge"));
+        return false;
+      }
 
       const before = messagesRef.current.filter((m) => !isLocalMessageId(m.id));
       const userCountBefore = before.filter((m) => m.role === "user").length;

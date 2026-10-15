@@ -6,6 +6,7 @@ import {
   formatBytes,
   isVideoFile,
   makeAttachmentId,
+  MAX_UPLOAD_BYTES,
   processFile,
   type PendingAttachment,
 } from "@/lib/attachments";
@@ -83,6 +84,20 @@ export default function BottomInputBar({
     const list = Array.from(files);
     if (list.length === 0) return;
     list.forEach(async (file) => {
+      // ملف أضخم من الحد — بنرفضه فورًا من غير ما نقراه في الذاكرة.
+      if (file.size > MAX_UPLOAD_BYTES) {
+        setAttachments((prev) => [
+          ...prev,
+          {
+            id: makeAttachmentId(),
+            file,
+            kind: "text",
+            loading: false,
+            error: `الملف كبير جدًا — الحد الأقصى ${formatBytes(MAX_UPLOAD_BYTES)}`,
+          },
+        ]);
+        return;
+      }
       // Video becomes frame images (async extraction) with a temp placeholder
       if (isVideoFile(file)) {
         // Video uploads are paused for now (native video needs a paid
