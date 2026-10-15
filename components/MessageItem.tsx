@@ -126,7 +126,7 @@ function MessageItem({
   );
   const imageAttachments = userAttachments.filter((a) => a.kind === "image");
   const videoAttachments = userAttachments.filter(
-    (a) => a.kind === "video" && ((a.frames?.length ?? 0) > 0 || !!a.previewUrl)
+    (a) => a.kind === "video" && ((a.frames?.length ?? 0) > 0 || !!a.previewUrl || !!a.remoteUrl)
   );
   const fileAttachments = userAttachments.filter((a) => a.kind === "text");
 
@@ -151,11 +151,11 @@ function MessageItem({
         {imageAttachments.length > 0 && (
           <div className="mb-1.5 flex max-w-[85%] flex-wrap justify-end gap-1.5">
             {imageAttachments.map((a, i) =>
-              a.previewUrl ? (
+              (a.previewUrl || a.remoteUrl) ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   key={i}
-                  src={a.previewUrl}
+                  src={(a.previewUrl || a.remoteUrl) as string}
                   alt={a.name}
                   className="h-28 w-28 rounded-lg border border-hair object-cover shadow-1"
                 />
@@ -172,10 +172,10 @@ function MessageItem({
                 className="w-64 max-w-full overflow-hidden rounded-xl border border-hair bg-surface-2 shadow-1"
               >
                 <div className="relative">
-                  {a.previewUrl ? (
+                  {a.previewUrl || a.remoteUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={a.previewUrl}
+                      src={(a.previewUrl || a.remoteUrl) as string}
                       alt={a.name}
                       className="aspect-video w-full object-cover"
                     />

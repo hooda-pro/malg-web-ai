@@ -56,6 +56,8 @@ services:
         sync: false
       - key: FIREBASE_PRIVATE_KEY
         sync: false
+      - key: FIREBASE_STORAGE_BUCKET
+        sync: false
       - key: E2B_API_KEY
         sync: false
       - key: TAVILY_API_KEY

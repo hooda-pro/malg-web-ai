@@ -1,0 +1,11 @@
+// Firebase Storage rules — انسخها في Firebase Console > Storage > Rules > Publish.
+// الرفع والقراءة عبر سيرفر التطبيق فقط (Admin SDK يتجاوز القواعد)، والعميل
+// والموديل يستخدمان روابط التحميل (token) غير القابلة للتخمين.
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /chat-uploads/{userId}/{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

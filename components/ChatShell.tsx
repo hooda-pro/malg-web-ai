@@ -678,6 +678,8 @@ export default function ChatShell() {
           file: a.file,
           kind: a.kind,
           extractedText: a.extractedText,
+          previewUrl: a.previewUrl,
+          remoteUrl: a.remoteUrl,
           loading: false,
         }))
       );

@@ -4,11 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowUp, FileArchive, FileText, Paperclip, Square, X } from "lucide-react";
 import {
   ATTACHMENTS_ENABLED,
+  detectAttachmentKind,
   formatBytes,
   isVideoFile,
   makeAttachmentId,
   MAX_UPLOAD_BYTES,
-  processFile,
+  readImagePreview,
+  uploadAttachmentFile,
   type PendingAttachment,
 } from "@/lib/attachments";
 import { useSettings, type ModelId } from "./SettingsContext";
@@ -19,6 +21,7 @@ export interface ComposerAttachment {
   file: File;
   extractedText?: string;
   previewUrl?: string;
+  remoteUrl?: string;
   kind: "image" | "text" | "video";
   frames?: { dataUrl: string; atSec: number }[];
   durationSec?: number;
@@ -118,14 +121,38 @@ export default function BottomInputBar({
       const placeholder: PendingAttachment = {
         id: makeAttachmentId(),
         file,
-        kind: (file.type.startsWith("image/") ? "image" : "text") as PendingAttachment["kind"],
+        kind: detectAttachmentKind(file.name, file.type),
         loading: true,
       };
       setAttachments((prev) => [...prev, placeholder]);
-      const processed = await processFile(file);
-      setAttachments((prev) =>
-        prev.map((a) => (a.id === placeholder.id ? { ...processed, id: placeholder.id } : a))
-      );
+      // معاينة فورية للصور (عرض فقط — المحتوى المرسل هو رابط التخزين الخارجي).
+      if (placeholder.kind === "image") {
+        const preview = await readImagePreview(file);
+        if (preview) {
+          setAttachments((prev) =>
+            prev.map((a) => (a.id === placeholder.id ? { ...a, previewUrl: preview } : a))
+          );
+        }
+      }
+      // رفع الملف الخام على التخزين الخارجي — طلب الشات بيشيل الرابط بس.
+      try {
+        const remote = await uploadAttachmentFile(file);
+        setAttachments((prev) =>
+          prev.map((a) =>
+            a.id === placeholder.id
+              ? { ...a, loading: false, remoteUrl: remote.url, kind: remote.kind }
+              : a
+          )
+        );
+      } catch {
+        setAttachments((prev) =>
+          prev.map((a) =>
+            a.id === placeholder.id
+              ? { ...a, loading: false, error: "تعذّر رفع الملف — حاول مجددًا" }
+              : a
+          )
+        );
+      }
     });
   };
 
@@ -137,6 +164,8 @@ export default function BottomInputBar({
     const trimmed = text.trim();
     if ((!trimmed && attachments.length === 0) || isGenerating) return;
     if (attachments.some((a) => a.loading)) return; // استنى لحد ما كل الملفات تخلص قراءة
+    // الملفات لازم تكون اترفعت (remoteUrl) قبل الإرسال — الفاشلة (error) يتبعت اسمها بس.
+    if (attachments.some((a) => !a.remoteUrl && !a.error)) return;
     // مهم: بنمسح نص/مرفقات الكومبوزر فورًا لما الإرسال يتقبل — مش بعد ما
     // البث يخلص (ده ممكن ياخد دقايق، والنص الطويل كان بيفضل في الـ textarea
     // والمرفقات قايمة تحته طوال التوليد). لو الإرسال فشل فعلًا (شبكة، خطأ
@@ -151,6 +180,7 @@ export default function BottomInputBar({
         file: a.file,
         extractedText: a.extractedText,
         previewUrl: a.previewUrl,
+        remoteUrl: a.remoteUrl,
         kind: a.kind,
         frames: a.frames,
         durationSec: a.durationSec,
@@ -223,7 +253,8 @@ export default function BottomInputBar({
   };
 
   const hasLoadingAttachment = attachments.some((a) => a.loading);
-  const canSend = (!!text.trim() || attachments.length > 0) && !hasLoadingAttachment;
+  const hasPendingUpload = attachments.some((a) => !a.remoteUrl && !a.error);
+  const canSend = (!!text.trim() || attachments.length > 0) && !hasLoadingAttachment && !hasPendingUpload;
 
   return (
     <div
