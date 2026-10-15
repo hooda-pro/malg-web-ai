@@ -1,8 +1,6 @@
 import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
-import { getStorage } from "firebase-admin/storage";
-import { randomUUID } from "crypto";
 
 // بيانات حساب الخدمة (Service Account) بتاعة مشروع Firebase — بتتاخد من
 // https://console.firebase.google.com/ > Project settings > Service accounts > Generate new private key
@@ -94,34 +92,6 @@ export async function saveProfileToFirestore(
     // Postgres هو مصدر الحقيقة الأساسي للتطبيق.
     console.error("saveProfileToFirestore error", e);
   }
-}
-
-/**
- * بيرفع ملف مرفقات شات على Firebase Storage (المسار: chat-uploads/...) ويرجّع
- * رابط تحميل دائم (download token). الرفع سيرفر-فقط عبر Admin SDK.
- * محتاج متغير البيئة FIREBASE_STORAGE_BUCKET (اسم الباكت من Firebase Console).
- */
-export async function uploadChatFileToStorage(
-  path: string,
-  buffer: Buffer,
-  contentType: string
-): Promise<{ url: string }> {
-  const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
-  if (!bucketName) {
-    throw new Error(
-      "FIREBASE_STORAGE_BUCKET مش متظبط — ضيف اسم باكت الـ Storage من Firebase Console في متغيرات البيئة."
-    );
-  }
-  const bucket = getStorage(getAdminApp()).bucket(bucketName);
-  const token = randomUUID();
-  await bucket.file(path).save(buffer, {
-    contentType,
-    metadata: { metadata: { firebaseStorageDownloadTokens: token } },
-  });
-  const url =
-    `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/` +
-    `${encodeURIComponent(path)}?alt=media&token=${token}`;
-  return { url };
 }
 
 /**

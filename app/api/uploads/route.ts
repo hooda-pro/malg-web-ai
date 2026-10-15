@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { getSessionUser } from "@/lib/auth";
-import { uploadChatFileToStorage } from "@/lib/firebaseAdmin";
 import { MAX_UPLOAD_BYTES, detectAttachmentKind, formatBytes } from "@/lib/attachments";
 
 export const dynamic = "force-dynamic";
@@ -14,14 +13,26 @@ function safeName(name: string): string {
 }
 
 /**
- * رفع ملف مرفقات (multipart) على Firebase Storage عبر Admin SDK.
- * بيرجّع رابطًا دائمًا صغيرًا — العميل بيبعته في /api/chat بدل محتوى الملف نفسه،
- * عشان طلب الشات يفضل صغيرًا ولا ترفضه طبقة الاستضافة.
+ * رفع ملف مرفقات (multipart) على Cloudinary عبر السيرفر (signed upload —
+ * المفاتيح السرية لا تخرج من السيرفر). بيرجّع رابطًا دائمًا صغيرًا — العميل
+ * بيبعته في /api/chat بدل محتوى الملف نفسه، عشان طلب الشات يفضل صغيرًا
+ * ولا ترفضه طبقة الاستضافة.
+ * (Free plan: تسجيل بدون كارت، 25 credits شهريًا.)
  */
 export async function POST(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) {
     return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
+  }
+
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  if (!cloudName || !apiKey || !apiSecret) {
+    return NextResponse.json(
+      { error: "خدمة رفع الملفات غير مفعّلة بعد — جرّب لاحقًا" },
+      { status: 500 }
+    );
   }
 
   let form: FormData;
@@ -54,16 +65,35 @@ export async function POST(req: NextRequest) {
 
   try {
     const buf = Buffer.from(await file.arrayBuffer());
-    const path = `chat-uploads/${user.id}/${randomUUID()}/${name}`;
-    const { url } = await uploadChatFileToStorage(
-      path,
-      buf,
-      file.type || "application/octet-stream"
-    );
-    return NextResponse.json({ url, name, size: file.size, kind });
+    const timestamp = Math.floor(Date.now() / 1000);
+    const publicId = `malg-chat/${user.id}/${randomUUID()}/${name.replace(/\.[^.]+$/, "")}`;
+    const signature = createHash("sha1")
+      .update(`public_id=${publicId}&timestamp=${timestamp}${apiSecret}`)
+      .digest("hex");
+    const cloudForm = new FormData();
+    cloudForm.append("file", new Blob([buf], { type: file.type || "application/octet-stream" }), name);
+    cloudForm.append("api_key", apiKey);
+    cloudForm.append("timestamp", String(timestamp));
+    cloudForm.append("public_id", publicId);
+    cloudForm.append("signature", signature);
+    const up = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, {
+      method: "POST",
+      body: cloudForm,
+      signal: AbortSignal.timeout(60_000),
+    });
+    const data = await up.json().catch(() => null);
+    if (!up.ok || !data?.secure_url) {
+      console.error("[uploads] cloudinary failed", up.status, data?.error || data);
+      return NextResponse.json({ error: "تعذّر رفع الملف — حاول مجددًا" }, { status: 502 });
+    }
+    return NextResponse.json({
+      url: String(data.secure_url),
+      name,
+      size: file.size,
+      kind,
+    });
   } catch (e) {
     console.error("[uploads] failed", e);
-    const msg = e instanceof Error && e.message ? e.message : "تعذّر رفع الملف";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: "تعذّر رفع الملف — حاول مجددًا" }, { status: 500 });
   }
 }

@@ -892,18 +892,27 @@ export interface RemoteUploadResult {
   kind: AttachmentKind;
 }
 
-/** بيرفع ملف خام على /api/uploads (multipart) ويرجّع رابطه الدائم. */
+/** بيرفع ملف خام مباشرة على Cloudinary (unsigned — من المتصفح للسحابة،
+ * من غير ما يعدّي على سيرفر التطبيق). بيرجّع رابطه الدائم. */
 export async function uploadAttachmentFile(file: File): Promise<RemoteUploadResult> {
+  const cloud = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+  const preset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+  if (!cloud || !preset) throw new Error("خدمة رفع الملفات غير مفعّلة بعد — جرّب لاحقًا");
   const form = new FormData();
   form.append("file", file, file.name);
-  const res = await fetch("/api/uploads", { method: "POST", body: form });
+  form.append("upload_preset", preset);
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${cloud}/auto/upload`, {
+    method: "POST",
+    body: form,
+  });
   const data = await res.json().catch(() => null);
-  if (!res.ok || !data?.url) throw new Error(data?.error || "تعذّر رفع الملف");
+  if (!res.ok || !data?.secure_url) throw new Error("تعذّر رفع الملف — حاول مجددًا");
+  if (String(data.resource_type || "") === "video") throw new Error("رفع الفيديو متوقف حاليا");
   return {
-    url: String(data.url),
-    name: String(data.name || file.name),
-    size: Number(data.size || file.size),
-    kind: data.kind === "image" || data.kind === "video" ? data.kind : "text",
+    url: String(data.secure_url),
+    name: file.name,
+    size: Number(data.bytes || file.size),
+    kind: String(data.resource_type || "") === "image" ? "image" : "text",
   };
 }
 
