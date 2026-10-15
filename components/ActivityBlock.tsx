@@ -23,7 +23,7 @@ import {
 import type { AgentStep } from "@/lib/agentEvents";
 import { agentStepLabel, stepHasDetail } from "@/lib/agentEvents";
 import { renderFormattedText } from "@/lib/markdown";
-import LatticeLoader from "./LatticeLoader";
+import ThoughtLine from "./ThoughtLine";
 import { useSettings } from "./SettingsContext";
 import { cn } from "@/lib/utils";
 
@@ -371,22 +371,21 @@ function ThinkingRow({
   const { t } = useSettings();
   const expandable = !!thinking.body?.trim();
 
-  // مؤشر التفكير الحي: موجة شبكية + فعل + ستوب ووتش (LatticeLoader) —
-  // وبعد الانتهاء علامة صح خضراء مع الزمن المجمّد. المؤقت المدمج يغني عن شارة الثواني.
+  // سطر التفكير: تنفّس + لمعة أثناء الشغل، ويستقر على "انتهى خلال …" مع الزمن
+  // المجمّد — المؤقت المدمج يغني عن شارة الثواني. settleBlur=0 (ممنوع البلور المتحرك).
   const label = (
-    <span className="min-w-0 flex-1 text-accent" dir="auto">
-      <LatticeLoader
-        status={thinking.live ? "working" : "done"}
+    <span className="min-w-0 flex-1" dir="auto">
+      <ThoughtLine
+        working={thinking.live}
         label={thinking.live ? thinking.label : ""}
         doneLabel={t("latticeDone")}
-        showTimer
-        elapsed={!thinking.live && thinking.durationMs != null ? thinking.durationMs / 1000 : undefined}
+        glyph="sparkle"
         fontSize={12.5}
-        cellSize={5}
-        gap={2}
-        pattern="orbit"
-        grid={3}
-        shape="round"
+        collapsible={false}
+        showTimer
+        settleBlur={0}
+        elapsed={!thinking.live && thinking.durationMs != null ? thinking.durationMs / 1000 : undefined}
+        className="text-accent"
       />
     </span>
   );
