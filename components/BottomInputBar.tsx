@@ -327,6 +327,15 @@ export default function BottomInputBar({
           <textarea
             ref={taRef}
             id="mlag-composer"
+            name="mlag-composer"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-1p-ignore
+            data-lpignore="true"
+            data-bwignore
+            data-form-type="other"
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
