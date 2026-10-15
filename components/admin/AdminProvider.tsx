@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AudioLines, Check, ChevronDown, ChevronUp, Crown, FlaskConical, GripVertical, KeyRound, Layers, Loader2, Mic, Pencil, PlugZap, Plus, RefreshCw, Save, Star, Trash2, X } from "lucide-react";
+import { AudioLines, Check, ChevronDown, ChevronUp, Copy, Crown, FlaskConical, GripVertical, KeyRound, Layers, Loader2, Mic, Pencil, PlugZap, Plus, RefreshCw, Save, Star, Trash2, X } from "lucide-react";
 import type { ModelSummary, ProviderConfigPublic, ProviderProtocol } from "@/lib/provider";
 
 interface Loaded {
@@ -69,6 +69,8 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
   const [confirmDeleteModel, setConfirmDeleteModel] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [copyingIdx, setCopyingIdx] = useState<number | null>(null);
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
 
   // إعادة الترتيب اليدوي (سحب وإفلات + أسهم)
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -254,6 +256,28 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
       notify("err", e instanceof Error ? e.message : "فشل الإضافة");
     } finally {
       setAddingKey(false);
+    }
+  };
+
+  const copyKey = async (idx: number) => {
+    if (!selectedId || copyingIdx !== null) return;
+    setCopyingIdx(idx);
+    try {
+      const res = await fetch("/api/admin/provider/keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reveal", index: idx, modelId: selectedId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.key) throw new Error(data.error || "فشل النسخ");
+      await navigator.clipboard.writeText(String(data.key));
+      setCopiedIdx(idx);
+      notify("ok", `تم نسخ المفتاح ${idx + 1}`);
+      setTimeout(() => setCopiedIdx((c) => (c === idx ? null : c)), 2000);
+    } catch (e) {
+      notify("err", e instanceof Error ? e.message : "فشل النسخ");
+    } finally {
+      setCopyingIdx(null);
     }
   };
 
@@ -900,6 +924,21 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
                     {i + 1}
                   </span>
                   <span className="tnum min-w-0 flex-1 truncate text-[12.5px] text-ink" dir="ltr">{m}</span>
+                  <button
+                    onClick={() => copyKey(i)}
+                    disabled={testingIdx !== null || removingIdx !== null || copyingIdx !== null}
+                    title="نسخ المفتاح كاملًا"
+                    aria-label={`نسخ المفتاح ${i + 1}`}
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-ink-3 transition-colors duration-1 hover:bg-surface-3 hover:text-ink disabled:opacity-40"
+                  >
+                    {copyingIdx === i ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : copiedIdx === i ? (
+                      <Check size={13} className="text-live" />
+                    ) : (
+                      <Copy size={13} />
+                    )}
+                  </button>
                   <button
                     onClick={() => testKey(i)}
                     disabled={testingIdx !== null || removingIdx !== null}
