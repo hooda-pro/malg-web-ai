@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUp, FileArchive, FileText, Paperclip, Square, X } from "lucide-react";
 import {
+  ATTACHMENTS_ENABLED,
   formatBytes,
   isVideoFile,
   makeAttachmentId,
@@ -81,6 +82,7 @@ export default function BottomInputBar({
   const dragDepth = useRef(0);
 
   const addFiles = (files: FileList | File[]) => {
+    if (!ATTACHMENTS_ENABLED) return;
     const list = Array.from(files);
     if (list.length === 0) return;
     list.forEach(async (file) => {
@@ -172,6 +174,8 @@ export default function BottomInputBar({
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    // رفع الملفات معطّل مؤقتًا — اللصق بينزل كنص عادي.
+    if (!ATTACHMENTS_ENABLED) return;
     const files = Array.from(e.clipboardData?.files || []);
     if (files.length > 0) {
       e.preventDefault();
@@ -195,6 +199,7 @@ export default function BottomInputBar({
 
   const onDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
+    if (!ATTACHMENTS_ENABLED) return;
     dragDepth.current += 1;
     if (e.dataTransfer.types.includes("Files")) setDragOver(true);
   };
@@ -213,6 +218,7 @@ export default function BottomInputBar({
     e.preventDefault();
     dragDepth.current = 0;
     setDragOver(false);
+    if (!ATTACHMENTS_ENABLED) return;
     if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
   };
 
@@ -302,15 +308,17 @@ export default function BottomInputBar({
         </div>
 
         <div className="flex items-center gap-1.5 px-2.5 pb-2.5 pt-1">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={disabled}
-            title={t("attachFiles")}
-            aria-label={t("attachFiles")}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-3 transition-colors duration-1 hover:bg-surface-3 hover:text-ink disabled:opacity-40"
-          >
-            <Paperclip size={16} />
-          </button>
+          {ATTACHMENTS_ENABLED && (
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={disabled}
+              title={t("attachFiles")}
+              aria-label={t("attachFiles")}
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-3 transition-colors duration-1 hover:bg-surface-3 hover:text-ink disabled:opacity-40"
+            >
+              <Paperclip size={16} />
+            </button>
+          )}
 
           <span className="min-w-0 flex-1" aria-hidden="true" />
 
