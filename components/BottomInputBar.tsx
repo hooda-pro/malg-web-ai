@@ -36,7 +36,8 @@ export interface ComposerAttachment {
  * style.height يدويًا وبتعمل قفزة في القايمة اللي فوقها مع كل حرف.)
  * الخط 16px على الموبايل عشان iOS ما يعملش zoom تلقائي أول ما تضغط على الخانة.
  */
-const FIELD_TEXT = "px-4 pb-1 pt-3 text-[16px] leading-7 sm:text-[15px]";
+const FIELD_TEXT =
+  "px-4 pb-3 pt-3 text-[16px] leading-7 sm:text-[15px] pe-12 rtl:pe-4 rtl:ps-12";
 
 // Above this length, a paste turns into a .txt attachment instead of composer text.
 const PASTE_AS_FILE_CHARS = 3000;
@@ -312,7 +313,7 @@ export default function BottomInputBar({
           </div>
         )}
 
-        <div className="grid max-h-[220px]">
+        <div className="relative grid max-h-[220px]">
           <div
             aria-hidden="true"
             dir="auto"
@@ -352,30 +353,13 @@ export default function BottomInputBar({
               "text-ink outline-none placeholder:text-ink-3 focus:outline-none focus-visible:outline-none disabled:opacity-50"
             )}
           />
-        </div>
-
-        <div className="flex items-center gap-1.5 px-2.5 pb-2 pt-1 rtl:flex-row-reverse">
-          {ATTACHMENTS_ENABLED && (
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={disabled}
-              title={t("attachFiles")}
-              aria-label={t("attachFiles")}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-3 transition-colors duration-1 hover:bg-surface-3 hover:text-ink disabled:opacity-40"
-            >
-              <Plus size={17} />
-            </button>
-          )}
-
-          <span className="min-w-0 flex-1" aria-hidden="true" />
-
           {isGenerating ? (
             <button
               onMouseDown={(e) => e.preventDefault()}
               onClick={onStop}
               title={t("stop")}
               aria-label={t("stop")}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-ink text-ground transition-transform duration-1 ease-soft active:scale-[0.92]"
+              className="absolute bottom-2 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-ink text-ground transition-transform duration-1 ease-soft end-2 active:scale-[0.92] rtl:end-auto rtl:start-2"
             >
               <Square size={11} fill="currentColor" />
             </button>
@@ -387,8 +371,8 @@ export default function BottomInputBar({
               title={t("send")}
               aria-label={t("send")}
               className={cn(
-                "btn-send grid h-8 w-8 shrink-0 place-items-center rounded-full text-accent-ink",
-                "transition-all duration-1 ease-soft",
+                "btn-send absolute bottom-2 grid h-8 w-8 shrink-0 place-items-center rounded-full text-accent-ink end-2",
+                "transition-all duration-1 ease-soft rtl:end-auto rtl:start-2",
                 "active:scale-[0.94] disabled:bg-surface-3 disabled:text-ink-3 disabled:shadow-none"
               )}
             >
@@ -398,8 +382,8 @@ export default function BottomInputBar({
         </div>
       </div>
 
-      {/* صف تحت الخانة زي كلود: اختيار الموديل في الأول (يمين) والتنبيه في الآخر (شمال) */}
-      <div className="mx-auto mt-2 flex max-w-[760px] items-center justify-between gap-3 px-1">
+      {/* صف تحت الخانة زي كلود: اختيار الموديل في الأول (يمين) والتنبيه في النص وزر + في الآخر (شمال) */}
+      <div className="mx-auto mt-2 flex max-w-[760px] items-center gap-2 px-1">
         <ModelPicker
           compact
           dropUp
@@ -410,6 +394,19 @@ export default function BottomInputBar({
         <p className="min-w-0 flex-1 text-center text-[11px] leading-4 text-ink-3">
           {t("disclaimer")}
         </p>
+        {ATTACHMENTS_ENABLED ? (
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={disabled}
+            title={t("attachFiles")}
+            aria-label={t("attachFiles")}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-3 transition-colors duration-1 hover:bg-surface-3 hover:text-ink disabled:opacity-40"
+          >
+            <Plus size={17} />
+          </button>
+        ) : (
+          <span className="w-8 shrink-0" aria-hidden="true" />
+        )}
       </div>
     </div>
   );

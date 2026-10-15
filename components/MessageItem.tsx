@@ -225,7 +225,7 @@ function MessageItem({
         {userMainText && (
           <div
             className={cn(
-              "msg-in max-w-[85%] whitespace-pre-wrap break-words rounded-2xl",
+              "msg-in max-w-[85%] whitespace-pre-wrap break-words rounded-xl",
               "bg-surface-3 px-4 py-2.5 text-[15px] leading-7 text-ink"
             )}
             dir="auto"
