@@ -162,6 +162,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     root.dir = settings.lang === "ar" ? "rtl" : "ltr";
     root.setAttribute("data-theme", resolvedTheme);
     root.classList.toggle("no-anim", !settings.animations);
+    // لون شريط المتصفح/منطقة الـ overscroll لازم يتبع ثيم الموقع مش ثيم الجهاز،
+    // وإلا بيظهر شريط أبيض فوق/تحت الصفحة في الوضع الداكن على الموبايل.
+    const chrome = resolvedTheme === "dark" ? "#09090b" : "#f4f3ed";
+    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", chrome));
   }, [settings, loaded, resolvedTheme]);
 
   const update = useCallback(<K extends keyof Settings>(key: K, value: Settings[K]) => {

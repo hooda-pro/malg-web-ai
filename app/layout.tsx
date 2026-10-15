@@ -3,6 +3,7 @@ import { IBM_Plex_Sans_Arabic, JetBrains_Mono } from "next/font/google";
 import { getSiteUrl } from "@/lib/site";
 import "./globals.css";
 import "./mobile.css";
+import "./landing.css";
 import "./print.css";
 import Analytics from "@/components/Analytics";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
@@ -62,13 +63,13 @@ export const viewport: Viewport = {
   maximumScale: 5,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f5f5f7" },
-    { media: "(prefers-color-scheme: dark)", color: "#0a0a0c" },
+    { media: "(prefers-color-scheme: light)", color: "#f4f3ed" },
+    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
   ],
 };
 
 /** Applies the stored theme before first paint so there is never a flash. */
-const THEME_BOOTSTRAP = `(function(){try{var r=localStorage.getItem("mlag-settings");var t=r?JSON.parse(r).theme:null;if(t!=="light"&&t!=="dark"){t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}document.documentElement.setAttribute("data-theme",t);}catch(e){document.documentElement.setAttribute("data-theme","light");}})();`;
+const THEME_BOOTSTRAP = `(function(){var d=document.documentElement;try{var r=localStorage.getItem("mlag-settings");var t=r?JSON.parse(r).theme:null;if(t!=="light"&&t!=="dark"){t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}d.setAttribute("data-theme",t);d.style.backgroundColor=t==="dark"?"#09090b":"#f4f3ed";}catch(e){d.setAttribute("data-theme","light");}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

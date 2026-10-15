@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowUp, FileArchive, FileText, Paperclip, Square, X } from "lucide-react";
 import {
   formatBytes,
@@ -60,6 +60,19 @@ export default function BottomInputBar({
 }) {
   const { t, enterToSend } = useSettings();
   const [text, setText] = useState("");
+
+  // نص كتبه الزائر في خانة صفحة الهبوط قبل تسجيل الدخول — بيتحط في الخانة مرة واحدة.
+  useEffect(() => {
+    try {
+      const pending = sessionStorage.getItem("malg-pending-prompt");
+      if (pending) {
+        sessionStorage.removeItem("malg-pending-prompt");
+        setText(pending);
+      }
+    } catch {
+      // sessionStorage غير متاح
+    }
+  }, []);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);

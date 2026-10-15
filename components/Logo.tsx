@@ -1,23 +1,19 @@
 import { cn } from "@/lib/utils";
 
 /**
- * علامة MALG الأصلية (public/logo.png — مقصوصة من ملف اللوجو المعتمد).
- * الخلفية البيضاء تُخفى تلقائيًا بتقنية المزج:
- * - الفاتح: multiply (الأبيض يختفي، الأسود يظهر)
- * - الداكن: invert + screen (العلامة تظهر بيضاء بدون صندوق)
- * فتندمج على أي سطح — بما فيها الصناديق الملونة — من غير أي صندوق أبيض.
+ * علامة MALG كقناع CSS على public/logo-mark.png (PNG شفاف).
+ * اللون = currentColor، فالعلامة تتبع لون النص في أي ثيم أو سطح.
+ * سابقًا كانت صورة بخلفية بيضاء تُخفى بـ mix-blend-mode، والمزج ده بيتكسر
+ * جوه أي عنصر عليه animation/transform/backdrop-filter (المودالات، الرسائل،
+ * الهيدر الزجاجي) فكان بيظهر "مربع أبيض" لحظيًا ويختفي.
  */
 export default function Logo({ size = 20, className }: { size?: number; className?: string }) {
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src="/logo.png"
-      alt="MALG"
-      draggable={false}
-      decoding="async"
-      width={size}
-      height={size}
-      className={cn("logo-img shrink-0 select-none", className)}
+    <span
+      role="img"
+      aria-label="MALG"
+      className={cn("logo-mark inline-block shrink-0 select-none", className)}
+      style={{ width: size, height: size }}
     />
   );
 }
