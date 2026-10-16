@@ -54,7 +54,7 @@ interface SpeechRecognitionInstance {
  * الخط 16px على الموبايل عشان iOS ما يعملش zoom تلقائي أول ما تضغط على الخانة.
  */
 const FIELD_TEXT =
-  "px-4 pb-3 pt-3 text-[16px] leading-7 sm:text-[15px] pe-12 rtl:pe-4 rtl:ps-12";
+  "pb-3 pt-3 text-[16px] leading-7 sm:text-[15px] ps-12 pe-12";
 
 // Above this length, a paste turns into a .txt attachment instead of composer text.
 const PASTE_AS_FILE_CHARS = 3000;
@@ -477,6 +477,22 @@ export default function BottomInputBar({
               <ArrowUp size={16} strokeWidth={2.4} />
             </button>
           )}
+          {micEnabled && micSupported && !isGenerating && (
+            <button
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={toggleMic}
+              disabled={disabled}
+              title={listening ? t("micStop") : t("micRecord")}
+              aria-label={listening ? t("micStop") : t("micRecord")}
+              aria-pressed={listening}
+              className={cn(
+                "absolute bottom-2 left-2 grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors duration-1 disabled:opacity-40",
+                listening ? "mic-live bg-danger text-white" : "text-ink-3 hover:bg-surface-3 hover:text-ink"
+              )}
+            >
+              {listening ? <Square size={11} fill="currentColor" /> : <Mic size={17} />}
+            </button>
+          )}
         </div>
       </div>
 
@@ -492,20 +508,6 @@ export default function BottomInputBar({
         <p className="min-w-0 flex-1 text-center text-[11px] leading-4 text-ink-3">
           {t("disclaimer")}
         </p>
-        {micEnabled && micSupported && (
-          <button
-            onClick={toggleMic}
-            disabled={disabled || isGenerating}
-            title={listening ? t("micStop") : t("micRecord")}
-            aria-label={listening ? t("micStop") : t("micRecord")}
-            aria-pressed={listening}
-            className={`grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors duration-1 disabled:opacity-40 ${
-              listening ? "bg-danger-soft text-danger" : "text-ink-3 hover:bg-surface-3 hover:text-ink"
-            }`}
-          >
-            {listening ? <Square size={11} fill="currentColor" /> : <Mic size={17} />}
-          </button>
-        )}
         {ATTACHMENTS_ENABLED ? (
           <button
             onClick={() => fileInputRef.current?.click()}
