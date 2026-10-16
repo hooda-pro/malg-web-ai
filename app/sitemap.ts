@@ -1,8 +1,13 @@
 import type { MetadataRoute } from "next";
 import { getSiteUrl } from "@/lib/site";
 
-// التطبيق حاليًا صفحة واحدة (الراوتر بالـ hash)، فالـ sitemap فيه الرئيسية بس.
-// ضيف هنا أي صفحات حقيقية جديدة (landing, privacy, terms...) لما تتعمل.
+// الصفحات الحقيقية: الرئيسية + الباقات + الخصوصية + الشروط.
 export default function sitemap(): MetadataRoute.Sitemap {
-  return [{ url: `${getSiteUrl()}/`, changeFrequency: "weekly", priority: 1 }];
+  const base = getSiteUrl();
+  return [
+    { url: `${base}/`, changeFrequency: "weekly", priority: 1 },
+    { url: `${base}/pricing`, changeFrequency: "monthly", priority: 0.8 },
+    { url: `${base}/privacy`, changeFrequency: "yearly", priority: 0.4 },
+    { url: `${base}/terms`, changeFrequency: "yearly", priority: 0.4 },
+  ];
 }

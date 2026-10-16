@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, LogIn, PanelLeftClose, Pin, Search, Sparkles, SquarePen, Timer, Trash2, X } from "lucide-react";
+import { AudioLines, Download, LogIn, PanelLeftClose, Pin, Search, Sparkles, SquarePen, Timer, Trash2, X } from "lucide-react";
 import type { ChatSession, SessionUser } from "@/lib/types";
 import type { SubscriptionInfo } from "@/lib/plans";
 import { Button, IconButton, Kbd, modKeyLabel } from "./ui/Controls";
@@ -132,6 +132,8 @@ export default function ChatDrawer({
   onOpenRecharge,
   onOpenPlans,
   onOpenShortcuts,
+  onOpenVoice,
+  voiceOpen,
 }: {
   open: boolean;
   collapsed: boolean;
@@ -155,6 +157,10 @@ export default function ChatDrawer({
   onOpenRecharge: () => void;
   onOpenPlans: () => void;
   onOpenShortcuts: () => void;
+  /** فتح استوديو الصوت (نص → صوت — للمشتركين) */
+  onOpenVoice: () => void;
+  /** هل عرض الصوت مفتوح حاليًا (لتظليل الزرار) */
+  voiceOpen: boolean;
 }) {
   const { t } = useSettings();
   const [query, setQuery] = useState("");
@@ -238,6 +244,30 @@ export default function ChatDrawer({
         </div>
 
         <div className="flex flex-col gap-2 px-3 pb-2">
+          {user && (
+            <button
+              onClick={onOpenVoice}
+              aria-current={voiceOpen ? "page" : undefined}
+              className={cn(
+                "group flex h-10 w-full items-center gap-2.5 rounded-md border px-3",
+                "text-[13.5px] font-medium transition-colors duration-1",
+                voiceOpen
+                  ? "border-accent-line bg-accent-soft text-ink"
+                  : "border-hair bg-surface text-ink shadow-1 hover:border-hair-2"
+              )}
+            >
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-accent to-accent-hover text-accent-ink shadow-accent">
+                <AudioLines size={17} />
+              </span>
+              <span className="flex-1 text-start">{t("voiceStudio")}</span>
+              <span className="shrink-0 rounded-full bg-warn-soft px-2 py-px text-[10.5px] font-bold text-warn">
+                {t("modelProBadge")}
+              </span>
+            </button>
+          )}
+
+          {user && <div className="-mx-3 border-t border-hair" aria-hidden="true" />}
+
           <button
             onClick={onNewChat}
             className={cn(
@@ -283,7 +313,7 @@ export default function ChatDrawer({
                 placeholder={t("searchChats")}
                 className={cn(
                   "h-9 w-full rounded-md border border-transparent bg-surface-3 pe-3 ps-8 text-[13px] text-ink",
-                  "placeholder:text-ink-3 transition-colors duration-1 focus:border-accent-line focus:bg-surface focus:outline-none"
+                  "placeholder:text-ink-3 transition-colors duration-1 focus:bg-surface focus:outline-none"
                 )}
               />
             </label>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, Crown, FlaskConical, GripVertical, KeyRound, Layers, Loader2, PlugZap, Plus, RefreshCw, Save, Star, Trash2 } from "lucide-react";
+import { AudioLines, ChevronDown, ChevronUp, Crown, FlaskConical, GripVertical, KeyRound, Layers, Loader2, Mic, PlugZap, Plus, RefreshCw, Save, Star, Trash2 } from "lucide-react";
 import type { ModelSummary, ProviderConfigPublic, ProviderProtocol } from "@/lib/provider";
 
 interface Loaded {
@@ -11,6 +11,7 @@ interface Loaded {
 }
 
 const PRESETS: { label: string; name: string; baseUrl: string; model: string; protocol: ProviderProtocol }[] = [
+  { label: "Z.AI — GLM-4.7-Flash (Free)", name: "Z.AI", baseUrl: "https://api.z.ai/api/paas/v4", model: "glm-4.7-flash", protocol: "chat_completions" },
   { label: "Token Harbor — DeepSeek V4.1", name: "Token Harbor", baseUrl: "https://tokenharbor.ai/v1", model: "deepseek-v4.1-flash:free", protocol: "chat_completions" },
   { label: "OpenRouter", name: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1", model: "deepseek/deepseek-chat-v3-0324:free", protocol: "chat_completions" },
   { label: "DeepSeek", name: "DeepSeek", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat", protocol: "chat_completions" },
@@ -44,7 +45,7 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
   const [maxTokens, setMaxTokens] = useState("128000");
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [testResult, setTestResult] = useState<{ ok: boolean; text: string; detail?: string; endpoint?: string } | null>(null);
 
   // إدارة المفاتيح
   const [newKey, setNewKey] = useState("");
@@ -58,7 +59,10 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
   const [showAdd, setShowAdd] = useState(false);
   const [addName, setAddName] = useState("");
   const [addId, setAddId] = useState("");
+  const [addModality, setAddModality] = useState<"chat" | "tts">("chat");
   const [adding, setAdding] = useState(false);
+  // الصوت الافتراضي لموديلات TTS (يُحفظ مع إعداد المزوّد)
+  const [voice, setVoice] = useState("");
 
   // إجراءات على صف موديل (حذف/افتراضي)
   const [actingId, setActingId] = useState<string | null>(null);
@@ -68,6 +72,13 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const [reordering, setReordering] = useState(false);
+
+  // ملخص الموديل المحدد + مزامنة خانة الصوت — قبل أي return مبكر (قواعد الـ hooks)
+  const selectedSummary = (models ?? []).find((m) => m.id === selectedId) ?? null;
+  useEffect(() => {
+    setVoice(selectedSummary?.ttsVoice ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
 
   const loadModels = async (keepId?: string | null): Promise<ModelSummary[]> => {
     const res = await fetch("/api/admin/models");
@@ -151,6 +162,7 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
     name, baseUrl, protocol, model,
     temperature: Number(temperature),
     maxTokens: Number(maxTokens),
+    ttsVoice: voice,
   });
 
   const test = async () => {
@@ -170,10 +182,10 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
-        setTestResult({ ok: false, text: data.error || "فشل الاتصال" });
+        setTestResult({ ok: false, text: data.error || "فشل الاتصال", detail: typeof data.detail === "string" ? data.detail : undefined, endpoint: typeof data.endpoint === "string" ? data.endpoint : undefined });
         return;
       }
-      setTestResult({ ok: true, text: data.sample ? `شغال [${data.protocol ?? protocol}] — رد الموديل: ${data.sample}` : `شغال [${data.protocol ?? protocol}] — الاتصال ناجح` });
+      setTestResult({ ok: true, text: data.sample ? `شغال [${data.protocol ?? protocol}] — رد الموديل: ${data.sample}` : `شغال [${data.protocol ?? protocol}] — الاتصال ناجح`, endpoint: typeof data.endpoint === "string" ? data.endpoint : undefined });
     } catch {
       setTestResult({ ok: false, text: "مشكلة في الاتصال — حاول تاني" });
     } finally {
@@ -307,7 +319,7 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
       const res = await fetch("/api/admin/models", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: nm, id: addId.trim() || undefined }),
+        body: JSON.stringify({ name: nm, id: addId.trim() || undefined, modality: addModality }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "فشل إنشاء الموديل");
@@ -316,6 +328,7 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
       const created = list.find((m) => m.id === data.createdId) ?? list.find((m) => m.name === nm) ?? list[list.length - 1];
       setAddName("");
       setAddId("");
+      setAddModality("chat");
       setShowAdd(false);
       notify("ok", `تم إنشاء الموديل ${nm} — عدّل إعدادات مزوّده واحفظها`);
       if (created) {
@@ -362,6 +375,25 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
       notify("ok", v ? `Native video ON for ${id}` : `Native video OFF for ${id} (frames fallback)`);
     } catch (e) {
       notify("err", e instanceof Error ? e.message : "update failed");
+    } finally {
+      setActingId(null);
+    }
+  };
+
+  const setModality = async (id: string, modality: "chat" | "tts") => {
+    setActingId(id);
+    try {
+      const res = await fetch(`/api/admin/models/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modality }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "فشل التحديث");
+      setModels(data.models ?? []);
+      notify("ok", modality === "tts" ? `الموديل ${id} بقى صوتيًا (TTS)` : `الموديل ${id} بقى للمحادثة`);
+    } catch (e) {
+      notify("err", e instanceof Error ? e.message : "فشل التحديث");
     } finally {
       setActingId(null);
     }
@@ -458,7 +490,7 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
     );
   }
 
-  const inputCls = "w-full rounded-md border border-hair bg-surface-2 px-3 py-2 text-[13px] text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent";
+  const inputCls = "w-full rounded-md border border-hair bg-surface-2 px-3 py-2 text-[13px] text-ink placeholder:text-ink-3 focus:outline-none";
   const masked = loaded.active.maskedKeys ?? [];
   const busy = saving || testing || addingKey || adding || actingId !== null || reordering;
 
@@ -499,6 +531,25 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
                 dir="ltr"
                 className={`${inputCls} tnum max-w-[180px]`}
               />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] text-ink-2">النوع:</span>
+              {(
+                [
+                  { v: "chat", label: "محادثة" },
+                  { v: "tts", label: "صوت (TTS)" },
+                ] as const
+              ).map((o) => (
+                <button
+                  key={o.v}
+                  type="button"
+                  onClick={() => setAddModality(o.v)}
+                  aria-pressed={addModality === o.v}
+                  className={`rounded-full px-3 py-1 text-[12px] font-medium transition-colors duration-1 ${addModality === o.v ? "bg-accent text-accent-ink" : "border border-hair bg-surface text-ink-2 hover:text-ink"}`}
+                >
+                  {o.label}
+                </button>
+              ))}
             </div>
             <button
               onClick={addModel}
@@ -591,6 +642,16 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
                           ×{m.costMultiplier}
                         </span>
                       )}
+                      {m.modality === "tts" ? (
+                        <span className="flex shrink-0 items-center gap-1 rounded-full bg-accent-soft px-1.5 py-px text-[10.5px] font-medium text-accent">
+                          <AudioLines size={10} />
+                          صوت
+                        </span>
+                      ) : (
+                        <span className="shrink-0 rounded-full bg-surface-3 px-1.5 py-px text-[10.5px] font-medium text-ink-2">
+                          محادثة
+                        </span>
+                      )}
                     </span>
                     <span className="tnum mt-0.5 block truncate text-[11.5px] text-ink-3" dir="ltr">
                       {m.id} · {m.keysCount} {m.keysCount === 1 ? "مفتاح" : "مفاتيح"}
@@ -618,6 +679,19 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
                       <Loader2 size={13} className="animate-spin" />
                     ) : (
                       <Crown size={13} className={((m as { tier?: string }).tier ?? "free") === "paid" ? "text-warn" : "text-ink-3"} />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setModality(m.id, m.modality === "tts" ? "chat" : "tts")}
+                    disabled={busy}
+                    title={m.modality === "tts" ? "حوّله لموديل محادثة" : "حوّله لموديل صوتي (TTS)"}
+                    aria-label="تبديل النوع محادثة/صوت"
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-full transition-colors duration-1 hover:bg-surface-3 disabled:opacity-40"
+                  >
+                    {acting ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <Mic size={13} className={m.modality === "tts" ? "text-accent" : "text-ink-3"} />
                     )}
                   </button>
                   <button
@@ -842,6 +916,13 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
             <label className="mb-1 block text-[12px] text-ink-2">اسم الموديل (زي ما المزوّد مسمّيه بالظبط)</label>
             <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="deepseek-chat" dir="ltr" className={`${inputCls} tnum`} />
           </div>
+          {selectedSummary?.modality === "tts" && (
+            <div>
+              <label className="mb-1 block text-[12px] text-ink-2">الصوت الافتراضي (Voice — مثال: alloy)</label>
+              <input value={voice} onChange={(e) => setVoice(e.target.value)} placeholder="alloy" dir="ltr" className={`${inputCls} tnum`} />
+              <p className="mt-1 text-[11.5px] text-ink-3">بيتبعت مع كل طلب توليد صوت — سيبه فاضي لصوت المزوّد الافتراضي. بيتحفظ مع زر «حفظ وتفعيل».</p>
+            </div>
+          )}
           {!savedExists && (
             <div>
               <label className="mb-1 block text-[12px] text-ink-2">مفتاح API الأول (بيتخزن على السيرفر بس)</label>
@@ -861,20 +942,36 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
           </div>
 
           {testResult && (
-            <p className={`rounded-md px-3 py-2 text-[12.5px] leading-5 ${testResult.ok ? "bg-live-soft text-live" : "bg-danger-soft text-danger"}`} dir="auto">
-              {testResult.text}
-            </p>
+            <div className={`rounded-md px-3 py-2 text-[12.5px] leading-5 ${testResult.ok ? "bg-live-soft text-live" : "bg-danger-soft text-danger"}`}>
+              <p dir="auto">{testResult.text}</p>
+              {testResult.endpoint && (
+                <p className="mt-1 break-all text-[11px]" dir="ltr">
+                  <span className="font-semibold">Endpoint:</span> {testResult.endpoint}
+                </p>
+              )}
+              {testResult.detail && (
+                <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap break-words rounded bg-black/5 p-2 text-[11px] leading-4 text-ink" dir="ltr">
+                  {testResult.detail}
+                </pre>
+              )}
+            </div>
           )}
 
           <div className="flex gap-2">
-            <button
-              onClick={test}
-              disabled={testing || saving}
-              className="flex flex-1 items-center justify-center gap-2 rounded-md border border-hair bg-surface-2 py-2.5 text-[13.5px] font-semibold text-ink hover:border-accent-line hover:text-accent disabled:opacity-40"
-            >
-              {testing ? <Loader2 size={14} className="animate-spin" /> : <FlaskConical size={14} />}
-              {testing ? "جاري الاختبار…" : "اختبار الاتصال"}
-            </button>
+            {selectedSummary?.modality === "tts" ? (
+              <p className="flex-1 rounded-md bg-surface-2 px-3 py-2.5 text-[12.5px] leading-5 text-ink-3">
+                زرار الاختبار للمحادثة فقط — لموديلات الصوت جرّب التوليد الحقيقي من «استوديو الصوت».
+              </p>
+            ) : (
+              <button
+                onClick={test}
+                disabled={testing || saving}
+                className="flex flex-1 items-center justify-center gap-2 rounded-md border border-hair bg-surface-2 py-2.5 text-[13.5px] font-semibold text-ink hover:border-accent-line hover:text-accent disabled:opacity-40"
+              >
+                {testing ? <Loader2 size={14} className="animate-spin" /> : <FlaskConical size={14} />}
+                {testing ? "جاري الاختبار…" : "اختبار الاتصال"}
+              </button>
+            )}
             <button
               onClick={save}
               disabled={saving || testing}

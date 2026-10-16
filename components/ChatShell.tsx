@@ -15,6 +15,7 @@ import QuotaExhaustedNotice from "./QuotaExhaustedNotice";
 import AuthModal from "./AuthModal";
 import RechargeModal from "./RechargeModal";
 import PlansModal from "./PlansModal";
+import VoiceStudio from "./VoiceStudio";
 import type { SubscriptionInfo } from "@/lib/plans";
 import ArtifactPanel from "./ArtifactPanel";
 import SettingsModal from "./SettingsModal";
@@ -139,6 +140,8 @@ export default function ChatShell() {
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [showRecharge, setShowRecharge] = useState(false);
   const [showPlans, setShowPlans] = useState(false);
+  /** عرض استوديو الصوت كصفحة كاملة بدل الشات */
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
 
   // الرد الحيّ بيتربط بالشات اللي اتبعت منه (لو المستخدم فتح شات تاني ما يظهرش فيه)
@@ -186,7 +189,7 @@ export default function ChatShell() {
     toastSeqRef.current = mySeq;
     setTimeout(() => {
       if (toastSeqRef.current === mySeq) setToast(null);
-    }, 4500);
+    }, 6000);
   }, []);
 
   const lockSessionModel = useCallback((sessionId: string, m: ModelId) => {
@@ -455,6 +458,7 @@ export default function ChatShell() {
       setShowAuthModal(true);
       return;
     }
+    setVoiceOpen(false);
     if (tempSessionId) await dropTempSession(tempSessionId);
     try {
       const res = await fetch("/api/sessions", {
@@ -492,6 +496,7 @@ export default function ChatShell() {
       setShowAuthModal(true);
       return;
     }
+    setVoiceOpen(false);
     if (tempSessionId) {
       const tid = tempSessionId;
       setTempSessionId(null);
@@ -521,6 +526,7 @@ export default function ChatShell() {
   }, [user, currentSessionId, messages.length, showToast, t, markLoaded]);
 
   const handleSelectSession = (id: string) => {
+    setVoiceOpen(false);
     if (tempSessionId && tempSessionId !== id) {
       const tid = tempSessionId;
       setTempSessionId(null);
@@ -1230,6 +1236,11 @@ export default function ChatShell() {
           setDrawerOpen(false);
           setShowShortcuts(true);
         }}
+        onOpenVoice={() => {
+          setDrawerOpen(false);
+          setVoiceOpen(true);
+        }}
+        voiceOpen={voiceOpen}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
@@ -1240,13 +1251,16 @@ export default function ChatShell() {
           totalTokens={quota?.total ?? null}
           onOpenRecharge={openRecharge}
           onNewChat={handleNewChat}
-          lockedModel={lockedModel}
-          onPickModel={handlePickModel}
-          onLockedModel={() => {
-            showToast(t("modelLockedToast"));
-            setShowPlans(true);
+          onShare={currentSessionId && !inTempMode && !voiceOpen ? () => setShareOpen(true) : undefined}
+          mode={voiceOpen ? "voice" : "chat"}
+          onModeChange={(m) => {
+            if (m === "voice") {
+              setDrawerOpen(false);
+              setVoiceOpen(true);
+            } else {
+              setVoiceOpen(false);
+            }
           }}
-          onShare={currentSessionId && !inTempMode ? () => setShareOpen(true) : undefined}
         />
 
         {inTempMode && (
@@ -1259,7 +1273,13 @@ export default function ChatShell() {
           </div>
         )}
 
-        {currentSessionEnded && !isGenerating ? (
+        {voiceOpen ? (
+          <VoiceStudio
+            onOpenPlans={() => {
+              setShowPlans(true);
+            }}
+          />
+        ) : currentSessionEnded && !isGenerating ? (
           <ChatEndedNotice endedBy={currentSession?.endedBy ?? null} onNewChat={handleNewChat} />
         ) : quotaExhausted && !isGenerating ? (
           <QuotaExhaustedNotice renewsAt={quotaRenewsAt} onRecharge={openRecharge} />
@@ -1297,6 +1317,12 @@ export default function ChatShell() {
                   onSend={sendMessage}
                   onStop={stopGeneration}
                   disabled={!authChecked}
+                  lockedModel={lockedModel}
+                  onPickModel={handlePickModel}
+                  onLockedModel={() => {
+                    showToast(t("modelLockedToast"));
+                    setShowPlans(true);
+                  }}
                 />
               }
             />
@@ -1326,6 +1352,12 @@ export default function ChatShell() {
               onSend={sendMessage}
               onStop={stopGeneration}
               disabled={!authChecked}
+              lockedModel={lockedModel}
+              onPickModel={handlePickModel}
+              onLockedModel={() => {
+                showToast(t("modelLockedToast"));
+                setShowPlans(true);
+              }}
             />
           </>
         )}
@@ -1479,7 +1511,7 @@ function EditMessageDialog({
             dir="auto"
             disabled={busy}
             placeholder={t("placeholder")}
-            className="max-h-[40dvh] w-full resize-y rounded-md border border-hair bg-surface-2 px-3 py-2.5 text-[14px] leading-7 text-ink placeholder:text-ink-3 focus:border-accent-line focus:outline-none disabled:opacity-60"
+            className="max-h-[40dvh] w-full resize-y rounded-md border border-hair bg-surface-2 px-3 py-2.5 text-[14px] leading-7 text-ink placeholder:text-ink-3 focus:outline-none disabled:opacity-60"
           />
         </div>
         <div className="flex gap-2 border-t border-hair px-4 py-3">

@@ -1,0 +1,113 @@
+/* ============================================================================
+   MALG — Landing page visuals. Full-bleed backgrounds (no boxed edges),
+   marquee, gradient-border cards. transform/opacity-only motion.
+   ========================================================================= */
+
+.lp-hero-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 50% at 50% -5%, var(--accent-soft), transparent 70%),
+    radial-gradient(35% 35% at 85% 20%, var(--aurora-2), transparent 70%),
+    radial-gradient(35% 35% at 12% 30%, var(--aurora-3), transparent 70%);
+}
+.lp-hero-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--hairline) 1px, transparent 1px),
+    linear-gradient(90deg, var(--hairline) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(60% 55% at 50% 20%, black 20%, transparent 75%);
+  mask-image: radial-gradient(60% 55% at 50% 20%, black 20%, transparent 75%);
+  opacity: 0.7;
+}
+.lp-hero-bg::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 40%;
+  background: linear-gradient(to bottom, transparent, var(--ground));
+}
+
+.lp-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  opacity: 0.55;
+  animation: mlag-drift 18s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+/* Gradient hairline border for highlighted cards */
+.lp-ring {
+  position: relative;
+  isolation: isolate;
+}
+.lp-ring::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(160deg, var(--accent-line), transparent 45%, transparent 60%, var(--accent-line));
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Infinite marquee (direction-agnostic: duplicated track) */
+.lp-marquee {
+  display: flex;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent);
+}
+.lp-marquee-track {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.75rem;
+  padding-inline-end: 0.75rem;
+  animation: lp-marquee 38s linear infinite;
+}
+.lp-marquee:hover .lp-marquee-track {
+  animation-play-state: paused;
+}
+@keyframes lp-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* Soft dotted backdrop for feature visuals */
+.lp-dots {
+  background-image: radial-gradient(var(--hairline-2) 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+
+.lp-caret::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  margin-inline-start: 2px;
+  vertical-align: -0.2em;
+  background: var(--accent);
+  animation: mlag-caret 1s steps(1, end) infinite;
+}
+
+@media (max-width: 639.98px) {
+  .lp-orb {
+    animation: none;
+  }
+}

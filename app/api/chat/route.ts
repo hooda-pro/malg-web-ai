@@ -303,10 +303,13 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
 
   // اسم الموديل المعروض للهوية ("ما هو الموديل؟") — من إعداد الموديل نفسه
   const modelCfg = await getModelProvider(model).catch(() => null);
-  const modelDisplayName = modelCfg?.displayName ?? "Malg-A3";
+  const modelDisplayName = modelCfg?.displayName ?? "MALG AI";
   const costMult = modelCfg && Number.isFinite(modelCfg.costMultiplier) && modelCfg.costMultiplier > 0 ? modelCfg.costMultiplier : 1;
   const videoNative = modelCfg?.supportsVideo === true;
 
+  // حقائق المستخدم المحفوظة — قراءة DB رخيصة، وفشلها لا يوقف الرد.
+  const { getTopFacts, buildFactsBlock } = await import("@/lib/facts");
+  const factsBlock = buildFactsBlock(await getTopFacts(user.id, 10).catch(() => []));
   const systemPromptContent =
     buildSystemPrompt({
       userName: user.displayName,
@@ -326,6 +329,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
       closeConfirmationPending: closePendingAtStart,
     }) +
     (personalization ? `\n\n${personalization}` : "") +
+    (factsBlock ? `\n\n${factsBlock}` : "") +
     (deepSearch.performed && deepSearch.contextBlock ? `\n\n${deepSearch.contextBlock}` : "");
 
   // آخر 10 رسائل. المرفقات مبتتبعتش كاملة: الملفات الصغيرة inline (ميزانية محدودة)
@@ -357,6 +361,26 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
           : extractAgentStepsMeta(m.content).visibleText,
     })),
   ];
+
+  // تذكير صيغة التسليم في آخر جملة الطلب — أوفر تأثيرًا على الموديلات اللي
+  // بتتجاهل بنود الـ system prompt الطويلة (زي بعض الموديلات المجانية):
+  // بنلحق توجيه قصير على آخر رسالة (في النسخة المرسلة فقط — مش في المحفوظ).
+  const FORMAT_NUDGE =
+    "\n\n[توجيه ملزم لإخراج الكود: أي كود في ردك (تسليم فعلي) لازم كل ملف يتكتب ككتلة كاملة بصيغة: ```lang path=\"المسار/الملف.ext\" محتوى الملف ``` — ممنوع تسليم أي كود من غير path=\"...\".]";
+  const lastApi = apiMessages[apiMessages.length - 1] as { role: string; content: unknown } | undefined;
+  if (lastApi && lastApi.role === "user") {
+    if (typeof lastApi.content === "string") {
+      lastApi.content += FORMAT_NUDGE;
+    } else if (Array.isArray(lastApi.content) && lastApi.content.length > 0) {
+      const arr = lastApi.content as Array<Record<string, unknown>>;
+      const lastPart = arr[arr.length - 1];
+      if (lastPart && typeof lastPart === "object" && lastPart.type === "text" && typeof lastPart.text === "string") {
+        lastPart.text += FORMAT_NUDGE;
+      } else {
+        arr.push({ type: "text", text: FORMAT_NUDGE.trim() });
+      }
+    }
+  }
 
   // تكلفة رسالة المستخدم الحالية بعد التحويل (اللي بيتبعت للموديل فعلًا) — دي أساس الحسبة.
   const sentUser = apiUserContentLength(apiMessages[apiMessages.length - 1]?.content ?? "");

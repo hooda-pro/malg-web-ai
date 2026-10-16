@@ -225,7 +225,7 @@ function MessageItem({
         {userMainText && (
           <div
             className={cn(
-              "msg-in max-w-[85%] whitespace-pre-wrap break-words rounded-xl rounded-ee-xs border border-hair",
+              "msg-in max-w-[85%] whitespace-pre-wrap break-words rounded-xl border border-hair",
               "bg-surface-3 px-4 py-2.5 text-[15px] leading-7 text-ink shadow-1"
             )}
             dir="auto"
@@ -412,6 +412,7 @@ function MessageItem({
               onClick={handleCopy}
               tabIndex={isLive ? -1 : undefined}
               title={copied ? t("copied") : t("copy")}
+              aria-label={copied ? t("copied") : t("copy")}
               disabled={actionsDisabled}
               className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[12px] text-ink-3 transition-colors duration-1 hover:bg-surface-3 hover:text-ink disabled:opacity-40"
             >
@@ -423,6 +424,7 @@ function MessageItem({
                 onClick={() => onRegenerate(message.id)}
                 tabIndex={isLive ? -1 : undefined}
                 title={t("regenerate")}
+                aria-label={isRegenerating ? t("regenerating") : t("regenerate")}
                 disabled={actionsDisabled || isRegenerating}
                 className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[12px] text-ink-3 transition-colors duration-1 hover:bg-surface-3 hover:text-ink disabled:opacity-40"
               >

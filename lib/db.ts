@@ -77,7 +77,7 @@ async function seedDefaultAdmin() {
 
 /**
  * يضمن وجود موديل افتراضي واحد على الأقل في ai_models.
- * - لو الجدول فاضي وفيه إعداد قديم في provider_settings → يرحّله كموديل 'malg-a3' افتراضي.
+ * - لو الجدول فاضي وفيه إعداد قديم في provider_settings → يرحّله كموديل 'malg-ai' افتراضي.
  * - لو مفيش حاجة خالص → يزرع موديل افتراضي من متغيرات البيئة (نفس قيم الـ fallback).
  * Idempotent: لا يفعل شيئًا لو الجدول فيه صفوف.
  */
@@ -90,7 +90,7 @@ async function seedDefaultModel() {
     try {
       const migrated = await sql`
         INSERT INTO ai_models (id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default)
-        SELECT 'malg-a3', COALESCE(name, 'Malg-A3'), '', base_url, COALESCE(protocol, 'chat_completions'), model, api_keys, temperature, max_tokens, TRUE, TRUE
+        SELECT 'malg-ai', COALESCE(name, 'MALG AI'), '', base_url, COALESCE(protocol, 'chat_completions'), model, api_keys, temperature, max_tokens, TRUE, TRUE
         FROM provider_settings
         WHERE is_active = TRUE
         ORDER BY updated_at DESC
@@ -99,7 +99,7 @@ async function seedDefaultModel() {
         RETURNING id
       `;
       if (migrated.length > 0) {
-        console.log("[seed] تم ترحيل إعداد المزوّد القديم إلى موديل malg-a3 الافتراضي");
+        console.log("[seed] تم ترحيل إعداد المزوّد القديم إلى موديل malg-ai الافتراضي");
         return;
       }
     } catch (e) {
@@ -133,26 +133,26 @@ async function seedDefaultModel() {
     const fullBase = /^https?:\/\//i.test(cleanBase) ? cleanBase : `https://${cleanBase}`;
     await sql`
       INSERT INTO ai_models (id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default)
-      VALUES ('malg-a3', 'Malg-A3', '', ${fullBase}, 'chat_completions', ${model}, ${[...new Set(keys)]}, 0.4, 128000, TRUE, TRUE)
+      VALUES ('malg-ai', 'MALG AI', '', ${fullBase}, 'chat_completions', ${model}, ${[...new Set(keys)]}, 0.4, 128000, TRUE, TRUE)
       ON CONFLICT (id) DO NOTHING
     `;
-    console.log("[seed] تم إنشاء الموديل الافتراضي malg-a3");
+    console.log("[seed] تم إنشاء الموديل الافتراضي malg-ai");
   } catch (e) {
     console.error("seedDefaultModel error", e);
   }
 }
 
 /**
- * يزرع موديل Claude Sonnet 5.5 (عبر Token Harbor — نفس baseURL ومفاتيح malg-a3):
+ * يزرع موديل Claude Sonnet 5.5 (عبر Token Harbor — نفس baseURL ومفاتيح malg-ai):
  * - مدفوع (Pro فقط) + معامل تكلفة ×4.
  * - ON CONFLICT DO NOTHING: آمن على القواعد الموجودة، والأدمن يفعّله من اللوحة.
- * ملحوظة: لو غيّرت مفاتيح malg-a3 بعد البذر، انسخها لصف كلود يدويًا من اللوحة.
+ * ملحوظة: لو غيّرت مفاتيح malg-ai بعد البذر، انسخها لصف كلود يدويًا من اللوحة.
  */
 async function seedClaudeModel() {
   try {
     await sql`
       INSERT INTO ai_models (id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, tier, cost_multiplier, is_active, is_default)
-      SELECT 'claude-sonnet-5-5', 'Claude Sonnet 5.5', 'الأحدث من Anthropic — برمجة ووكلاء (يتطلب Pro).', COALESCE((SELECT base_url FROM ai_models WHERE id = 'malg-a3' LIMIT 1), 'https://tokenharbor.ai/v1/chat/completions'), 'chat_completions', 'claude-sonnet-5.5', COALESCE((SELECT api_keys FROM ai_models WHERE id = 'malg-a3' LIMIT 1), '{}'::text[]), 0.4, 128000, 'paid', 4, FALSE, FALSE
+      SELECT 'claude-sonnet-5-5', 'Claude Sonnet 5.5', 'الأحدث من Anthropic — برمجة ووكلاء (يتطلب Pro).', COALESCE((SELECT base_url FROM ai_models WHERE id = 'malg-ai' LIMIT 1), 'https://tokenharbor.ai/v1/chat/completions'), 'chat_completions', 'claude-sonnet-5.5', COALESCE((SELECT api_keys FROM ai_models WHERE id = 'malg-ai' LIMIT 1), '{}'::text[]), 0.4, 128000, 'paid', 4, FALSE, FALSE
       WHERE NOT EXISTS (SELECT 1 FROM ai_models WHERE id = 'claude-sonnet-5-5')
     `;
   } catch (e) {
@@ -365,7 +365,24 @@ export function ensureSchema(): Promise<void> {
       `;
       await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS cost_multiplier DOUBLE PRECISION NOT NULL DEFAULT 1`;
       await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS supports_video BOOLEAN NOT NULL DEFAULT FALSE`;
+      // ——— موديلات الصوت (TTS): نفس جدول ai_models — modality يفرّق (chat افتراضيًا) ———
+      await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS modality TEXT NOT NULL DEFAULT 'chat'`;
+      await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS tts_voice TEXT NOT NULL DEFAULT ''`;
 
+/**
+ * إعادة تسمية الموديل الافتراضي malg-a3 → malg-ai (مرة واحدة، آمنة للتكرار):
+ * صف ai_models (مع الاسم الظاهر) + مفاتيح API المرتبطة به.
+ */
+async function migrateModelRename() {
+  try {
+    await sql`UPDATE ai_models SET id = 'malg-ai', name = 'MALG AI' WHERE id = 'malg-a3' AND NOT EXISTS (SELECT 1 FROM ai_models WHERE id = 'malg-ai')`;
+    await sql`UPDATE api_keys SET model_id = 'malg-ai' WHERE model_id = 'malg-a3'`;
+  } catch (e) {
+    console.error("migrateModelRename error", e);
+  }
+}
+
+      await migrateModelRename();
       await seedDefaultModel();
       await seedClaudeModel();
 
@@ -412,6 +429,41 @@ export function ensureSchema(): Promise<void> {
         )
       `;
 
+      // ——— المشاريع وملفاتها وحقائق المستخدم (v2-projects) ———
+      await sql`
+        CREATE TABLE IF NOT EXISTS projects (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          instructions TEXT NOT NULL DEFAULT '',
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id)`;
+      await sql`
+        CREATE TABLE IF NOT EXISTS project_files (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          path TEXT NOT NULL,
+          lang TEXT NOT NULL DEFAULT '',
+          content TEXT NOT NULL DEFAULT '',
+          updated_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(project_id, path)
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS idx_project_files_project ON project_files(project_id)`;
+      await sql`
+        CREATE TABLE IF NOT EXISTS user_facts (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          fact TEXT NOT NULL,
+          category TEXT NOT NULL DEFAULT 'عام',
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS idx_user_facts_user ON user_facts(user_id)`;
+      await sql`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS project_id TEXT`;
       // إنشاء حساب الأدمن الافتراضي لو مفيش أي أدمن في القاعدة
       await seedDefaultAdmin();
     })().catch((e) => {

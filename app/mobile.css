@@ -11,12 +11,12 @@
   :root {
     --hairline: rgba(31, 30, 29, 0.14);
     --hairline-2: rgba(31, 30, 29, 0.22);
-    --ink-3: #8b8883;
+    --ink-3: #6f6c68;
   }
   html[data-theme="dark"] {
     --hairline: rgba(255, 255, 255, 0.12);
     --hairline-2: rgba(255, 255, 255, 0.18);
-    --ink-3: #86868b;
+    --ink-3: #8e8e96;
   }
 
   /* ---- Cheaper glass + no film grain on weak mobile GPUs ---- */

@@ -165,15 +165,19 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
   // اسم الموديل المعروض للهوية — من إعداد الموديل نفسه
   const costMult = await getCostMultiplier(model).catch(() => 1);
   const continueCfg = await getModelProvider(model).catch(() => null);
-  const modelDisplayName = continueCfg?.displayName ?? "Malg-A3";
+  const modelDisplayName = continueCfg?.displayName ?? "MALG AI";
   const videoNative = continueCfg?.supportsVideo === true;
 
+  // حقائق المستخدم المحفوظة — الرد المكمَّل يشوف نفس السياق.
+  const { getTopFacts, buildFactsBlock } = await import("@/lib/facts");
+  const factsBlock = buildFactsBlock(await getTopFacts(user.id, 10).catch(() => []));
   const apiMessages: ApiMessage[] = [
     {
       role: "system",
       content:
         buildSystemPrompt({ userName: user.displayName, uiLanguage, tone, modelName: modelDisplayName, memory: userMemory }) +
-        (personalization ? `\n\n${personalization}` : ""),
+        (personalization ? `\n\n${personalization}` : "") +
+        (factsBlock ? `\n\n${factsBlock}` : ""),
     },
     // نفس تخفيف /api/chat: المرفقات قايمة أسماء (+ ملفات صغيرة inline في آخر رسالة)
     // والصور بس في آخر رسالة فيها صور — بدل ما كل محتوى الـ zip يتبعت تاني.

@@ -1,15 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
 import {
   ArrowUpRight,
+  Brain,
   Check,
   ChevronDown,
   Coins,
   Database,
   Download,
   KeyRound,
+  Lock,
   LogOut,
   RefreshCw,
   Settings2,
@@ -30,19 +33,16 @@ import {
   type ModelId,
 } from "./SettingsContext";
 import { cn } from "@/lib/utils";
+import FactsManager from "./FactsManager";
 
 const TABS: { id: SettingsTab; icon: typeof Settings2; labelKey: string; needsUser?: boolean }[] = [
   { id: "general", icon: Settings2, labelKey: "settingsGeneral" },
   { id: "personalization", icon: Wand2, labelKey: "settingsPersonalization" },
+  { id: "facts", icon: Brain, labelKey: "settingsFactsTab", needsUser: true },
   { id: "billing", icon: Coins, labelKey: "settingsBilling", needsUser: true },
   { id: "data", icon: Database, labelKey: "settingsData", needsUser: true },
   { id: "account", icon: UserRound, labelKey: "settingsAccountTab", needsUser: true },
 ];
-
-const selectClass = cn(
-  "h-9 min-w-[150px] cursor-pointer appearance-none rounded-full border border-hair bg-surface pe-9 ps-3.5 text-[13px] font-medium text-ink shadow-1",
-  "transition-colors duration-1 hover:border-hair-2 focus:border-accent focus:outline-none"
-);
 
 export default function SettingsModal({
   user,
@@ -112,8 +112,9 @@ export default function SettingsModal({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6 pt-4 sm:px-6">
           <div key={tab} className="animate-fade">
-            {tab === "general" && <GeneralTab />}
+            {tab === "general" && <GeneralTab onLockedModel={() => { onClose(); onOpenPlans(); }} />}
             {tab === "personalization" && <PersonalizationTab />}
+            {tab === "facts" && user && <FactsManager />}
             {tab === "billing" && user && (
               <BillingTab
                 user={user}
@@ -149,16 +150,137 @@ export default function SettingsModal({
   );
 }
 
-function SelectWrap({ children }: { children: ReactNode }) {
+/** قايمة منسدلة مخصصة (زر + صندوق زجاجي) بدل الـ select الأصلية — بنفس لغة ModelPicker. */
+function SettingSelect({
+  label,
+  value,
+  options,
+  onChange,
+  onLockedOption,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string; hint?: string; locked?: boolean }[];
+  onChange: (value: string) => void;
+  onLockedOption?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; width: number } | null>(null);
+
+  // القايمة بتترسم في portal بمقاس ثابت من الشاشة — لأن المودال فيه overflow-y-auto
+  // فالقايمة المطلقة جواه كانت بتتقص. المقاس بيتحسب مع الفتح وبيتابع السكرول والتحجيم،
+  // وبيتقلب لفوق لو مفيش مساحة تحت.
+  const updatePos = useCallback(() => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const w = Math.max(r.width, 200);
+    const estH = Math.min(320, options.length * 44 + 12);
+    const up = window.innerHeight - r.bottom < estH && r.top > window.innerHeight / 2;
+    setPos(
+      up
+        ? { bottom: Math.max(8, window.innerHeight - r.top + 6), left: Math.max(8, r.right - w), width: w }
+        : { top: r.bottom + 6, left: Math.max(8, r.right - w), width: w }
+    );
+  }, [options.length]);
+
+  useEffect(() => {
+    if (!open) return;
+    updatePos();
+    const target = (e: MouseEvent) => e.target as Node;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current?.contains(target(e))) return;
+      if (listRef.current?.contains(target(e))) return;
+      setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", updatePos);
+    document.addEventListener("scroll", updatePos, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", updatePos);
+      document.removeEventListener("scroll", updatePos, true);
+    };
+  }, [open, updatePos]);
+
+  const selected = options.find((o) => o.value === value) ?? options[0];
+
   return (
-    <span className="relative inline-flex">
-      {children}
-      <ChevronDown
-        size={14}
-        className="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-ink-3"
-        aria-hidden="true"
-      />
-    </span>
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        ref={btnRef}
+        onClick={() => setOpen((o) => !o)}
+        disabled={options.length === 0}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={label}
+        className="flex h-9 min-w-[150px] max-w-[220px] items-center justify-between gap-2 rounded-full border border-hair bg-surface px-3.5 text-[13px] font-medium text-ink shadow-1 transition-colors duration-1 hover:border-hair-2 disabled:opacity-50"
+      >
+        <span className="truncate">{selected?.label ?? "…"}</span>
+        <ChevronDown
+          size={14}
+          aria-hidden="true"
+          className={cn("shrink-0 text-ink-3 transition-transform duration-2 ease-soft", open && "rotate-180")}
+        />
+      </button>
+
+      {open && options.length > 0 && pos && createPortal(
+        <div
+          ref={listRef}
+          role="listbox"
+          aria-label={label}
+          className="animate-materialize glass fixed z-[80] overflow-y-auto rounded-lg border border-hair p-1.5 shadow-3"
+          style={{ top: pos.top, bottom: pos.bottom, left: pos.left, width: pos.width, maxHeight: 320 }}
+        >
+          {options.map((o) => {
+            const active = o.value === value;
+            return (
+              <button
+                key={o.value}
+                type="button"
+                role="option"
+                aria-selected={active}
+                onClick={() => {
+                  if (o.locked) {
+                    setOpen(false);
+                    onLockedOption?.();
+                    return;
+                  }
+                  onChange(o.value);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-start transition-colors duration-1",
+                  active ? "bg-surface-3" : "hover:bg-surface-3"
+                )}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-1.5 text-[13px] font-medium text-ink">
+                    <span className="truncate">{o.label}</span>
+                    {o.locked && <Lock size={11} className="shrink-0 text-ink-3" aria-hidden="true" />}
+                  </span>
+                  {o.hint ? (
+                    <span className="mt-0.5 block truncate text-[12px] text-ink-3">{o.hint}</span>
+                  ) : null}
+                </span>
+                <span className="grid h-5 w-5 shrink-0 place-items-center">
+                  {active && <Check size={15} className="text-accent" />}
+                </span>
+              </button>
+            );
+          })}
+        </div>,
+        document.body
+      )}
+    </div>
   );
 }
 
@@ -194,7 +316,7 @@ function SettingRow({
   );
 }
 
-function GeneralTab() {
+function GeneralTab({ onLockedModel }: { onLockedModel: () => void }) {
   const { t, lang, theme, model, models, animations, showTime, enterToSend, tone, setLang, setTheme, setModel, setAnimations, setShowTime, setTone, update } =
     useSettings();
 
@@ -206,20 +328,12 @@ function GeneralTab() {
           <ThemeSwitch value={theme} onChange={setTheme} />
         </SettingRow>
         <SettingRow label={t("settingsLang")} htmlFor="mlag-lang">
-          <SelectWrap>
-          <select
-            id="mlag-lang"
+          <SettingSelect
+            label={t("settingsLang")}
             value={lang}
-            onChange={(e) => setLang(e.target.value as Lang)}
-            className={selectClass}
-          >
-            {LANGUAGES.map((l) => (
-              <option key={l.code} value={l.code}>
-                {l.label}
-              </option>
-            ))}
-          </select>
-          </SelectWrap>
+            options={LANGUAGES.map((l) => ({ value: l.code, label: l.label }))}
+            onChange={(v) => setLang(v as Lang)}
+          />
         </SettingRow>
         <SettingRow label={t("settingsAnim")} hint={t("animHint")}>
           <Switch checked={animations} onChange={setAnimations} label={t("settingsAnim")} />
@@ -229,20 +343,13 @@ function GeneralTab() {
       <SectionTitle>{t("preferences")}</SectionTitle>
       <Panel>
         <SettingRow label={t("defaultModel")} hint={t("defaultModelHint")} htmlFor="mlag-model">
-          <SelectWrap>
-          <select
-            id="mlag-model"
+          <SettingSelect
+            label={t("defaultModel")}
             value={model}
-            onChange={(e) => setModel(e.target.value as ModelId)}
-            className={selectClass}
-          >
-            {models.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-          </SelectWrap>
+            options={models.map((m) => ({ value: m.id, label: m.label, hint: m.hint || undefined, locked: m.locked }))}
+            onChange={(v) => setModel(v as ModelId)}
+            onLockedOption={onLockedModel}
+          />
         </SettingRow>
         <SettingRow label={t("enterToSend")} hint={t("enterToSendHint")}>
           <Switch checked={enterToSend} onChange={(v) => update("enterToSend", v)} label={t("enterToSend")} />
@@ -251,17 +358,15 @@ function GeneralTab() {
           <Switch checked={showTime} onChange={setShowTime} label={t("settingsShowTime")} />
         </SettingRow>
         <SettingRow label={t("toneLabel")} hint={t("toneHint")} htmlFor="mlag-tone">
-          <SelectWrap>
-          <select
-            id="mlag-tone"
+          <SettingSelect
+            label={t("toneLabel")}
             value={tone}
-            onChange={(e) => setTone(e.target.value as "msa" | "egyptian")}
-            className={selectClass}
-          >
-            <option value="msa">{t("toneMSA")}</option>
-            <option value="egyptian">{t("toneEgyptian")}</option>
-          </select>
-          </SelectWrap>
+            options={[
+              { value: "msa", label: t("toneMSA") },
+              { value: "egyptian", label: t("toneEgyptian") },
+            ]}
+            onChange={(v) => setTone(v as "msa" | "egyptian")}
+          />
         </SettingRow>
       </Panel>
 
@@ -290,7 +395,7 @@ function PersonalizationTab() {
             className={cn(
               "h-11 w-full rounded-md border border-hair bg-surface px-3.5 text-[14.5px] text-ink shadow-1",
               "placeholder:text-ink-3 transition-all duration-1 hover:border-hair-2",
-              "focus:border-accent focus:outline-none"
+              "focus:outline-none"
             )}
           />
         </label>
@@ -310,7 +415,7 @@ function PersonalizationTab() {
             className={cn(
               "w-full resize-y rounded-md border border-hair bg-surface px-3.5 py-3 text-[14px] leading-6 text-ink shadow-1",
               "placeholder:text-ink-3 transition-all duration-1 hover:border-hair-2",
-              "focus:border-accent focus:outline-none"
+              "focus:outline-none"
             )}
           />
           <span className="mt-1.5 flex items-center justify-between text-[12px] text-ink-3">
@@ -658,7 +763,7 @@ function AccountTab({
               className={cn(
                 "h-10 min-w-0 flex-1 rounded-md border border-hair bg-surface-2 px-3",
                 "text-[14px] text-ink placeholder:text-ink-3 transition-all duration-1",
-                "hover:border-hair-2 focus:border-accent focus:bg-surface focus:outline-none",
+                "hover:border-hair-2 focus:bg-surface focus:outline-none",
                 ""
               )}
             />

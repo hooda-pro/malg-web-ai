@@ -91,7 +91,7 @@ export default function AdminSearch({ notify }: { notify: (type: "ok" | "err", t
     );
   }
 
-  const inputCls = "w-full rounded-md border border-hair bg-surface-2 px-3 py-2 text-[13px] text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent";
+  const inputCls = "w-full rounded-md border border-hair bg-surface-2 px-3 py-2 text-[13px] text-ink placeholder:text-ink-3 focus:outline-none";
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">

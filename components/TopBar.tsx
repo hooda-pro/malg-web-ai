@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Coins, Crown, Lock, PanelLeft, Share2, SquarePen } from "lucide-react";
 import { formatTokens } from "@/lib/ai";
-import { IconButton } from "./ui/Controls";
+import { IconButton, Segmented } from "./ui/Controls";
 import { useSettings, type ModelId } from "./SettingsContext";
 import { cn } from "@/lib/utils";
 
@@ -14,10 +14,9 @@ export default function TopBar({
   totalTokens,
   onOpenRecharge,
   onNewChat,
-  lockedModel,
-  onPickModel,
-  onLockedModel,
   onShare,
+  mode,
+  onModeChange,
 }: {
   onToggleDrawer: () => void;
   sidebarCollapsed: boolean;
@@ -25,18 +24,16 @@ export default function TopBar({
   totalTokens?: number | null;
   onOpenRecharge: () => void;
   onNewChat: () => void;
-  /** الموديل اللي الشات الحالي متثبت عليه (لو اتبعت فيه رسايل بالفعل) */
-  lockedModel?: ModelId | null;
-  onPickModel: (id: ModelId) => void;
-  /** ضغطة على موديل مقفول (اشتراك) — تفتح الباقات بدل الاختيار */
-  onLockedModel?: (id: ModelId) => void;
   /** مشاركة المحادثة الحالية برابط — null = الزرار مخفي (مؤقت/لا جلسة) */
   onShare?: (() => void) | null;
+  /** وضع العرض الحالي للتبديل بين الشات والاستوديو من الشريط العلوي */
+  mode: "chat" | "voice";
+  onModeChange: (mode: "chat" | "voice") => void;
 }) {
   const { t } = useSettings();
 
   return (
-    <header className="m-topbar glass sticky top-0 z-nav flex h-[calc(3.25rem+env(safe-area-inset-top))] shrink-0 items-center gap-1.5 border-b border-hair ps-[max(0.625rem,env(safe-area-inset-left))] pe-[max(0.625rem,env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] sm:px-4">
+    <header className="m-topbar glass sticky top-0 z-nav flex h-[calc(3.25rem+env(safe-area-inset-top))] shrink-0 items-center gap-1.5 border-b border-hair ps-[max(0.625rem,env(safe-area-inset-left))] pe-[max(0.625rem,env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] sm:px-4 relative">
       <IconButton
         label={t("toggleSidebar")}
         onClick={onToggleDrawer}
@@ -45,8 +42,6 @@ export default function TopBar({
         <PanelLeft size={18} className="flip-rtl" />
       </IconButton>
 
-      <ModelPicker lockedModel={lockedModel} onPickModel={onPickModel} onLockedModel={onLockedModel} />
-
       {remainingTokens !== null && (
         <TokensBadge
           remainingTokens={remainingTokens}
@@ -54,6 +49,18 @@ export default function TopBar({
           onOpenRecharge={onOpenRecharge}
         />
       )}
+
+      <div className="absolute left-1/2 -translate-x-1/2">
+        <Segmented<"chat" | "voice">
+          size="sm"
+          value={mode}
+          onChange={onModeChange}
+          options={[
+            { value: "chat", label: t("modeChat") },
+            { value: "voice", label: t("modeVoice") },
+          ]}
+        />
+      </div>
 
       <div className="ms-auto flex items-center gap-1">
         {onShare && (
@@ -148,6 +155,7 @@ function TokensBadge({
         aria-haspopup="dialog"
         aria-expanded={open}
         title={t("topbarTokensHint")}
+        aria-label={t("topbarTokensHint")}
         className="relative grid h-5 w-5 shrink-0 place-items-center rounded-full transition-opacity duration-1 before:absolute before:-inset-2 before:content-[''] hover:opacity-80"
       >
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
@@ -223,16 +231,21 @@ function TokensBadge({
   );
 }
 
-function ModelPicker({
+/** اختيار الموديل — يُستخدم تحت خانة الكتابة (مضغوط، القايمة تفتح لفوق) زي كلود. */
+export function ModelPicker({
   lockedModel,
   onPickModel,
   onLockedModel,
+  compact,
+  dropUp,
 }: {
   lockedModel?: ModelId | null;
   onPickModel: (id: ModelId) => void;
   onLockedModel?: (id: ModelId) => void;
+  compact?: boolean;
+  dropUp?: boolean;
 }) {
-  const { t, model, models } = useSettings();
+  const { t, model, models, modelsLoading } = useSettings();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -259,14 +272,24 @@ function ModelPicker({
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
+        disabled={modelsLoading}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="flex h-9 items-center gap-1.5 rounded-full px-3 transition-colors duration-1 hover:bg-surface-3"
+        aria-label={modelsLoading ? t("modelsLoading") : undefined}
+        className={cn(
+          "flex items-center gap-1.5 rounded-full transition-colors duration-1 hover:bg-surface-3",
+          compact ? "h-8 px-2.5" : "h-9 px-3",
+          modelsLoading && "pointer-events-none opacity-70"
+        )}
       >
-        <span dir="ltr" className="text-[15px] font-semibold tracking-title text-ink">{currentLabel}</span>
+        {modelsLoading ? (
+          <span className="skel inline-block h-5 w-24 rounded-full" aria-hidden="true" />
+        ) : (
+          <span dir="ltr" className={cn("font-semibold tracking-title text-ink", compact ? "text-[12.5px]" : "text-[15px]")}>{currentLabel}</span>
+        )}
         {lockedModel && <Lock size={11} className="text-ink-3" aria-hidden="true" />}
         <ChevronDown
-          size={14}
+          size={compact ? 12 : 14}
           className={cn("text-ink-3 transition-transform duration-2 ease-soft", open && "rotate-180")}
         />
       </button>
@@ -275,7 +298,10 @@ function ModelPicker({
         <div
           role="listbox"
           aria-label={t("modelSwitcherTitle")}
-          className="animate-materialize glass absolute start-0 top-[calc(100%+6px)] z-modal w-[300px] overflow-hidden rounded-lg border border-hair p-1.5 shadow-3"
+          className={cn(
+            "animate-materialize glass absolute start-0 z-modal w-[300px] overflow-hidden rounded-lg border border-hair p-1.5 shadow-3",
+            dropUp ? "bottom-[calc(100%+6px)]" : "top-[calc(100%+6px)]"
+          )}
         >
           <p className="px-2.5 pb-1.5 pt-1 text-[11.5px] font-medium text-ink-3">
             {t("modelSwitcherTitle")}

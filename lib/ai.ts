@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Malg-A3 — مزوّد ديناميكي: الأدمن بيغيّره من لوحة الإدارة (lib/provider.ts)
+// MALG AI — مزوّد ديناميكي: الأدمن بيغيّره من لوحة الإدارة (lib/provider.ts)
 // ---------------------------------------------------------------------------
 // التعليمات (system prompt) والـ agent loop والبحث والتخزين ثابتين زي ما هما،
 // اللي بيتغيّر بس: البروتوكول + الرابط (baseUrl) + اسم الموديل + مفاتيح الـ API.
@@ -21,20 +21,20 @@ import { getModelProvider, resolveProviderEndpoint, type ProviderProtocol } from
  *
  * ملحوظة دمج مهمة: كان عندنا 3 موديلات منفصلة يختارهم المستخدم من القايمة
  * (malg-2 / malg-2.1 / malg-2.2)، كل واحد فيهم فعليًا مزوّد خارجي مختلف.
- * دلوقتي اتدمجوا كلهم في موديل واحد بس بره، اسمه "Malg-A3"، وبقى هو الموديل
+ * دلوقتي اتدمجوا كلهم في موديل واحد بس بره، اسمه "MALG AI"، وبقى هو الموديل
  * الافتراضي والوحيد — وجوه، بقى شغال بالكامل على مزوّد واحد بس (Token Harbor
  * / DeepSeek V4.1 Flash) بدل الثلاثة القدام.
  */
 export type ModelId = string;
-export const DEFAULT_MODEL: ModelId = "malg-a3";
+export const DEFAULT_MODEL: ModelId = "malg-ai";
 
 /** توحيد معرف الموديل القادم من الواجهة/الجلسات/مفاتيح API:
- * - القيم القديمة (malg-2 / malg-2.1 / malg-2.2) → "malg-a3" للتوافق الخلفي.
+ * - القيم القديمة (malg-2 / malg-2.1 / malg-2.2 / malg-a3) → "malg-ai" للتوافق الخلفي.
  * - أي slug صالح [a-z0-9-_] يُقبل كما هو (الموديلات التي يضيفها الأدمن).
  * - الفارغ/غير الصالح → الموديل الافتراضي. */
 export function normalizeModelId(_raw: unknown): ModelId {
   const t = String(_raw ?? "").trim().toLowerCase();
-  if (t === "malg-2" || t === "malg-2.1" || t === "malg-2.2") return DEFAULT_MODEL;
+  if (t === "malg-2" || t === "malg-2.1" || t === "malg-2.2" || t === "malg-a3") return DEFAULT_MODEL;
   if (/^[a-z0-9][a-z0-9-_]{0,62}[a-z0-9]$/.test(t) || /^[a-z0-9]$/.test(t)) return t;
   return DEFAULT_MODEL;
 }

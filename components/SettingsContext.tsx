@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { translate, type Lang } from "@/lib/i18n";
 
 export type Theme = "system" | "light" | "dark";
-/** معرف الموديل = slug من لوحة الأدمن (مثال: malg-a3). أي قيمة غير معروفة
+/** معرف الموديل = slug من لوحة الأدمن (مثال: malg-ai). أي قيمة غير معروفة
  * السيرفر بيقع بها على الموديل الافتراضي تلقائيًا. */
 export type ModelId = string;
 /** أسلوب رد المساعد على الرسائل العربية: فصحى (افتراضي) أو عامية مصرية. */
@@ -22,7 +22,7 @@ export interface ModelOption {
 }
 
 export const FALLBACK_MODELS: ModelOption[] = [
-  { id: "malg-a3", label: "Malg-A3", hint: "", recommended: true },
+  { id: "malg-ai", label: "MALG AI", hint: "", recommended: true },
 ];
 
 /** @deprecated استخدم models من useSettings() — باقٍ كـ fallback للتحميل الأول فقط */
@@ -31,7 +31,7 @@ export const AVAILABLE_MODELS: {
   label: string;
   hintKey: string;
   badgeKey?: string;
-}[] = [{ id: "malg-a3", label: "Malg-A3", hintKey: "modelA3Hint" }];
+}[] = [{ id: "malg-ai", label: "MALG AI", hintKey: "modelA3Hint" }];
 
 export const CUSTOM_INSTRUCTIONS_MAX = 1500;
 
@@ -56,7 +56,7 @@ const DEFAULTS: Settings = {
   theme: "system",
   animations: true,
   showTime: true,
-  model: "malg-a3",
+  model: "malg-ai",
   enterToSend: true,
   customInstructions: "",
   nickname: "",
@@ -65,8 +65,11 @@ const DEFAULTS: Settings = {
 const STORAGE_KEY = "mlag-settings";
 
 interface SettingsValue extends Settings {
-  /** قائمة الموديلات المتاحة من السيرفر (أو fallback محلي قبل التحميل) */
+  /** قائمة الموديلات من السيرفر — فارغة أثناء التحميل حتى لا يظهر اسم وهمي،
+   * وfallback محلي عند فشل الشبكة فقط */
   models: ModelOption[];
+  /** true من أول render حتى وصول قائمة السيرفر (أو فشلها) */
+  modelsLoading: boolean;
   /** id الموديل الافتراضي من السيرفر */
   defaultModelId: string;
   /** الثيم الفعلي بعد حل "system" */
@@ -94,18 +97,18 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [loaded, setLoaded] = useState(false);
   const [systemDark, setSystemDark] = useState(false);
   const [models, setModels] = useState<ModelOption[] | null>(null);
-  const [defaultModelId, setDefaultModelId] = useState<string>("malg-a3");
+  const [defaultModelId, setDefaultModelId] = useState<string>("malg-ai");
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<Settings>;
-        // ترحيل القيم القديمة (malg-2 / malg-2.1 / malg-2.2) للموديل الافتراضي،
+        // ترحيل القيم القديمة (malg-2 / malg-2.1 / malg-2.2 / malg-a3) للموديل الافتراضي،
         // وأي slug آخر يُقبل كما هو — السيرفر يقع بغير المعروف على الافتراضي،
         // والتحقق النهائي ضد قائمة السيرفر يتم بعد تحميل الموديلات.
-        if (parsed.model === "malg-2" || parsed.model === "malg-2.1" || parsed.model === "malg-2.2") {
-          parsed.model = "malg-a3";
+        if (parsed.model === "malg-2" || parsed.model === "malg-2.1" || parsed.model === "malg-2.2" || parsed.model === "malg-a3") {
+          parsed.model = "malg-ai";
         }
         setSettings((prev) => ({ ...prev, ...parsed }));
       }
@@ -159,6 +162,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     root.dir = settings.lang === "ar" ? "rtl" : "ltr";
     root.setAttribute("data-theme", resolvedTheme);
     root.classList.toggle("no-anim", !settings.animations);
+    // لون شريط المتصفح/منطقة الـ overscroll لازم يتبع ثيم الموقع مش ثيم الجهاز،
+    // وإلا بيظهر شريط أبيض فوق/تحت الصفحة في الوضع الداكن على الموبايل.
+    const chrome = resolvedTheme === "dark" ? "#09090b" : "#f4f3ed";
+    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", chrome));
   }, [settings, loaded, resolvedTheme]);
 
   const update = useCallback(<K extends keyof Settings>(key: K, value: Settings[K]) => {
@@ -177,11 +184,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [settings.lang]
   );
 
-  const resolvedModels = models ?? FALLBACK_MODELS;
+  const resolvedModels = models ?? [];
   const value = useMemo<SettingsValue>(
     () => ({
       ...settings,
       models: resolvedModels,
+      modelsLoading: models === null,
       defaultModelId,
       resolvedTheme,
       dir: settings.lang === "ar" ? "rtl" : "ltr",
@@ -194,7 +202,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setTone,
       t,
     }),
-    [settings, resolvedModels, defaultModelId, resolvedTheme, update, setLang, setTheme, setAnimations, setShowTime, setModel, setTone, t]
+    [settings, resolvedModels, models, defaultModelId, resolvedTheme, update, setLang, setTheme, setAnimations, setShowTime, setModel, setTone, t]
   );
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
@@ -206,7 +214,8 @@ export function useSettings(): SettingsValue {
     return {
       ...DEFAULTS,
       models: FALLBACK_MODELS,
-      defaultModelId: "malg-a3",
+      modelsLoading: false,
+      defaultModelId: "malg-ai",
       resolvedTheme: "light",
       dir: "rtl",
       update: () => {},

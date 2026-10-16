@@ -1,0 +1,27 @@
+{
+  "name": "MALG AI",
+  "short_name": "MALG",
+  "description": "مساعد ذكي للمبرمجين: شات فوري، معاينة حيّة للمشاريع، وبيئة تشغيل كود.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "dir": "rtl",
+  "lang": "ar",
+  "theme_color": "#c15f3c",
+  "background_color": "#f4f3ed",
+  "categories": ["productivity", "developer"],
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

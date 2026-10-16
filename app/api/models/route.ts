@@ -7,14 +7,15 @@ import { getDefaultModelId, listModels } from "@/lib/provider";
 
 export const dynamic = "force-dynamic";
 
-/** قائمة الموديلات النشطة للواجهة (عام — بدون مفاتيح): id + اسم + وصف + طبقة الاشتراك.
+/** قائمة موديلات الشات النشطة للواجهة (عام — بدون مفاتيح): id + اسم + وصف + طبقة الاشتراك.
+ *  موديلات الصوت (tts) مستبعدة — لها مسار /api/tts الخاص.
  *  locked = true للموديلات المدفوعة عندما لا يملك المستخدم اشتراكًا ساريًا. */
 export async function GET() {
   await ensureSchema();
-  const [models, defaultId] = await Promise.all([listModels(true), getDefaultModelId()]);
+  const [models, defaultId] = await Promise.all([listModels(true, "chat"), getDefaultModelId()]);
   const list = models.length > 0
     ? models
-    : [{ id: "malg-a3", name: "Malg-A3", description: "", isDefault: true, isActive: true, keysCount: 0, sortOrder: 0, updatedAt: null, tier: "free" as const }];
+    : [{ id: "malg-ai", name: "MALG AI", description: "", isDefault: true, isActive: true, keysCount: 0, sortOrder: 0, updatedAt: null, tier: "free" as const }];
 
   let unlocked = false;
   try {

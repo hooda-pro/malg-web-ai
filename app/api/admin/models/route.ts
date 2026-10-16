@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
 
   await ensureSchema();
 
-  const body = (await req.json().catch(() => ({}))) as { id?: unknown; name?: unknown; description?: unknown };
+  const body = (await req.json().catch(() => ({}))) as { id?: unknown; name?: unknown; description?: unknown; modality?: unknown };
   const checked = validateModelInput(body ?? {});
   if (!checked.ok) {
     return NextResponse.json({ error: checked.error }, { status: 400 });
@@ -39,9 +39,10 @@ export async function POST(req: NextRequest) {
   const maxRows = (await sql`SELECT COALESCE(MAX(sort_order), -1)::int AS m FROM ai_models`) as { m: number }[];
   const nextOrder = Number(maxRows[0]?.m ?? -1) + 1;
   // قيم مبدئية آمنة — الأدمن يعدل الرابط/المفاتيح من نموذج المزوّد قبل الاعتماد عليه
+  const modality = (body as { modality?: unknown }).modality === "tts" ? "tts" : "chat";
   await sql`
-    INSERT INTO ai_models (id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, sort_order)
-    VALUES (${v.id}, ${v.name}, ${v.description}, 'https://api.openai.com/v1', 'chat_completions', ${v.id}, '{}', 0.4, 128000, TRUE, ${isFirst}, ${nextOrder})
+    INSERT INTO ai_models (id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, sort_order, modality)
+    VALUES (${v.id}, ${v.name}, ${v.description}, 'https://api.openai.com/v1', 'chat_completions', ${v.id}, '{}', 0.4, 128000, TRUE, ${isFirst}, ${nextOrder}, ${modality})
   `;
   invalidateProviderCache();
 
