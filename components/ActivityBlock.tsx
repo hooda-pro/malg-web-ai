@@ -374,7 +374,7 @@ function ThinkingRow({
   // سطر التفكير: تنفّس + لمعة أثناء الشغل، ويستقر على "انتهى خلال …" مع الزمن
   // المجمّد — المؤقت المدمج يغني عن شارة الثواني. settleBlur=0 (ممنوع البلور المتحرك).
   const label = (
-    <span className="min-w-0 flex-1" dir="auto">
+    <span className="min-w-0 flex-1 text-start" dir="auto">
       <ThoughtLine
         working={thinking.live}
         label={thinking.live ? thinking.label : ""}
