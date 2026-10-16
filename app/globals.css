@@ -165,11 +165,26 @@
   }
 
   /* لا توجد أي إطارات تركيز في أي مكان (بطلب صريح): لا حلقة ولا توهّج ولا
-     تغيّر بوردر — الحقل النشط يُميَّز بتغيّر الخلفية فقط حيث وُجد. */
+     تغيّر بوردر — الحقل النشط يُميَّز بتغيّر الخلفية فقط حيث وُجد.
+     ملحوظة: longhands صريحة بعرض صفري — لحظة التحويل بين :focus وغيرها كان
+     المتصفح يرسم فريمًا وسيطًا مرئيًا (style من كلاس + width/color من القاعدة)،
+     فالعرض الصفري يقتله في كل الحالات. */
   :focus,
   :focus-visible {
     outline: none !important;
+    outline-width: 0 !important;
+    outline-color: transparent !important;
     outline-offset: 0;
+  }
+
+  /* خانة الكتابة تحديدًا: تأكيد إضافي بأعلى أولوية (id) + إلغاء أي ظل. */
+  #mlag-composer,
+  #mlag-composer:focus,
+  #mlag-composer:focus-visible {
+    outline-style: none !important;
+    outline-width: 0 !important;
+    outline-color: transparent !important;
+    box-shadow: none !important;
   }
 
   * {
@@ -468,15 +483,16 @@
 }
 
 @keyframes mlag-materialize {
+  /* ملحوظة: بدون filter: blur — البلور المتحرك فوق عناصر backdrop-filter
+     (القوائم الزجاجية والمودالات) كان يعمل وميض/إطار أبيض لحظي في المتصفح.
+     الحركة transform/opacity فقط حسب مبدأ المشروع. */
   from {
     opacity: 0;
     transform: scale(0.96) translate3d(0, 8px, 0);
-    filter: blur(6px);
   }
   to {
     opacity: 1;
     transform: scale(1) translate3d(0, 0, 0);
-    filter: blur(0);
   }
 }
 

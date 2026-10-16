@@ -5,6 +5,7 @@ import "./globals.css";
 import "./mobile.css";
 import "./landing.css";
 import "./print.css";
+import "../components/ThoughtLine.css";
 import Analytics from "@/components/Analytics";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 

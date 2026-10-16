@@ -95,12 +95,14 @@ export async function saveProfileToFirestore(
 }
 
 /**
- * بيحذف نسخة البروفايل من Firestore (users/{uid}) — best-effort لما المستخدم
- * يحذف حسابه. لو Firestore مش مفعّل أو حصل خطأ، بنلوك الخطأ يوصل من الخارج
- * (النداء بيحطه جوه try) ومش بيمنع حذف الحساب من Postgres.
+ * بيمسح نسخة البروفايل من Firestore (users/{uid}) — best-effort،
+ * يُستخدم عند حذف الحساب نهائيًا. الفشل هنا لا يمنع حذف صف Postgres.
  */
 export async function deleteProfileFromFirestore(uid: string): Promise<void> {
-  if (!uid) return;
-  const db = getFirestore(getAdminApp());
-  await db.collection("users").doc(uid).delete();
+  try {
+    const db = getFirestore(getAdminApp());
+    await db.collection("users").doc(uid).delete();
+  } catch (e) {
+    console.error("deleteProfileFromFirestore error", e);
+  }
 }

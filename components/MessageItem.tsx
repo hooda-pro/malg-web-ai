@@ -126,7 +126,7 @@ function MessageItem({
   );
   const imageAttachments = userAttachments.filter((a) => a.kind === "image");
   const videoAttachments = userAttachments.filter(
-    (a) => a.kind === "video" && ((a.frames?.length ?? 0) > 0 || !!a.previewUrl)
+    (a) => a.kind === "video" && ((a.frames?.length ?? 0) > 0 || !!a.previewUrl || !!a.remoteUrl)
   );
   const fileAttachments = userAttachments.filter((a) => a.kind === "text");
 
@@ -147,15 +147,15 @@ function MessageItem({
 
   if (isUser) {
     return (
-      <div className={cn("group flex w-full flex-col items-end px-4 py-3 sm:px-6", animateIn && "animate-rise")}>
+      <div className={cn("group flex w-full flex-col items-end px-4 py-3 rtl:items-start sm:px-6", animateIn && "animate-rise")}>
         {imageAttachments.length > 0 && (
-          <div className="mb-1.5 flex max-w-[85%] flex-wrap justify-end gap-1.5">
+          <div className="mb-1.5 flex max-w-[85%] flex-wrap justify-end gap-1.5 rtl:justify-start">
             {imageAttachments.map((a, i) =>
-              a.previewUrl ? (
+              (a.previewUrl || a.remoteUrl) ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   key={i}
-                  src={a.previewUrl}
+                  src={(a.previewUrl || a.remoteUrl) as string}
                   alt={a.name}
                   className="h-28 w-28 rounded-lg border border-hair object-cover shadow-1"
                 />
@@ -172,10 +172,10 @@ function MessageItem({
                 className="w-64 max-w-full overflow-hidden rounded-xl border border-hair bg-surface-2 shadow-1"
               >
                 <div className="relative">
-                  {a.previewUrl ? (
+                  {a.previewUrl || a.remoteUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={a.previewUrl}
+                      src={(a.previewUrl || a.remoteUrl) as string}
                       alt={a.name}
                       className="aspect-video w-full object-cover"
                     />
@@ -203,7 +203,7 @@ function MessageItem({
         )}
 
         {fileAttachments.length > 0 && (
-          <div className="mb-1.5 flex max-w-[85%] flex-wrap justify-end gap-1.5">
+          <div className="mb-1.5 flex max-w-[85%] flex-wrap justify-end gap-1.5 rtl:justify-start">
             {fileAttachments.map((a, i) => (
               <span
                 key={i}
@@ -225,8 +225,8 @@ function MessageItem({
         {userMainText && (
           <div
             className={cn(
-              "msg-in max-w-[85%] whitespace-pre-wrap break-words rounded-xl border border-hair",
-              "bg-surface-3 px-4 py-2.5 text-[15px] leading-7 text-ink shadow-1"
+              "msg-in max-w-[85%] whitespace-pre-wrap break-words rounded-xl",
+              "bg-surface-3 px-4 py-2.5 text-[15px] leading-7 text-ink"
             )}
             dir="auto"
           >

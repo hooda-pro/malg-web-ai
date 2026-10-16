@@ -59,6 +59,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, active: await refresh() });
   }
 
+  if (action === "reveal") {
+    const idx = typeof body.index === "number" ? body.index : Number(body.index);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= saved.apiKeys.length) {
+      return NextResponse.json({ error: "المفتاح غير موجود — حدّث الصفحة وحاول تاني" }, { status: 400 });
+    }
+    await logAdminAction(guard.admin, "reveal_key", null, null, `عرض/نسخ مفتاح موديل ${saved.modelId}: ${saved.displayName} (${maskKey(saved.apiKeys[idx])})`);
+    return NextResponse.json({ ok: true, key: saved.apiKeys[idx] });
+  }
+
   if (action === "remove") {
     const idx = typeof body.index === "number" ? body.index : Number(body.index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= saved.apiKeys.length) {

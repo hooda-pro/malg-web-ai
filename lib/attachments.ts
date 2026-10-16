@@ -23,6 +23,8 @@ export interface PendingAttachment {
   kind: AttachmentKind;
   /** data URI — للصور بس، لعرض الصورة قبل وبعد الإرسال */
   previewUrl?: string;
+  /** رابط Firebase Storage الدائم — بعد رفع الملف من /api/uploads */
+  remoteUrl?: string;
   /** المحتوى النصي المستخرج (لملفات النص/الكود/PDF/ملفات الـ zip الداخلية) */
   extractedText?: string;
   /** true أثناء القراءة/الاستخراج */
@@ -59,6 +61,51 @@ const SKIP_FILE_RE = /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.
 export const API_INLINE_FILE_MAX_CHARS = 12_000;
 export const API_INLINE_TOTAL_MAX_CHARS = 24_000;
 export const API_MANIFEST_MAX_ENTRIES = 200;
+
+// الصور من الموبايل بتيجي كبيرة (5-12MB) — إرسالها base64 كاملة بيخلي طلب
+// /api/chat ضخمًا فطبقة الاستضافة بترفضه (403 من غير JSON). أكبر ضلع بيتصغّر
+// لـ 1600px قبل الإرسال — الموديل مش محتاج أكتر من كده لرؤية المحتوى.
+export const MAX_IMAGE_DIMENSION = 1600;
+const IMAGE_JPEG_QUALITY = 0.82;
+// سقف حجم طلب /api/chat بالحروف — فوقه الاستضافة بترفض الطلب قبل ما يوصل
+// للتطبيق، فبنمنعه من الواجهة برسالة واضحة بدل فشل غامض.
+export const MAX_CHAT_PAYLOAD_CHARS = 3_000_000;
+// المفتاح الرئيسي لرفع الملفات — false = معطّل مؤقتًا من الواجهة
+// (زر الإرفاق + السحب والإفلات + لصق الملفات). رجّعه true لإعادة التفعيل.
+export const ATTACHMENTS_ENABLED = true;
+// سقف حجم الملف الواحد عند الاختيار — فوقه بنرفض فورًا من غير ما نقراه في الذاكرة.
+export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+
+function loadImageElement(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("img-load-failed"));
+    img.src = src;
+  });
+}
+
+/** بيصغّر صورة data URL لو أكبر من الحد — بيرجّع الأصل لو صغيرة أو GIF (عشان الحركة) أو فشل التصغير. */
+export async function downscaleImageDataUrl(dataUrl: string): Promise<string> {
+  if (dataUrl.startsWith("data:image/gif")) return dataUrl;
+  try {
+    const img = await loadImageElement(dataUrl);
+    const w = img.naturalWidth || img.width;
+    const h = img.naturalHeight || img.height;
+    if (!w || !h || Math.max(w, h) <= MAX_IMAGE_DIMENSION) return dataUrl;
+    const scale = MAX_IMAGE_DIMENSION / Math.max(w, h);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(2, Math.round(w * scale));
+    canvas.height = Math.max(2, Math.round(h * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return dataUrl;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    // JPEG أصغر بكتير من PNG للصور الفوتوغرافية.
+    return canvas.toDataURL("image/jpeg", IMAGE_JPEG_QUALITY);
+  } catch {
+    return dataUrl;
+  }
+}
 
 function extOf(name: string): string {
   const parts = name.toLowerCase().split(".");
@@ -424,7 +471,7 @@ export async function processFile(file: File): Promise<PendingAttachment> {
   if (isImageFile(file)) {
     const att: PendingAttachment = { id, file, kind: "image", loading: true };
     try {
-      att.previewUrl = await readAsDataURL(file);
+      att.previewUrl = await downscaleImageDataUrl(await readAsDataURL(file));
     } catch {
       att.error = "تعذّر تحميل الصورة";
     }
@@ -473,6 +520,15 @@ function fenceFor(content: string): string {
   return "`".repeat(Math.max(3, longest + 1));
 }
 
+/** معاينة صورة محلية مصغّرة للعرض فقط (لا تُرسل للسيرفر) — null لو فشلت القراءة. */
+export async function readImagePreview(file: File): Promise<string | null> {
+  try {
+    return await downscaleImageDataUrl(await readAsDataURL(file));
+  } catch {
+    return null;
+  }
+}
+
 export function buildAttachmentsPromptBlock(attachments: PendingAttachment[]): string {
   const withText = attachments.filter((a) => a.kind === "text" && a.extractedText && a.extractedText.trim());
   if (withText.length === 0) return "";
@@ -499,8 +555,10 @@ export interface StoredAttachmentMeta {
   name: string;
   size: number;
   kind: AttachmentKind;
-  /** data URI — للصور بس */
+  /** data URI — للصور بس (رسايل قديمة قبل التخزين الخارجي) */
   previewUrl?: string;
+  /** رابط Firebase Storage الدائم — بديل خفيف للـ base64 في طلب الشات */
+  remoteUrl?: string;
   frames?: { url: string; at: number }[];
   durationSec?: number;
   videoUrl?: string;
@@ -510,6 +568,7 @@ interface AttachmentLike {
   file: File;
   kind: AttachmentKind;
   previewUrl?: string;
+  remoteUrl?: string;
   frames?: { dataUrl: string; atSec: number }[];
   durationSec?: number;
   videoDataUrl?: string;
@@ -522,19 +581,25 @@ interface AttachmentLike {
  */
 export function buildAttachmentsMetaBlock(attachments: AttachmentLike[]): string {
   if (attachments.length === 0) return "";
-  const meta: StoredAttachmentMeta[] = attachments.map((a) => ({
-    name: a.file.name,
-    size: a.file.size,
-    kind: a.kind,
-    previewUrl: a.kind === "image" || a.kind === "video" ? a.previewUrl : undefined,
-    videoUrl: a.kind === "video" ? a.videoDataUrl : undefined,
-    frames:
-      a.kind === "video" && a.frames
-        ? a.frames.map((f) => ({ url: f.dataUrl, at: Math.round(f.atSec) }))
-        : undefined,
-    durationSec:
-      a.kind === "video" && typeof a.durationSec === "number" ? Math.round(a.durationSec) : undefined,
-  }));
+  const meta: StoredAttachmentMeta[] = attachments.map((a) => {
+    // لو الملف مرفوع خارجيًا (remoteUrl) بنبعت الرابط بس — من غير base64،
+    // عشان طلب /api/chat يفضل صغير وميترفضش من طبقة الاستضافة.
+    const remote = a.remoteUrl;
+    return {
+      name: a.file.name,
+      size: a.file.size,
+      kind: a.kind,
+      previewUrl: remote ? undefined : a.kind === "image" || a.kind === "video" ? a.previewUrl : undefined,
+      remoteUrl: remote,
+      videoUrl: a.kind === "video" ? a.videoDataUrl : undefined,
+      frames:
+        a.kind === "video" && a.frames
+          ? a.frames.map((f) => ({ url: f.dataUrl, at: Math.round(f.atSec) }))
+          : undefined,
+      durationSec:
+        a.kind === "video" && typeof a.durationSec === "number" ? Math.round(a.durationSec) : undefined,
+    };
+  });
   return `\n${ATTACHMENTS_META_START}${JSON.stringify(meta)}${ATTACHMENTS_META_END}`;
 }
 
@@ -737,8 +802,10 @@ export function toApiUserContent(content: string, opts: ApiContentOptions = {}):
     if (blocks.length) text = `${mainText}\n\n---\nمرفقات المستخدم:\n${blocks.join("\n\n")}`.trim();
   }
 
-  const images = attachments.filter((a) => a.kind === "image" && a.previewUrl);
-  const videos = attachments.filter((a) => a.kind === "video" && a.frames && a.frames.length > 0);
+  const images = attachments.filter((a) => a.kind === "image" && (a.previewUrl || a.remoteUrl));
+  const videos = attachments.filter(
+    (a) => a.kind === "video" && ((a.frames && a.frames.length > 0) || !!a.remoteUrl)
+  );
   if (images.length === 0 && videos.length === 0) return text;
   const videoNative = opts.videoNative === true;
 
@@ -768,13 +835,15 @@ export function toApiUserContent(content: string, opts: ApiContentOptions = {}):
 
   const parts: ApiContentPart[] = [{ type: "text", text: labeledText }];
   for (const a of attachments) {
-    if (a.kind === "image" && a.previewUrl) {
-      parts.push({ type: "image_url", image_url: { url: a.previewUrl } });
+    if (a.kind === "image" && (a.previewUrl || a.remoteUrl)) {
+      parts.push({ type: "image_url", image_url: { url: (a.previewUrl || a.remoteUrl) as string } });
     } else if (a.kind === "video") {
       if (videoNative && a.videoUrl) {
         parts.push({ type: "video_url", video_url: { url: a.videoUrl } });
       } else if (a.frames) {
         for (const f of a.frames) parts.push({ type: "image_url", image_url: { url: f.url } });
+      } else if (a.remoteUrl) {
+        parts.push({ type: "video_url", video_url: { url: a.remoteUrl } });
       }
     }
   }
@@ -801,4 +870,184 @@ export function apiUserContentLength(content: string | ApiContentPart[]): { char
     else images += 1;
   }
   return { chars, images };
+}
+
+// ---------------------------------------------------------------------------
+// التخزين الخارجي: الملفات بتترفع على Firebase Storage عبر /api/uploads،
+// وطلب /api/chat بيشيل روابط صغيرة بس — السيرفر بيسترجع المحتوى وقت الإرسال.
+// ---------------------------------------------------------------------------
+
+/** تصنيف نوع الملف من الاسم والـ MIME — مشترك بين العميل والسيرفر. */
+export function detectAttachmentKind(name: string, mime: string): AttachmentKind {
+  const ext = extOf(name);
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/") || VIDEO_EXTENSIONS.has(ext)) return "video";
+  return "text";
+}
+
+export interface RemoteUploadResult {
+  url: string;
+  name: string;
+  size: number;
+  kind: AttachmentKind;
+}
+
+/** بيرفع ملف خام مباشرة على Cloudinary (unsigned — من المتصفح للسحابة،
+ * من غير ما يعدّي على سيرفر التطبيق). بيرجّع رابطه الدائم. */
+export async function uploadAttachmentFile(file: File): Promise<RemoteUploadResult> {
+  const cloud = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+  const preset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+  if (!cloud || !preset) throw new Error("خدمة رفع الملفات غير مفعّلة بعد — جرّب لاحقًا");
+  const form = new FormData();
+  form.append("file", file, file.name);
+  form.append("upload_preset", preset);
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${cloud}/auto/upload`, {
+    method: "POST",
+    body: form,
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data?.secure_url) {
+    const detail = data?.error?.message ? String(data.error.message) : "";
+    console.error("[upload-failed]", res.status, detail || data);
+    throw new Error(detail ? `Cloudinary: ${detail}` : "تعذّر رفع الملف — حاول مجددًا");
+  }
+  if (String(data.resource_type || "") === "video") throw new Error("رفع الفيديو متوقف حاليا");
+  return {
+    url: String(data.secure_url),
+    name: file.name,
+    size: Number(data.bytes || file.size),
+    kind: String(data.resource_type || "") === "image" ? "image" : "text",
+  };
+}
+
+// --- سيرفر فقط من هنا لتحت (تستخدم Buffer وfetch السيرفر) ---
+
+const REMOTE_FETCH_TIMEOUT_MS = 15_000;
+const REMOTE_FILE_MAX_BYTES = 10 * 1024 * 1024;
+const REMOTE_TOTAL_MAX_BYTES = 20 * 1024 * 1024;
+const REMOTE_IMAGE_INLINE_MAX_BYTES = 6 * 1024 * 1024;
+
+async function fetchRemoteBytes(
+  url: string,
+  maxBytes: number
+): Promise<{ buf: Buffer; contentType: string } | null> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(REMOTE_FETCH_TIMEOUT_MS) });
+    if (!res.ok || !res.body) return null;
+    const contentType = res.headers.get("content-type") || "";
+    const reader = res.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        try {
+          await reader.cancel();
+        } catch {
+          // ignore
+        }
+        return null;
+      }
+      chunks.push(value);
+    }
+    const buf = Buffer.alloc(total);
+    let off = 0;
+    for (const c of chunks) {
+      buf.set(c, off);
+      off += c.byteLength;
+    }
+    return { buf, contentType };
+  } catch {
+    return null;
+  }
+}
+
+/** بيستخرج نص ملف نصي/PDF/ZIP من بايتاته — نفس قواعد الرفع القديم. */
+async function extractRemoteTextFile(
+  name: string,
+  buf: Buffer,
+  contentType: string
+): Promise<string | null> {
+  const ext = extOf(name);
+  try {
+    if (ext === "zip") {
+      const JSZip = (await import("jszip")).default;
+      const zip = await JSZip.loadAsync(new Uint8Array(buf));
+      const entries = Object.values(zip.files)
+        .filter((e) => !e.dir)
+        .map((e) => ({ name: e.name, read: () => e.async("string") }));
+      const r = await buildZipText(entries);
+      return r.text.trim() ? r.text : null;
+    }
+    if (ext === "pdf") {
+      const copy = new Uint8Array(buf.byteLength);
+      copy.set(buf);
+      const text = extractPdfTextBestEffort(copy.buffer);
+      if (!text || text.length < 5) return null;
+      return truncateNote(text, MAX_STORED_CHARS_PER_FILE);
+    }
+    const isText =
+      TEXT_EXTENSIONS.has(ext) ||
+      ext === "" ||
+      contentType.startsWith("text/") ||
+      contentType.includes("json");
+    if (!isText) return null;
+    const text = buf.toString("utf-8");
+    if (!text.trim()) return null;
+    return truncateNote(text, MAX_STORED_CHARS_PER_FILE);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * سيرفر فقط: بيحوّل رسالة مستخدم فيها روابط تخزين خارجي لنسخة مخزّنة كاملة
+ * بنفس فورمات الرسايل القديمة — الصور بتتحط data URI، والنصوص بيتبني لها
+ * كتلة filesSection. الفشل best-effort (الرابط بيفضل كما هو).
+ */
+export async function materializeRemoteAttachments(content: string): Promise<string> {
+  const { visibleText, attachments } = extractAttachmentsMeta(content);
+  if (!attachments.some((a) => a.remoteUrl)) return content;
+  const { mainText, filesSection } = extractAttachmentsPromptSection(visibleText);
+  if (filesSection) return content; // متجهّزة بالفعل (رسايل قديمة)
+  let budget = REMOTE_TOTAL_MAX_BYTES;
+  const updated: StoredAttachmentMeta[] = attachments.map((a) => ({ ...a }));
+  const textParts: PendingAttachment[] = [];
+  for (const a of updated) {
+    if (!a.remoteUrl || budget <= 0) continue;
+    const fetched = await fetchRemoteBytes(a.remoteUrl, Math.min(REMOTE_FILE_MAX_BYTES, budget));
+    if (!fetched) continue; // يفضل رابطًا كما هو
+    budget -= fetched.buf.byteLength;
+    if (a.kind === "image") {
+      if (fetched.buf.byteLength <= REMOTE_IMAGE_INLINE_MAX_BYTES) {
+        const mime = fetched.contentType.startsWith("image/")
+          ? fetched.contentType.split(";")[0]
+          : a.name.toLowerCase().endsWith(".png")
+            ? "image/png"
+            : "image/jpeg";
+        a.previewUrl = `data:${mime};base64,${fetched.buf.toString("base64")}`;
+        delete a.remoteUrl;
+      }
+      continue;
+    }
+    if (a.kind === "text") {
+      const text = await extractRemoteTextFile(a.name, fetched.buf, fetched.contentType);
+      if (text) {
+        textParts.push({
+          id: "",
+          file: { name: a.name } as File,
+          kind: "text",
+          loading: false,
+          extractedText: text,
+        });
+      }
+      continue;
+    }
+    // video: بيفضل رابطًا (رفع الفيديو موقوف من الواجهة أصلًا)
+  }
+  const metaBlock = `\n${ATTACHMENTS_META_START}${JSON.stringify(updated)}${ATTACHMENTS_META_END}`;
+  const promptBlock = buildAttachmentsPromptBlock(textParts);
+  return mainText + metaBlock + promptBlock;
 }

@@ -68,6 +68,7 @@ import {
   apiUserContentLength,
   extractAttachmentsMeta,
   extractAttachmentsPromptSection,
+  materializeRemoteAttachments,
   toApiUserContent,
 } from "@/lib/attachments";
 
@@ -179,6 +180,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   }
   const isAdmin = flags.isAdmin;
   if (flags.isBanned) {
+    console.warn("[chat-reject] banned user=", user.id);
     return NextResponse.json(
       { error: "تم حظر حسابك من إدارة المنصة — لا يمكنك إرسال رسائل حاليًا." },
       { status: 403 }
@@ -206,6 +208,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
 
   const quotaCheck = await checkAndMaybeRenewQuota(user.id, isAdmin);
   if (quotaCheck.blocked) {
+    console.warn("[chat-reject] quota user=", user.id);
     return NextResponse.json({ error: quotaCheck.message, quotaExhausted: true }, { status: 403 });
   }
   // التوكنز المتبقية للمستخدم قبل الرد ده (null = أدمن، مفيش حد) — بنقطع الرد في نصه لو خلصت.
@@ -213,6 +216,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
 
   // موديلات الباقات المدفوعة: محجوبة عن الخطة المجانية (الأدمن والمشتركون فقط)
   if (!isAdmin && (await isModelPaid(model).catch(() => false)) && !(await hasPaidSubscription(user.id).catch(() => false))) {
+    console.warn("[chat-reject] paid-model user=", user.id, "model=", model);
     return NextResponse.json(
       { error: "هذا الموديل متاح لمشتركي باقة Pro فقط — اشترك من حسابك لاستخدامه.", subscriptionRequired: true },
       { status: 403 }
@@ -248,11 +252,17 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   // عشان لو حصل أي خطأ تاني في الحفظ، نرجّع JSON واضح للعميل بدل ما نسيبه
   // ياخد 500 فاضي ويفضل يفسّره كـ"حصل خطأ" غامض.
   const sanitizeForDb = (s: string) => s.replace(/\u0000/g, "");
+  // المرفقات المرفوعة خارجيًا (روابط Storage) بيسترجع السيرفر محتواها هنا —
+  // طلب العميل بيفضل صغيرًا (روابط فقط)، والمحتوى الكامل بيتخزن في الداتابيز.
+  const materializedPrompt = await materializeRemoteAttachments(userPrompt).catch((e) => {
+    console.error("[chat] materialize attachments failed", e);
+    return userPrompt;
+  });
   const userMsgId = randomUUID();
   try {
     await sql`
       INSERT INTO chat_messages (id, session_id, role, content)
-      VALUES (${userMsgId}, ${sessionId}, 'user', ${sanitizeForDb(userPrompt)})
+      VALUES (${userMsgId}, ${sessionId}, 'user', ${sanitizeForDb(materializedPrompt)})
     `;
   } catch (e) {
     console.error("failed to persist user message", e);
@@ -269,10 +279,10 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   const userMemory = await getMemory(user.id).catch(() => null);
 
   // النص اللي كتبه المستخدم فعلًا (من غير بيانات الصور Base64 ولا محتوى الملفات المرفقة)
-  const typedPrompt = extractAttachmentsPromptSection(extractAttachmentsMeta(userPrompt).visibleText).mainText;
+  const typedPrompt = extractAttachmentsPromptSection(extractAttachmentsMeta(materializedPrompt).visibleText).mainText;
 
   if (existing.length <= 1) {
-    const titleSource = typedPrompt || extractAttachmentsMeta(userPrompt).attachments[0]?.name || "محادثة جديدة";
+    const titleSource = typedPrompt || extractAttachmentsMeta(materializedPrompt).attachments[0]?.name || "محادثة جديدة";
     const preview = titleSource.length > 30 ? titleSource.slice(0, 30) + "..." : titleSource;
     await sql`UPDATE chat_sessions SET title = ${preview}, updated_at = now() WHERE id = ${sessionId}`;
   } else {
@@ -342,7 +352,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   windowMsgs.forEach((m, i) => {
     if (m.role !== "user") return;
     lastUserIdx = i;
-    if (extractAttachmentsMeta(m.content).attachments.some((a) => (a.kind === "image" && a.previewUrl) || (a.kind === "video" && (a.frames?.length ?? 0) > 0))) lastImageIdx = i;
+    if (extractAttachmentsMeta(m.content).attachments.some((a) => (a.kind === "image" && (a.previewUrl || a.remoteUrl)) || (a.kind === "video" && (a.frames?.length ?? 0) > 0))) lastImageIdx = i;
   });
 
   const apiMessages: ApiMessage[] = [

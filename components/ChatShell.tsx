@@ -24,7 +24,7 @@ import Toast from "./Toast";
 import WelcomeHero from "./WelcomeHero";
 import type { SettingsTab } from "./AccountMenu";
 import { useSettings, type ModelId } from "./SettingsContext";
-import { buildAttachmentsMetaBlock, buildAttachmentsPromptBlock, extractAttachmentsMeta, extractAttachmentsPromptSection } from "@/lib/attachments";
+import { buildAttachmentsMetaBlock, buildAttachmentsPromptBlock, extractAttachmentsMeta, extractAttachmentsPromptSection, MAX_CHAT_PAYLOAD_CHARS } from "@/lib/attachments";
 import type { AgentEvent } from "@/lib/agentEvents";
 import { extractAgentStepsMeta } from "@/lib/agentEvents";
 import { Timer } from "lucide-react";
@@ -678,10 +678,19 @@ export default function ChatShell() {
           file: a.file,
           kind: a.kind,
           extractedText: a.extractedText,
+          previewUrl: a.previewUrl,
+          remoteUrl: a.remoteUrl,
           loading: false,
         }))
       );
       const storedContent = trimmed + attachmentsMeta + attachmentsPromptBlock;
+
+      // طلبات المرفقات الضخمة (صور base64...) بتترفض من طبقة الاستضافة قبل ما
+      // توصل للتطبيق (403 من غير JSON) — نمنعها هنا برسالة واضحة بدل الفشل الغامض.
+      if (storedContent.length > MAX_CHAT_PAYLOAD_CHARS) {
+        showToast(t("toastTooLarge"));
+        return false;
+      }
 
       const before = messagesRef.current.filter((m) => !isLocalMessageId(m.id));
       const userCountBefore = before.filter((m) => m.role === "user").length;
@@ -733,13 +742,22 @@ export default function ChatShell() {
 
         if (!res.ok) {
           rejected = true;
-          const data = await res.json().catch(() => ({}));
+          // الرد ممكن يكون مش JSON أصلًا (حجب من الاستضافة/بروكسي قبل التطبيق) —
+          // بنقراه كنص الأول عشان نعرض كود الخطأ ونسجّله للتشخيص بدل رسالة عامة.
+          const raw = await res.text().catch(() => "");
+          let data: { error?: string; sessionEnded?: boolean; quotaExhausted?: boolean } = {};
+          try {
+            data = raw ? JSON.parse(raw) : {};
+          } catch {
+            data = {};
+          }
+          if (!data.error) console.error("[chat-send-failed]", res.status, raw.slice(0, 500));
           setMessages((prev) => prev.filter((m) => m.id !== optimisticUser.id));
           if (data.sessionEnded) {
             markSessionEnded(sessionId);
             showToast(t("toastChatEnded"));
           } else {
-            showToast(data.error || t("toastSendFail"));
+            showToast(data.error || t("toastSendFailStatus", { status: res.status }));
             if (data.quotaExhausted) void refreshQuota();
           }
         } else {

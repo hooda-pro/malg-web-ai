@@ -1,12 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, FileArchive, FileText, Paperclip, Square, X } from "lucide-react";
+import { ArrowUp, FileArchive, FileText, Paperclip, Plus, Square, X } from "lucide-react";
 import {
+  ATTACHMENTS_ENABLED,
+  detectAttachmentKind,
   formatBytes,
   isVideoFile,
   makeAttachmentId,
-  processFile,
+  MAX_UPLOAD_BYTES,
+  readImagePreview,
+  uploadAttachmentFile,
   type PendingAttachment,
 } from "@/lib/attachments";
 import { useSettings, type ModelId } from "./SettingsContext";
@@ -17,6 +21,7 @@ export interface ComposerAttachment {
   file: File;
   extractedText?: string;
   previewUrl?: string;
+  remoteUrl?: string;
   kind: "image" | "text" | "video";
   frames?: { dataUrl: string; atSec: number }[];
   durationSec?: number;
@@ -31,7 +36,8 @@ export interface ComposerAttachment {
  * style.height يدويًا وبتعمل قفزة في القايمة اللي فوقها مع كل حرف.)
  * الخط 16px على الموبايل عشان iOS ما يعملش zoom تلقائي أول ما تضغط على الخانة.
  */
-const FIELD_TEXT = "px-4 pb-1 pt-3.5 text-[16px] leading-7 sm:text-[15px]";
+const FIELD_TEXT =
+  "px-4 pb-3 pt-3 text-[16px] leading-7 sm:text-[15px] pe-12 rtl:pe-4 rtl:ps-12";
 
 // Above this length, a paste turns into a .txt attachment instead of composer text.
 const PASTE_AS_FILE_CHARS = 3000;
@@ -80,9 +86,24 @@ export default function BottomInputBar({
   const dragDepth = useRef(0);
 
   const addFiles = (files: FileList | File[]) => {
+    if (!ATTACHMENTS_ENABLED) return;
     const list = Array.from(files);
     if (list.length === 0) return;
     list.forEach(async (file) => {
+      // ملف أضخم من الحد — بنرفضه فورًا من غير ما نقراه في الذاكرة.
+      if (file.size > MAX_UPLOAD_BYTES) {
+        setAttachments((prev) => [
+          ...prev,
+          {
+            id: makeAttachmentId(),
+            file,
+            kind: "text",
+            loading: false,
+            error: `الملف كبير جدًا — الحد الأقصى ${formatBytes(MAX_UPLOAD_BYTES)}`,
+          },
+        ]);
+        return;
+      }
       // Video becomes frame images (async extraction) with a temp placeholder
       if (isVideoFile(file)) {
         // Video uploads are paused for now (native video needs a paid
@@ -101,14 +122,45 @@ export default function BottomInputBar({
       const placeholder: PendingAttachment = {
         id: makeAttachmentId(),
         file,
-        kind: (file.type.startsWith("image/") ? "image" : "text") as PendingAttachment["kind"],
+        kind: detectAttachmentKind(file.name, file.type),
         loading: true,
       };
       setAttachments((prev) => [...prev, placeholder]);
-      const processed = await processFile(file);
-      setAttachments((prev) =>
-        prev.map((a) => (a.id === placeholder.id ? { ...processed, id: placeholder.id } : a))
-      );
+      // معاينة فورية للصور (عرض فقط — المحتوى المرسل هو رابط التخزين الخارجي).
+      if (placeholder.kind === "image") {
+        const preview = await readImagePreview(file);
+        if (preview) {
+          setAttachments((prev) =>
+            prev.map((a) => (a.id === placeholder.id ? { ...a, previewUrl: preview } : a))
+          );
+        }
+      }
+      // رفع الملف الخام على التخزين الخارجي — طلب الشات بيشيل الرابط بس.
+      try {
+        const remote = await uploadAttachmentFile(file);
+        setAttachments((prev) =>
+          prev.map((a) =>
+            a.id === placeholder.id
+              ? { ...a, loading: false, remoteUrl: remote.url, kind: remote.kind }
+              : a
+          )
+        );
+      } catch (e) {
+        setAttachments((prev) =>
+          prev.map((a) =>
+            a.id === placeholder.id
+              ? {
+                  ...a,
+                  loading: false,
+                  error:
+                    e instanceof Error && e.message
+                      ? e.message
+                      : "تعذّر رفع الملف — حاول مجددًا",
+                }
+              : a
+          )
+        );
+      }
     });
   };
 
@@ -120,6 +172,8 @@ export default function BottomInputBar({
     const trimmed = text.trim();
     if ((!trimmed && attachments.length === 0) || isGenerating) return;
     if (attachments.some((a) => a.loading)) return; // استنى لحد ما كل الملفات تخلص قراءة
+    // الملفات لازم تكون اترفعت (remoteUrl) قبل الإرسال — الفاشلة (error) يتبعت اسمها بس.
+    if (attachments.some((a) => !a.remoteUrl && !a.error)) return;
     // مهم: بنمسح نص/مرفقات الكومبوزر فورًا لما الإرسال يتقبل — مش بعد ما
     // البث يخلص (ده ممكن ياخد دقايق، والنص الطويل كان بيفضل في الـ textarea
     // والمرفقات قايمة تحته طوال التوليد). لو الإرسال فشل فعلًا (شبكة، خطأ
@@ -134,6 +188,7 @@ export default function BottomInputBar({
         file: a.file,
         extractedText: a.extractedText,
         previewUrl: a.previewUrl,
+        remoteUrl: a.remoteUrl,
         kind: a.kind,
         frames: a.frames,
         durationSec: a.durationSec,
@@ -157,6 +212,8 @@ export default function BottomInputBar({
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    // رفع الملفات معطّل مؤقتًا — اللصق بينزل كنص عادي.
+    if (!ATTACHMENTS_ENABLED) return;
     const files = Array.from(e.clipboardData?.files || []);
     if (files.length > 0) {
       e.preventDefault();
@@ -180,6 +237,7 @@ export default function BottomInputBar({
 
   const onDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
+    if (!ATTACHMENTS_ENABLED) return;
     dragDepth.current += 1;
     if (e.dataTransfer.types.includes("Files")) setDragOver(true);
   };
@@ -198,11 +256,13 @@ export default function BottomInputBar({
     e.preventDefault();
     dragDepth.current = 0;
     setDragOver(false);
+    if (!ATTACHMENTS_ENABLED) return;
     if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
   };
 
   const hasLoadingAttachment = attachments.some((a) => a.loading);
-  const canSend = (!!text.trim() || attachments.length > 0) && !hasLoadingAttachment;
+  const hasPendingUpload = attachments.some((a) => !a.remoteUrl && !a.error);
+  const canSend = (!!text.trim() || attachments.length > 0) && !hasLoadingAttachment && !hasPendingUpload;
 
   return (
     <div
@@ -253,7 +313,7 @@ export default function BottomInputBar({
           </div>
         )}
 
-        <div className="grid max-h-[220px]">
+        <div className="relative grid max-h-[220px]">
           <div
             aria-hidden="true"
             dir="auto"
@@ -268,6 +328,15 @@ export default function BottomInputBar({
           <textarea
             ref={taRef}
             id="mlag-composer"
+            name="mlag-composer"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-1p-ignore
+            data-lpignore="true"
+            data-bwignore
+            data-form-type="other"
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -284,30 +353,15 @@ export default function BottomInputBar({
               "text-ink outline-none placeholder:text-ink-3 focus:outline-none focus-visible:outline-none disabled:opacity-50"
             )}
           />
-        </div>
-
-        <div className="flex items-center gap-1.5 px-2.5 pb-2.5 pt-1">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={disabled}
-            title={t("attachFiles")}
-            aria-label={t("attachFiles")}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-3 transition-colors duration-1 hover:bg-surface-3 hover:text-ink disabled:opacity-40"
-          >
-            <Paperclip size={16} />
-          </button>
-
-          <span className="min-w-0 flex-1" aria-hidden="true" />
-
           {isGenerating ? (
             <button
               onMouseDown={(e) => e.preventDefault()}
               onClick={onStop}
               title={t("stop")}
               aria-label={t("stop")}
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ink text-ground transition-transform duration-1 ease-soft active:scale-[0.92]"
+              className="absolute bottom-2 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-ink text-ground transition-transform duration-1 ease-soft end-2 active:scale-[0.92] rtl:end-auto rtl:start-2"
             >
-              <Square size={12} fill="currentColor" />
+              <Square size={11} fill="currentColor" />
             </button>
           ) : (
             <button
@@ -317,19 +371,19 @@ export default function BottomInputBar({
               title={t("send")}
               aria-label={t("send")}
               className={cn(
-                "btn-send grid h-9 w-9 shrink-0 place-items-center rounded-full text-accent-ink",
-                "transition-all duration-1 ease-soft",
+                "btn-send absolute bottom-2 grid h-8 w-8 shrink-0 place-items-center rounded-full text-accent-ink end-2",
+                "transition-all duration-1 ease-soft rtl:end-auto rtl:start-2",
                 "active:scale-[0.94] disabled:bg-surface-3 disabled:text-ink-3 disabled:shadow-none"
               )}
             >
-              <ArrowUp size={17} strokeWidth={2.4} />
+              <ArrowUp size={16} strokeWidth={2.4} />
             </button>
           )}
         </div>
       </div>
 
-      {/* صف تحت الخانة زي كلود: اختيار الموديل في الأول (يمين) والتنبيه في الآخر (شمال) */}
-      <div className="mx-auto mt-2 flex max-w-[760px] items-center justify-between gap-3 px-1">
+      {/* صف تحت الخانة زي كلود: اختيار الموديل في الأول (يمين) والتنبيه في النص وزر + في الآخر (شمال) */}
+      <div className="mx-auto mt-2 flex max-w-[760px] items-center gap-2 px-1">
         <ModelPicker
           compact
           dropUp
@@ -337,9 +391,22 @@ export default function BottomInputBar({
           onPickModel={onPickModel}
           onLockedModel={onLockedModel}
         />
-        <p className="min-w-0 flex-1 text-end text-[11px] leading-4 text-ink-3">
+        <p className="min-w-0 flex-1 text-center text-[11px] leading-4 text-ink-3">
           {t("disclaimer")}
         </p>
+        {ATTACHMENTS_ENABLED ? (
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={disabled}
+            title={t("attachFiles")}
+            aria-label={t("attachFiles")}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-3 transition-colors duration-1 hover:bg-surface-3 hover:text-ink disabled:opacity-40"
+          >
+            <Plus size={17} />
+          </button>
+        ) : (
+          <span className="w-8 shrink-0" aria-hidden="true" />
+        )}
       </div>
     </div>
   );

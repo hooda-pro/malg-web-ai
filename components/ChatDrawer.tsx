@@ -256,9 +256,7 @@ export default function ChatDrawer({
                   : "border-hair bg-surface text-ink shadow-1 hover:border-hair-2"
               )}
             >
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-accent to-accent-hover text-accent-ink shadow-accent">
-                <AudioLines size={17} />
-              </span>
+              <AudioLines size={16} className={cn("shrink-0", voiceOpen ? "text-accent" : "text-ink-2")} />
               <span className="flex-1 text-start">{t("voiceStudio")}</span>
               <span className="shrink-0 rounded-full bg-warn-soft px-2 py-px text-[10.5px] font-bold text-warn">
                 {t("modelProBadge")}
