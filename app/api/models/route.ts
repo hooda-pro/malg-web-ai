@@ -15,7 +15,7 @@ export async function GET() {
   const [models, defaultId] = await Promise.all([listModels(true, "chat"), getDefaultModelId()]);
   const list = models.length > 0
     ? models
-    : [{ id: "malg-ai", name: "MALG AI", description: "", isDefault: true, isActive: true, keysCount: 0, sortOrder: 0, updatedAt: null, tier: "free" as const }];
+    : [{ id: "malg-ai", name: "MALG AI", description: "", isDefault: true, isActive: true, keysCount: 0, sortOrder: 0, updatedAt: null, tier: "free" as const, supportsMic: false }];
 
   let unlocked = false;
   try {
@@ -40,6 +40,7 @@ export async function GET() {
         tier,
         requiresSubscription,
         locked: requiresSubscription && !unlocked,
+        supportsMic: (m as { supportsMic?: unknown }).supportsMic === true,
       };
     }),
     defaultId,

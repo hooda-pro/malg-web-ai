@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, FileArchive, FileText, Paperclip, Plus, Square, X } from "lucide-react";
+import { ArrowUp, FileArchive, FileText, Mic, Paperclip, Plus, Square, X } from "lucide-react";
 import {
   ATTACHMENTS_ENABLED,
   detectAttachmentKind,
@@ -28,6 +28,23 @@ export interface ComposerAttachment {
   videoDataUrl?: string;
 }
 
+/** أقل واجهة لازمة من Web Speech API (بدون اعتماد على lib.dom). */
+interface SpeechRecognitionInstance {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onresult:
+    | ((e: {
+        resultIndex: number;
+        results: ArrayLike<{ 0: { transcript: string }; isFinal: boolean }>;
+      }) => void)
+    | null;
+  onerror: ((e: { error: string }) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+}
+
 /**
  * خانة الكتابة بتكبر وتصغر من غير أي JavaScript بيقيس ارتفاع: فيه "مرآة" مخفية
  * (نفس النص ونفس الخط والحشو) واقفة في نفس خلية الـgrid مع الـtextarea، فالارتفاع
@@ -51,6 +68,7 @@ export default function BottomInputBar({
   lockedModel,
   onPickModel,
   onLockedModel,
+  micEnabled,
 }: {
   isGenerating: boolean;
   onSend: (text: string, attachments: ComposerAttachment[]) => Promise<boolean> | void;
@@ -63,8 +81,10 @@ export default function BottomInputBar({
   onPickModel: (id: ModelId) => void;
   /** ضغطة على موديل مقفول (اشتراك) — تفتح الباقات بدل الاختيار */
   onLockedModel?: (id: ModelId) => void;
+  /** إظهار زر المايك (تسجيل صوتي → نص) — فقط لو موديل الشات مفعّل له من الأدمن */
+  micEnabled?: boolean;
 }) {
-  const { t, enterToSend } = useSettings();
+  const { t, lang, enterToSend } = useSettings();
   const [text, setText] = useState("");
 
   // نص كتبه الزائر في خانة صفحة الهبوط قبل تسجيل الدخول — بيتحط في الخانة مرة واحدة.
@@ -84,6 +104,84 @@ export default function BottomInputBar({
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
+
+  // ---- التسجيل الصوتي (مايك → نص) عبر Web Speech API — يظهر فقط لو مفعّل للموديل ----
+  const [listening, setListening] = useState(false);
+  const recRef = useRef<{ stop: () => void } | null>(null);
+  const listeningRef = useRef(false);
+  const micSupported =
+    typeof window !== "undefined" &&
+    !!(
+      (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition ||
+      (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition
+    );
+  useEffect(
+    () => () => {
+      listeningRef.current = false;
+      try {
+        recRef.current?.stop();
+      } catch {
+        // تجاهل
+      }
+    },
+    []
+  );
+  const stopMic = () => {
+    listeningRef.current = false;
+    try {
+      recRef.current?.stop();
+    } catch {
+      // تجاهل
+    }
+    recRef.current = null;
+    setListening(false);
+  };
+  const toggleMic = () => {
+    if (listeningRef.current) {
+      stopMic();
+      return;
+    }
+    const w = window as unknown as {
+      SpeechRecognition?: new () => SpeechRecognitionInstance;
+      webkitSpeechRecognition?: new () => SpeechRecognitionInstance;
+    };
+    const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+    if (!Ctor) return;
+    try {
+      const rec = new Ctor();
+      rec.lang = lang === "ar" ? "ar-EG" : lang === "fr" ? "fr-FR" : lang === "es" ? "es-ES" : "en-US";
+      rec.interimResults = false;
+      rec.continuous = false;
+      rec.onresult = (e) => {
+        let chunk = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const r = e.results[i];
+          if (r.isFinal) chunk += r[0].transcript;
+        }
+        const said = chunk.trim();
+        if (said) setText((prev) => (prev ? `${prev} ${said}` : said));
+      };
+      rec.onerror = (e) => {
+        if (e.error === "not-allowed" || e.error === "service-not-allowed") stopMic();
+      };
+      rec.onend = () => {
+        // كروم بيوقف التعرف بعد وقفة — نعيد التشغيل تلقائيًا طول ما الزرار شغال
+        if (listeningRef.current) {
+          try {
+            rec.start();
+          } catch {
+            stopMic();
+          }
+        }
+      };
+      recRef.current = rec;
+      listeningRef.current = true;
+      rec.start();
+      setListening(true);
+    } catch {
+      stopMic();
+    }
+  };
 
   const addFiles = (files: FileList | File[]) => {
     if (!ATTACHMENTS_ENABLED) return;
@@ -394,6 +492,20 @@ export default function BottomInputBar({
         <p className="min-w-0 flex-1 text-center text-[11px] leading-4 text-ink-3">
           {t("disclaimer")}
         </p>
+        {micEnabled && micSupported && (
+          <button
+            onClick={toggleMic}
+            disabled={disabled || isGenerating}
+            title={listening ? t("micStop") : t("micRecord")}
+            aria-label={listening ? t("micStop") : t("micRecord")}
+            aria-pressed={listening}
+            className={`grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors duration-1 disabled:opacity-40 ${
+              listening ? "bg-danger-soft text-danger" : "text-ink-3 hover:bg-surface-3 hover:text-ink"
+            }`}
+          >
+            {listening ? <Square size={11} fill="currentColor" /> : <Mic size={17} />}
+          </button>
+        )}
         {ATTACHMENTS_ENABLED ? (
           <button
             onClick={() => fileInputRef.current?.click()}

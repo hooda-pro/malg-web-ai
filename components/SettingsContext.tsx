@@ -19,6 +19,8 @@ export interface ModelOption {
   recommended: boolean;
   locked?: boolean;
   tier?: "free" | "paid";
+  /** التسجيل الصوتي (مايك → نص) متاح مع هذا الموديل */
+  supportsMic?: boolean;
 }
 
 export const FALLBACK_MODELS: ModelOption[] = [
@@ -121,13 +123,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       .then((data) => {
         const list = Array.isArray(data?.models) ? data.models : [];
         if (list.length === 0) throw new Error("empty");
-        const mapped: ModelOption[] = list.map((m: { id: string; name: string; description?: string; isDefault?: boolean; tier?: unknown; locked?: unknown }) => ({
+        const mapped: ModelOption[] = list.map((m: { id: string; name: string; description?: string; isDefault?: boolean; tier?: unknown; locked?: unknown; supportsMic?: unknown }) => ({
           id: String(m.id),
           label: String(m.name || m.id),
           hint: typeof m.description === "string" ? m.description : "",
           recommended: !!m.isDefault,
           locked: (m as { locked?: unknown }).locked === true,
           tier: (m as { tier?: unknown }).tier === "paid" ? "paid" : "free",
+          supportsMic: (m as { supportsMic?: unknown }).supportsMic === true,
         }));
         setModels(mapped);
         const def = (typeof data?.defaultId === "string" && data.defaultId) || mapped.find((m) => m.recommended)?.id || mapped[0].id;

@@ -406,6 +406,25 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
     }
   };
 
+  const setSupportsMic = async (id: string, v: boolean) => {
+    setActingId(id);
+    try {
+      const res = await fetch(`/api/admin/models/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ supports_mic: v }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "فشل التحديث");
+      setModels(data.models ?? []);
+      notify("ok", v ? `المايك ON للموديل ${id}` : `المايك OFF للموديل ${id}`);
+    } catch (e) {
+      notify("err", e instanceof Error ? e.message : "فشل التحديث");
+    } finally {
+      setActingId(null);
+    }
+  };
+
   const setModality = async (id: string, modality: "chat" | "tts") => {
     setActingId(id);
     try {
@@ -728,6 +747,11 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
                           VID
                         </span>
                       )}
+                      {(m as { supportsMic?: unknown }).supportsMic === true && (
+                        <span className="shrink-0 rounded-full bg-accent-soft px-1.5 py-px text-[10.5px] font-medium text-accent">
+                          MIC
+                        </span>
+                      )}
                       {(m.costMultiplier ?? 1) > 1 && (
                         <span
                           className="shrink-0 rounded-full bg-surface-3 px-1.5 py-px text-[10.5px] font-medium text-ink-2"
@@ -800,6 +824,19 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
                       <span className={m.supportsVideo === true ? "text-[11px] font-bold text-live" : "text-[11px] font-bold text-ink-3"}>
                         VID
                       </span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setSupportsMic(m.id, !((m as { supportsMic?: unknown }).supportsMic === true))}
+                    disabled={busy}
+                    title="المايك (تسجيل صوتي → نص) on/off لهذا الموديل"
+                    aria-label="تبديل المايك لهذا الموديل"
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-full transition-colors duration-1 hover:bg-surface-3 disabled:opacity-40"
+                  >
+                    {acting ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <Mic size={13} className={(m as { supportsMic?: unknown }).supportsMic === true ? "text-accent" : "text-ink-3"} />
                     )}
                   </button>
                   <span className="flex shrink-0 flex-col" role="group" aria-label="تغيير الترتيب">

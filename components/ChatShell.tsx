@@ -103,7 +103,7 @@ function createChunkBatcher(apply: (chunk: string) => void) {
 const NO_MESSAGES: ChatMessage[] = [];
 
 export default function ChatShell() {
-  const { t, lang, model, setModel, customInstructions, nickname, tone } = useSettings();
+  const { t, lang, model, setModel, customInstructions, nickname, tone, models } = useSettings();
   const [authChecked, setAuthChecked] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -170,6 +170,10 @@ export default function ChatShell() {
   const lockedModel: ModelId | undefined = currentSessionId
     ? sessionModels[currentSessionId]
     : undefined;
+
+  // المايك يظهر فقط لو موديل الشات الحالي مفعّل له من الأدمن
+  const composerSupportsMic =
+    (models ?? []).find((m) => m.id === (lockedModel ?? model))?.supportsMic === true;
 
   const abortRef = useRef<AbortController | null>(null);
   // جلسة فيها إرسال شغّال حاليًا — بنمنع بيها refresh الرسايل (لما شات جديد
@@ -1335,6 +1339,7 @@ export default function ChatShell() {
                   onSend={sendMessage}
                   onStop={stopGeneration}
                   disabled={!authChecked}
+                  micEnabled={composerSupportsMic}
                   lockedModel={lockedModel}
                   onPickModel={handlePickModel}
                   onLockedModel={() => {
@@ -1370,6 +1375,7 @@ export default function ChatShell() {
               onSend={sendMessage}
               onStop={stopGeneration}
               disabled={!authChecked}
+              micEnabled={composerSupportsMic}
               lockedModel={lockedModel}
               onPickModel={handlePickModel}
               onLockedModel={() => {

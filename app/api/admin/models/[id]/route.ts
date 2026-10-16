@@ -28,6 +28,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     tier?: unknown;
     cost_multiplier?: unknown;
     supports_video?: unknown;
+    supports_mic?: unknown;
     modality?: unknown;
     tts_voice?: unknown;
   };
@@ -67,6 +68,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.supports_video === true || body.supports_video === false) {
     sets.push("native video " + (body.supports_video ? "ON" : "OFF"));
     await sql`UPDATE ai_models SET supports_video = ${body.supports_video}, updated_at = now() WHERE id = ${id}`;
+  }
+  if (body.supports_mic === true || body.supports_mic === false) {
+    sets.push("المايك " + (body.supports_mic ? "ON" : "OFF"));
+    await sql`UPDATE ai_models SET supports_mic = ${body.supports_mic}, updated_at = now() WHERE id = ${id}`;
   }
   if (body.modality === "chat" || body.modality === "tts") {
     sets.push(body.modality === "tts" ? "صوت (TTS)" : "محادثة");

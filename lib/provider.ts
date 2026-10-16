@@ -56,6 +56,8 @@ export interface ProviderConfig {
   tier: ModelTier;
   costMultiplier: number;
   supportsVideo: boolean;
+  /** التسجيل الصوتي (مايك → نص) متاح مع هذا الموديل — يحدده الأدمن */
+  supportsMic: boolean;
   isActive: boolean;
   updatedAt: string | null;
 }
@@ -84,6 +86,8 @@ export interface ModelSummary {
   tier: ModelTier;
   costMultiplier: number;
   supportsVideo: boolean;
+  /** التسجيل الصوتي (مايك → نص) متاح مع هذا الموديل — يحدده الأدمن */
+  supportsMic: boolean;
   /** نوع الموديل: محادثة (chat) أو توليد صوت (tts) — نفس الجدول والإعداد */
   modality: "chat" | "tts";
   /** الصوت الافتراضي لموديلات TTS (مثال: alloy) — فارغ = صوت المزوّد الافتراضي */
@@ -194,6 +198,7 @@ function modelRowToSummary(r: ModelRow): ModelSummary {
     tier: (r as { tier?: unknown }).tier === "paid" ? "paid" : "free",
     costMultiplier: clampCostMultiplier((r as { cost_multiplier?: unknown }).cost_multiplier),
     supportsVideo: (r as { supports_video?: unknown }).supports_video === true,
+    supportsMic: (r as { supports_mic?: unknown }).supports_mic === true,
     sortOrder: Number((r as { sort_order?: unknown }).sort_order ?? 0) || 0,
     modality: (r as { modality?: unknown }).modality === "tts" ? "tts" : "chat",
     ttsVoice: typeof voiceRaw === "string" ? voiceRaw.slice(0, 80) : "",
@@ -211,14 +216,14 @@ export function invalidateModelCache(modelId?: string) {
 async function selectModelRows(whereActive: boolean): Promise<ModelRow[]> {
   if (whereActive) {
     return (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, modality, tts_voice
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, modality, tts_voice
       FROM ai_models
       WHERE is_active = TRUE
       ORDER BY is_default DESC, sort_order ASC, created_at ASC
     `) as ModelRow[];
   }
   return (await sql`
-    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, modality, tts_voice
+    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, modality, tts_voice
     FROM ai_models
     ORDER BY is_default DESC, sort_order ASC, created_at ASC
   `) as ModelRow[];
@@ -300,7 +305,7 @@ export async function getModelProvider(modelId: string): Promise<ModelProviderCo
 
   try {
     const rows = (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic
       FROM ai_models
       WHERE id = ${id} AND is_active = TRUE
       LIMIT 1
@@ -312,7 +317,7 @@ export async function getModelProvider(modelId: string): Promise<ModelProviderCo
     }
     // fallback: الموديل الافتراضي النشط
     const defs = (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic
       FROM ai_models
       WHERE is_active = TRUE
       ORDER BY is_default DESC, sort_order ASC, created_at ASC
@@ -362,7 +367,7 @@ export interface TtsModelConfig {
 /** إعداد موديل صوتي نشط (موديل معين أو الأول بالترتيب) — يرمي NO_TTS_MODEL لو مفيش. */
 export async function getTtsModelConfig(modelId?: string): Promise<TtsModelConfig> {
   const rows = (await sql`
-    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, modality, tts_voice
+    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, modality, tts_voice
     FROM ai_models
     WHERE is_active = TRUE AND modality = 'tts'
     ORDER BY is_default DESC, sort_order ASC, created_at ASC
@@ -382,7 +387,7 @@ export async function getTtsModelConfig(modelId?: string): Promise<TtsModelConfi
 export async function getSavedModelProvider(modelId: string): Promise<ModelProviderConfig | null> {  const id = sanitizeModelId(modelId) || "malg-ai";
   try {
     const rows = (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic
       FROM ai_models
       WHERE id = ${id}
       LIMIT 1
@@ -443,6 +448,7 @@ function envFallback(): ProviderConfig {
     tier: "free",
     costMultiplier: 1,
     supportsVideo: false,
+    supportsMic: false,
     isActive: true,
     updatedAt: null,
   };
@@ -482,6 +488,7 @@ export interface ProviderRow {
   tier?: unknown;
   cost_multiplier?: unknown;
   supports_video?: unknown;
+  supports_mic?: unknown;
 }
 
 function clampCostMultiplier(v: unknown): number {
@@ -503,6 +510,7 @@ export function rowToConfig(r: ProviderRow): ProviderConfig {
     tier: r.tier === "paid" ? "paid" : "free",
     costMultiplier: clampCostMultiplier(r.cost_multiplier),
     supportsVideo: r.supports_video === true,
+    supportsMic: (r as { supports_mic?: unknown }).supports_mic === true,
     model: r.model,
     apiKeys: Array.isArray(r.api_keys) ? r.api_keys.filter((k) => typeof k === "string" && k.trim()) : [],
     temperature: Number(r.temperature ?? 0.4),

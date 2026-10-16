@@ -365,6 +365,7 @@ export function ensureSchema(): Promise<void> {
       `;
       await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS cost_multiplier DOUBLE PRECISION NOT NULL DEFAULT 1`;
       await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS supports_video BOOLEAN NOT NULL DEFAULT FALSE`;
+      await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS supports_mic BOOLEAN NOT NULL DEFAULT FALSE`;
       // ——— موديلات الصوت (TTS): نفس جدول ai_models — modality يفرّق (chat افتراضيًا) ———
       await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS modality TEXT NOT NULL DEFAULT 'chat'`;
       await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS tts_voice TEXT NOT NULL DEFAULT ''`;
