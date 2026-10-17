@@ -2,6 +2,9 @@
 const nextConfig = {
   reactStrictMode: true,
   agentRules: false,
+  allowedDevOrigins: ["localhost", "127.0.0.1"],
+  /* مفيش أي badge/شريط أدوات أثناء التطوير — نفسي من العميلة `N` الصغيرة. */
+  devIndicators: false,
   async headers() {
     return [
       {

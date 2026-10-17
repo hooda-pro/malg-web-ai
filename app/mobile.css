@@ -1,197 +1,938 @@
 /* ============================================================================
-   MALG AI — Mobile-only refinements (< 640px).
-   Everything in this file lives inside ONE media query, so tablet (>=640px)
-   and desktop are byte-for-byte untouched by design. No JS, pure CSS.
-   Breakpoint mirrors Tailwind's `sm:` (640px): utilities with `sm:` take over
-   at >=640px, this file owns everything below it.
-   ========================================================================= */
+   MALG AI — تجربة الموبايل المخصصة ("MALG Pocket" skin)
+   ----------------------------------------------------------------------------
+   كل مافي الملف ده لُفّ جوه media query بعرض ≤ 639.98px — يعني الكمبيوتر
+   والتابلت (≥ 640px) شكلهم الحالي مش بيتأثر نهائيًا بإي حرف.
+
+   الفكرة: مش "تعديل على شكل الديسكتوب" — دي لغة تصميم مختلفة للموبايل:
+   • مشهد محيطي حي (إضاءة نامية + شيلة على العناوين + حركة spring فوريعة)
+   • هيدر كبسولة زجاج عايمة + مينيو شيت بيتفتح بيgain
+   • هيرو بطول الشاشة، محاذاة editorial مش توسيط
+   • كومبوزر عايم بحيط نوري متحرك + أمثلة كاروسيل snap
+   • كروت تترتد دخول، شات بكبسولة توب/شيت رسايل، فقاعات فيها شخصية
+   • الحركة: transform/opacity فقط، durations أسرع، spring easings
+   • احترام كامل لـ prefers-reduced-motion
+   ============================================================================
+*/
 
 @media (max-width: 639.98px) {
-  /* ---- Sunlight legibility: slightly stronger hairlines and dim text ---- */
+  /* ========================================================================
+     00 — مشهد الموبايل: توكنز، حركة أسرع، إضاءة محيطية
+     ======================================================================== */
   :root {
-    --hairline: rgba(31, 30, 29, 0.14);
-    --hairline-2: rgba(31, 30, 29, 0.22);
-    --ink-3: #6f6c68;
+    /* حركة أسرع — كل تفاعل يفتكر إنك عينت عليه */
+    --dur-1: 130ms;
+    --dur-2: 210ms;
+    --dur-3: 330ms;
+    --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-spring: cubic-bezier(0.34, 1.5, 0.5, 1);
+
+    /* إضاءة المحيط (terracotta + لمسات باردة) */
+    --m-glow-a: rgba(217, 119, 87, 0.13);
+    --m-glow-b: rgba(0, 113, 227, 0.09);
+    --m-glow-c: rgba(29, 158, 91, 0.08);
+
+    --m-radius-card: 22px;
+    --m-radius-pill: 20px;
+    --m-radius-sheet: 26px;
   }
   html[data-theme="dark"] {
-    --hairline: rgba(255, 255, 255, 0.12);
-    --hairline-2: rgba(255, 255, 255, 0.18);
-    --ink-3: #8e8e96;
+    --m-glow-a: rgba(217, 119, 87, 0.2);
+    --m-glow-b: rgba(56, 130, 246, 0.12);
+    --m-glow-c: rgba(50, 213, 131, 0.1);
   }
 
-  /* ---- Cheaper glass + no film grain on weak mobile GPUs ---- */
-  .glass {
-    -webkit-backdrop-filter: saturate(140%) blur(12px);
-    backdrop-filter: saturate(140%) blur(12px);
+  body {
+    /* تدرّج محيطى خفيف بدل ground مسطح — إحساس أبلكيشن */
+    background:
+      radial-gradient(120% 60% at 85% -10%, var(--m-glow-a), transparent 60%),
+      radial-gradient(110% 55% at 0% 0%, var(--m-glow-b), transparent 65%),
+      var(--ground);
   }
+
+  /* طبقة المشهد: واش ضوء بيتنفس ببطء */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: -22%;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(34% 27% at 22% 16%, var(--m-glow-a), transparent 70%),
+      radial-gradient(30% 24% at 80% 10%, var(--m-glow-b), transparent 72%),
+      radial-gradient(40% 32% at 55% 98%, var(--m-glow-c), transparent 74%);
+    animation: mlag-m-stage 40s ease-in-out infinite alternate;
+    will-change: transform;
+    backface-visibility: hidden;
+  }
+  @keyframes mlag-m-stage {
+    from {
+      transform: translate3d(-2.5%, -2%, 0) rotate(-2deg) scale(1);
+    }
+    to {
+      transform: translate3d(2.5%, 3%, 0) rotate(3deg) scale(1.09);
+    }
+  }
+
+  /* الفاسدة جرين غالية على جيبي موبايل — نضيف من غيرها */
   .grain {
     display: none;
   }
-  .aurora-blob {
-    animation: none;
-    opacity: 0.6;
+
+  /* --------------- تأكيد ضغط موحد: أي زر فيا spring mini-pop --------------- */
+  button,
+  a,
+  summary,
+  [role="button"],
+  [role="tab"],
+  [role="option"] {
+    transition:
+      transform 95ms var(--ease-spring),
+      background-color var(--dur-1) var(--ease-soft),
+      color var(--dur-1) var(--ease-soft),
+      border-color var(--dur-1) var(--ease-soft),
+      opacity var(--dur-1) var(--ease-soft);
+    touch-action: manipulation;
+  }
+  button:active,
+  a:active,
+  summary:active,
+  [role="button"]:active,
+  [role="tab"]:active,
+  [role="option"]:active {
+    transform: scale(0.96);
   }
 
-  /* ---- Snappier entrances on touch (less motion, same language) ---- */
-  .msg-in {
-    animation-duration: 300ms;
+  /* --------------- الحركات العامة: أسرع وفيها عناد spring --------------- */
+  .animate-rise {
+    animation: mlag-m-pop 380ms var(--ease-spring) both;
+  }
+  .animate-materialize {
+    animation: mlag-m-pop 300ms var(--ease-spring) both;
+  }
+  .animate-fade {
+    animation: mlag-m-fade 240ms var(--ease-soft) both;
   }
   .animate-sheet-in {
-    animation-duration: 300ms;
+    animation: mlag-m-sheet 360ms var(--ease-spring) both;
+  }
+  @keyframes mlag-m-pop {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 14px, 0) scale(0.955);
+    }
+    60% {
+      opacity: 1;
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+  }
+  @keyframes mlag-m-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes mlag-m-sheet {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 26%, 0);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+  /* دخول الرسايل: pop سريع */
+  .msg-in {
+    animation: mlag-m-msg 330ms var(--ease-spring) both;
+  }
+  @keyframes mlag-m-msg {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 16px, 0) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
   }
 
-  /* ================= Composer ================= */
-  /* Action row (attach / send / stop) grows to thumb size */
-  .m-composer .composer-glow > div:last-child > button {
-    min-height: 44px;
-    min-width: 44px;
+  /* ستاجر أسرع */
+  .stagger > * {
+    animation: mlag-m-pop 380ms var(--ease-spring) both;
   }
-  /* Any other composer button (attachment chips, etc.) */
-  .m-composer .composer-glow button {
-    min-height: 40px;
-    min-width: 40px;
+  .stagger > *:nth-child(1) {
+    animation-delay: 0ms;
   }
-  /* Composer never eats the whole screen when the keyboard is open */
-  .m-composer [class*="max-h-"] {
-    max-height: 34dvh;
+  .stagger > *:nth-child(2) {
+    animation-delay: 55ms;
+  }
+  .stagger > *:nth-child(3) {
+    animation-delay: 110ms;
+  }
+  .stagger > *:nth-child(4) {
+    animation-delay: 165ms;
+  }
+  .stagger > *:nth-child(5) {
+    animation-delay: 220ms;
+  }
+  .stagger > *:nth-child(6) {
+    animation-delay: 275ms;
+  }
+  .stagger > *:nth-child(7) {
+    animation-delay: 330ms;
+  }
+  .stagger > *:nth-child(8) {
+    animation-delay: 385ms;
+  }
+  .stagger > *:nth-child(9) {
+    animation-delay: 440ms;
+  }
+  .stagger > *:nth-child(10) {
+    animation-delay: 495ms;
+  }
+  .stagger > *:nth-child(11) {
+    animation-delay: 550ms;
+  }
+  .stagger > *:nth-child(12) {
+    animation-delay: 605ms;
   }
 
-  /* ================= Top bar ================= */
+  /* الطايرين في الهيرو: رَجعنا الحركة أسرع وأقوى على الموبايل عن الديسكتوب */
+  .lp-orb {
+    animation: mlag-m-orb 11s ease-in-out infinite alternate;
+    opacity: 0.7;
+  }
+  @keyframes mlag-m-orb {
+    from {
+      transform: translate3d(-7%, -6%, 0) scale(1);
+    }
+    to {
+      transform: translate3d(8%, 7%, 0) scale(1.16);
+    }
+  }
+
+  /* حيط نوري بيتمشي على حواف الكروت المميزة (بيتستخدم في الهيرو والـ Pro) */
+  @keyframes mlag-m-ring {
+    from {
+      background-position: 120% 50%;
+    }
+    to {
+      background-position: -120% 50%;
+    }
+  }
+  /* دوت بيدق للبادجات الحية */
+  @keyframes mlag-m-badge {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 rgba(217, 119, 87, 0.5);
+    }
+    55% {
+      box-shadow: 0 0 0 7px rgba(217, 119, 87, 0);
+    }
+  }
+
+  /* ========================================================================
+     01 — الهيدر: كبسولة زجاج عايمة + منيو شيت منفصل
+     ======================================================================== */
+  /* ملحوظة مهمة: الهيدر فيه عناصر position:fixed (المينيو) — لا يمكن نضيف
+     transform دائم عليه وإلا الـfixed هيحسب موقعه نسبةً للهيدر. لذلك الـkeyframe
+     بيقفل على transform:none والحركة نفسها opacity أساسًا. */
+  header.sticky {
+    top: 8px;
+    margin: 8px 12px 0;
+    border-radius: var(--m-radius-pill);
+    border: 1px solid var(--hairline-2);
+    padding-top: max(env(safe-area-inset-top), 0px);
+    opacity: 1;
+    animation: mlag-m-dropin-fade 360ms var(--ease-soft) both;
+  }
+  @keyframes mlag-m-dropin-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  header.sticky.glass {
+    box-shadow: 0 10px 34px -18px rgba(0, 0, 0, 0.4), var(--highlight);
+  }
+
+  /* منيو الموبايل: شيت بيغطي الشاشة تحت الكبسولة (مش جواها) */
+  header.sticky nav#lp-mobile-nav {
+    position: fixed;
+    inset-inline: 12px;
+    top: calc(8px + max(env(safe-area-inset-top), 0px) + 64px + 10px);
+    margin: 0;
+    border: 1px solid var(--hairline);
+    border-top: 0;
+    border-radius: 0 0 var(--m-radius-sheet) var(--m-radius-sheet);
+    background: var(--surface);
+    box-shadow: 0 26px 54px -26px rgba(0, 0, 0, 0.5);
+    padding: 6px 12px calc(14px + env(safe-area-inset-bottom));
+    animation: mlag-m-menu 300ms var(--ease-spring) both;
+  }
+  /* سكريم خفيف يخفّي المحتوى اللي تحت الشيت — بيرسم خلف الشيت مش عليه */
+  header.sticky nav#lp-mobile-nav::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background: rgba(9, 9, 11, 0.52);
+    animation: mlag-m-fade 240ms var(--ease-soft) both;
+  }
+  @keyframes mlag-m-menu {
+    from {
+      opacity: 0;
+      transform: translate3d(0, -12px, 0) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+  }
+  header.sticky nav#lp-mobile-nav ul {
+    display: grid;
+    gap: 2px;
+  }
+  header.sticky nav#lp-mobile-nav ul a {
+    height: 52px;
+    border: 0;
+    border-radius: 16px;
+    padding-inline: 14px;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  header.sticky nav#lp-mobile-nav ul a:active {
+    background: var(--surface-3);
+  }
+  header.sticky nav#lp-mobile-nav a[href="/#/chat"] {
+    margin-top: 10px;
+    border: 0;
+    border-radius: 16px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  /* ========================================================================
+     02 — الهيرو: طول الشاشة، اندفnces من النص (editorial) مش توسيط
+     ======================================================================== */
+  [aria-labelledby="hero-title"] {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: calc(100dvh - 150px);
+    padding-top: 96px !important;
+    padding-bottom: 26px !important;
+    text-align: start;
+  }
+  [aria-labelledby="hero-title"] > div:last-child {
+    margin-inline: 0 !important;
+    max-width: none !important;
+    width: 100%;
+    padding-inline: 18px !important;
+    text-align: start !important;
+  }
+  [aria-labelledby="hero-title"] h1,
+  [aria-labelledby="hero-title"] p {
+    text-align: start;
+  }
+  /* العنصر النصي يدخل من طرف السطر، ومافيش توسيط نصي بالهيداي (mx-auto) */
+  [aria-labelledby="hero-title"] h1,
+  [aria-labelledby="hero-title"] a[href="#features"],
+  [aria-labelledby="hero-title"] p.animate-rise {
+    align-self: flex-start;
+    margin-inline-start: 0 !important;
+    margin-inline-end: auto !important;
+  }
+
+  #hero-title {
+    font-size: clamp(34px, 11vw, 46px) !important;
+    line-height: 1.14 !important;
+    letter-spacing: -0.025em !important;
+  }
+  /* الجملة الملونة: تنفس بشيلة ضوء */
+  #hero-title .text-gradient {
+    background:
+      linear-gradient(
+        115deg,
+        var(--accent) 12%,
+        var(--ink) 46%,
+        var(--accent-hover) 78%
+      );
+    background-size: 240% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    animation: mlag-m-textsheen 5.2s var(--ease-soft) infinite;
+  }
+  html[data-theme="dark"] #hero-title .text-gradient {
+    background:
+      linear-gradient(
+        115deg,
+        var(--accent) 10%,
+        #f5f5f7 46%,
+        var(--accent-hover) 80%
+      );
+    background-size: 240% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+  @keyframes mlag-m-textsheen {
+    0%,
+    30% {
+      background-position: 0% 50%;
+    }
+    68%,
+    100% {
+      background-position: 100% 50%;
+    }
+  }
+
+  /* الوصف: مقاس محسوب للموبايل */
+  [aria-labelledby="hero-title"] p.animate-rise:not(.lp-eyebrow-check) {
+    font-size: 15.5px !important;
+    line-height: 1.75 !important;
+    max-width: 44ch;
+  }
+
+  /* بادج "جديد": كبسولة مع نقط بيدق */
+  [aria-labelledby="hero-title"] a[href="#features"] {
+    height: 34px;
+    animation: mlag-m-pop 420ms var(--ease-spring) both;
+  }
+  [aria-labelledby="hero-title"] a[href="#features"] > span:first-child {
+    animation: mlag-m-badge 2.4s var(--ease-soft) infinite;
+  }
+
+  /* --------------- كومبوزر الهيرو: دِك زجاج بحيط نوري --------------- */
+  [aria-labelledby="hero-title"] form {
+    width: 100%;
+    background: color-mix(in srgb, var(--surface) 84%, transparent);
+    -webkit-backdrop-filter: saturate(170%) blur(16px);
+    backdrop-filter: saturate(170%) blur(16px);
+    border-radius: 24px;
+    box-shadow: 0 22px 55px -24px rgba(0, 0, 0, 0.4), var(--highlight);
+  }
+  /* الحيط المحيط بيه بيتمشي حواليه (blash نوري يجري) */
+  [aria-labelledby="hero-title"] form.lp-ring::before {
+    background: linear-gradient(
+      115deg,
+      transparent 30%,
+      var(--accent-line) 46%,
+      var(--accent-line) 56%,
+      transparent 72%
+    );
+    background-size: 240% 100%;
+    background-position: 0 50%;
+    animation: mlag-m-ring 3.4s linear infinite;
+  }
+
+  #lp-prompt {
+    min-height: 92px;
+    font-size: 16px !important; /* iOS مفيش زوم */
+    line-height: 1.65;
+  }
+  /* هدف الكتابة الشبح (typewriter) نفس مقاس الحقل مش أصغر */
+  [aria-labelledby="hero-title"] form .lp-caret {
+    font-size: 16px;
+    line-height: 1.65;
+  }
+
+  /* صف المودات: شيبس سكرول أفقي snap بدل اللف */
+  [aria-labelledby="hero-title"] form > div:last-child {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+  [aria-labelledby="hero-title"] form > div:last-child > div:first-child {
+    display: flex;
+    flex: 1;
+    gap: 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 10px, #000 calc(100% - 10px), transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 10px, #000 calc(100% - 10px), transparent);
+  }
+  [aria-labelledby="hero-title"] form > div:last-child > div:first-child::-webkit-scrollbar {
+    display: none;
+  }
+  /* شيبس المودات: الأكتف بياخد تدرج لون مغروئ */
+  [aria-labelledby="hero-title"] form button[aria-pressed] {
+    height: 36px;
+    scroll-snap-align: center;
+    font-size: 13.5px;
+    font-weight: 600;
+  }
+  [aria-labelledby="hero-title"] form button[aria-pressed="true"] {
+    background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 8px 18px -10px rgba(217, 119, 87, 0.7);
+  }
+  [aria-labelledby="hero-title"] form .btn-send {
+    width: 46px;
+    height: 46px;
+    animation: mlag-m-send 2.6s var(--ease-soft) infinite;
+  }
+  @keyframes mlag-m-send {
+    0%,
+    100% {
+      box-shadow: 0 10px 22px -12px rgba(217, 119, 87, 0.75);
+    }
+    50% {
+      box-shadow: 0 10px 28px -8px rgba(217, 119, 87, 0.95);
+    }
+  }
+  [aria-labelledby="hero-title"] form .btn-send:active {
+    transform: scale(0.88);
+  }
+
+  /* الأمثلة السريعة: كاروسيل snap — مش سطر ورا سطر */
+  [aria-labelledby="hero-title"] ul[aria-label="أمثلة سريعة"] {
+    display: flex;
+    flex-wrap: nowrap !important;
+    justify-content: flex-start !important;
+    gap: 8px !important;
+    margin-top: 14px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+    -webkit-mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 24px), transparent);
+    mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 24px), transparent);
+  }
+  [aria-labelledby="hero-title"] ul[aria-label="أمثلة سريعة"]::-webkit-scrollbar {
+    display: none;
+  }
+  [aria-labelledby="hero-title"] ul[aria-label="أمثلة سريعة"] li {
+    flex: 0 0 auto;
+    scroll-snap-align: center;
+  }
+  [aria-labelledby="hero-title"] ul[aria-label="أمثلة سريعة"] li button {
+    max-width: 78vw;
+    height: 38px;
+    border-radius: 14px;
+    padding-inline: 12px;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ========================================================================
+     03 — أقسام الهبوط: كروت spring الشكل، إحداثيات أعلى
+     ======================================================================== */
+  /* ماركيي أسرع + شيبس زجاج بيدق */
+  .lp-marquee {
+    -webkit-mask-image: linear-gradient(90deg, transparent 2%, #000 14%, #000 86%, transparent 98%);
+    mask-image: linear-gradient(90deg, transparent 2%, #000 14%, #000 86%, transparent 98%);
+  }
+  .lp-marquee-track {
+    gap: 8px;
+    animation-duration: 26s;
+  }
+  .lp-marquee-track > span {
+    border: 0;
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--surface) 78%, transparent);
+    box-shadow: 0 6px 16px -10px rgba(0, 0, 0, 0.3);
+  }
+
+  /* عناوين الأقسام: أكبر وبتاخد دوت نبض */
+  section p.font-semibold.text-accent {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+  section p.font-semibold.text-accent::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: currentColor;
+    animation: mlag-m-dot 1.8s var(--ease-soft) infinite;
+  }
+  @keyframes mlag-m-dot {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(0.7);
+      opacity: 0.5;
+    }
+  }
+  #features-title,
+  #how-title,
+  #plans-title,
+  #dev-title,
+  #cta-title {
+    font-size: clamp(26px, 7.6vw, 36px) !important;
+    letter-spacing: -0.025em !important;
+  }
+
+  /* كروت: رادِيَس أعلى + شادو ملوّن + pop عند اللمس */
+  section .lift {
+    border-radius: var(--m-radius-card);
+    box-shadow: 0 18px 44px -26px rgba(31, 30, 29, 0.35);
+  }
+  html[data-theme="dark"] section .lift {
+    box-shadow: 0 20px 44px -24px rgba(0, 0, 0, 0.7);
+  }
+  section .lift:hover {
+    transform: none;
+  }
+  section .lift:active {
+    transform: scale(0.985);
+  }
+
+  /* الفريم المرجعي (Showcase): بوردر مدكّ 30 + شادو عميق */
+  [aria-labelledby="showcase-title"] > div > div {
+    border-radius: 30px !important;
+    padding: 7px !important;
+  }
+
+  /* سيكشن "كيف يعمل": الارقام تدرّج لون */
+  #how ol span.tnum {
+    width: 44px;
+    height: 44px;
+    border: 0;
+    background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+    color: #fff;
+    font-size: 15px;
+    box-shadow: 0 10px 20px -12px rgba(217, 119, 87, 0.8);
+  }
+
+  /* الباقات: كارت Pro بحيط نوري + بادج بيدق */
+  #plans .lp-ring::before {
+    background: linear-gradient(
+      115deg,
+      rgba(255, 255, 255, 0.75) 30%,
+      rgba(217, 119, 87, 1) 50%,
+      rgba(255, 255, 255, 0.55) 70%
+    );
+    background-size: 230% 100%;
+    background-position: 0 50%;
+    animation: mlag-m-ring 3.2s linear infinite;
+  }
+  #plans .rounded-full.bg-accent {
+    animation: mlag-m-badge 2.6s var(--ease-soft) infinite;
+  }
+
+  /* CTA النهاية: نفس الطاقة بالنفس النضارة */
+  [aria-labelledby="cta-title"] > div > div:first-child {
+    border-radius: 30px;
+  }
+  /* السفن (sheen) على الديسكتوب فقط: الموبايل مافيهو hover */
+  .btn-sheen::after {
+    display: none;
+  }
+
+  /* الفوتر: عمودين مضغوطين */
+  footer > div:first-child {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 26px 18px;
+  }
+  footer > div:first-child > div:first-child {
+    grid-column: 1 / -1;
+  }
+
+  /* ========================================================================
+     04 — الشات: توب بار كبسولة، درَور شيت، فقاعات بتدرّج، دِك زجاج
+     ======================================================================== */
+
+  /* توب بار: كبسولة زجاج عايمة متفق مع الهيدر بتاع الهبوط
+     (هنا كمان من غير transform دائم عشان فيه popovers fixed جواه) */
   .m-topbar {
-    gap: 0.25rem;
+    top: calc(8px + max(env(safe-area-inset-top), 0px)) !important;
+    margin: 8px 12px 0;
+    height: 52px !important;
+    padding-top: 0 !important;
+    border: 1px solid var(--hairline-2) !important;
+    border-radius: var(--m-radius-pill);
+    box-shadow: 0 12px 32px -18px rgba(0, 0, 0, 0.4), var(--highlight);
+    animation: mlag-m-dropin-fade 320ms var(--ease-soft) both;
+  }
+  html[data-theme="dark"] .m-topbar {
+    box-shadow: 0 14px 32px -18px rgba(0, 0, 0, 0.8), var(--highlight);
   }
   .m-topbar button {
     min-height: 40px;
     min-width: 40px;
   }
-  /* Long model names must not push actions off a 320px header */
+  .m-topbar button:active {
+    transform: scale(0.9);
+  }
+  /* أسماء الموديلات الطويلة متزعش الكبسولة */
   .m-topbar button > span[dir="ltr"] {
-    display: inline-block;
-    min-width: 0;
     max-width: 24vw;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* Model dropdown can never be wider than the viewport.
-     Opaque on mobile: glass translucency lets hero text bleed through. */
+  /* قايمة الموديلات: ورق صلب (مش زجاج شفاف يحرك النص خلفه) + pop */
   .m-topbar div[role="listbox"] {
     width: min(300px, calc(100vw - 2rem));
     background-color: var(--surface);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
+    border: 1px solid var(--hairline-2);
+    border-radius: 20px;
+    animation: mlag-m-pop 260ms var(--ease-spring) both;
+    box-shadow: var(--shadow-3);
   }
-  /* Truncation chain so long labels/badges never overlap inside rows */
-  .m-topbar div[role="listbox"] button > span,
-  .m-topbar div[role="listbox"] button > span > span {
-    min-width: 0;
+  .m-topbar div[role="listbox"] button {
+    margin: 2px 6px;
+    border-radius: 12px;
   }
   .m-topbar div[role="listbox"] span[dir="ltr"] {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* Tokens popover: docked full-width bar under the header instead of a
-     240px bubble anchored to the tiny ring (which overflowed the viewport) */
+  /* دِك التوكنز: شريط ثابت تحت الكبسولة بدل فقاعة تفوت الشاشة */
   .m-topbar div[role="dialog"] {
     position: fixed;
-    top: calc(3.75rem + env(safe-area-inset-top));
+    top: calc(8px + max(env(safe-area-inset-top), 0px) + 52px + 8px);
     inset-inline-start: 0.75rem;
     inset-inline-end: 0.75rem;
     width: auto;
+    border-radius: 18px;
+    animation: mlag-m-pop 260ms var(--ease-spring) both;
   }
 
-  /* ================= Drawer (history) ================= */
-  .m-drawer nav {
-    overscroll-behavior-y: contain;
+  /* الدِرَور (التاريخ): شيت بيدخل بنزة من طرفه مع spring
+     مهم: الأنيميشن مش على العنصر نفسه دايمًا — الدرَور بيختفي بـ
+     translate-x-full (مش unmount)، فلو ثبتنا الأنيميشن بـ both هيفضل
+     ظاهر عالحل. بنحطها بس على حالة المفتوح (.translate-x-0) والنهاية
+     ترجع للقيم بتاعة الكلاس (fill-mode افتراضي) — فيختفي عادي بالـtransition. */
+  .m-drawer {
+    border-start-end-radius: var(--m-radius-sheet);
+    border-end-end-radius: var(--m-radius-sheet);
   }
-  /* Session rows become thumb-tall */
+  .m-drawer.translate-x-0 {
+    animation: mlag-m-drawer 340ms var(--ease-spring);
+    will-change: transform;
+  }
+  @keyframes mlag-m-drawer {
+    from {
+      opacity: 0.4;
+      transform: translate3d(60%, 0, 0);
+    }
+    to {
+      transform: translate3d(0, 0, 0);
+    }
+  }
   .m-drawer nav li > button {
-    min-height: 44px;
+    min-height: 46px;
+    border-radius: 14px;
+    transition: transform 95ms var(--ease-spring), background-color var(--dur-1) var(--ease-soft);
   }
-  .m-drawer button {
-    min-height: 40px;
+  .m-drawer nav li > button:active {
+    transform: scale(0.985);
   }
-  /* iOS zooms inputs under 16px on focus — keep search at 16px */
+  /* البحث داخل الدرور: 16px علشان iOS ميزومش */
   .m-drawer input {
     font-size: 16px;
   }
-
-  /* ================= Messages ================= */
-  /* Tighter gutters reclaim ~8px on 320px screens */
-  .m-msg {
-    padding-left: 0.75rem;
-    padding-right: 0.75rem;
+  .m-drawer nav {
+    overscroll-behavior-y: contain;
   }
-  /* Long URLs / tokens / hashes wrap instead of overflowing */
+
+  /* الفقاعة بتاعة المستخدم: اسمها "رسالتي" — تدرّج لون أكجنت + ذيل */
+  .m-msg .msg-in.bg-surface-3,
+  .msg-in.bg-surface-3 {
+    background: linear-gradient(
+      160deg,
+      var(--accent-soft),
+      color-mix(in srgb, var(--accent-soft) 55%, var(--surface-3)) 90%
+    );
+    border: 1px solid var(--accent-line);
+    border-radius: 20px 20px 6px 20px;
+    box-shadow: 0 10px 24px -16px rgba(31, 30, 29, 0.35);
+    padding-block: 12px;
+    animation: mlag-m-msg 300ms var(--ease-spring) both;
+  }
+  html[data-theme="dark"] .msg-in.bg-surface-3 {
+    box-shadow: 0 12px 26px -16px rgba(0, 0, 0, 0.65);
+  }
+
+  /* بلوكات الكود: أعمق ضل ونضاف */
+  .m-code {
+    border-radius: 16px !important;
+    box-shadow: 0 12px 28px -18px rgba(0, 0, 0, 0.4) !important;
+  }
+
+  /* دِك الإرسال: كارت زجاج عايم مع ضل عميق */
+  .m-composer > div[class*="rounded-2xl"] {
+    border: 1px solid var(--hairline-2);
+    border-radius: var(--m-radius-sheet);
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    -webkit-backdrop-filter: saturate(160%) blur(16px);
+    backdrop-filter: saturate(160%) blur(16px);
+    box-shadow: 0 22px 48px -22px rgba(0, 0, 0, 0.42), var(--highlight);
+    transition:
+      box-shadow var(--dur-2) var(--ease-soft),
+      border-color var(--dur-2) var(--ease-soft);
+  }
+  .m-composer #mlag-composer {
+    font-size: 16px !important; /* iOS مفيش زوم */
+  }
+  /* لما الكيبورد يفتح: الكومبوزر مياكلش نص الشاشة */
+  .m-composer [class*="max-h-"] {
+    max-height: 34dvh;
+  }
+  .m-composer button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .m-composer .btn-send {
+    width: 46px;
+    height: 46px;
+  }
+  .m-composer .btn-send:active {
+    transform: scale(0.86);
+  }
+
+  /* داخل الرسايل: لفّ أي حاجة طويلة بدل ما تكسر اللأي أوت، والجداول تتمرر جانبيًا */
   .m-msg .measure {
     overflow-wrap: anywhere;
   }
-  /* Markdown tables scroll sideways inside the bubble instead of breaking layout */
   .m-msg table {
     display: block;
     overflow-x: auto;
     max-width: 100%;
   }
-  /* Every message action (copy / edit / feedback / continue / preview) thumb-tall */
   .m-msg button {
     min-height: 40px;
   }
 
-  /* ================= Code blocks ================= */
-  .m-code pre {
-    font-size: 12px;
-    line-height: 1.65;
+  /* الدايالوجات: شيتات من تحت بنزة + زجاج */
+  [role="dialog"] {
+    border-radius: var(--m-radius-sheet) var(--m-radius-sheet) 0 0 !important;
+    -webkit-backdrop-filter: saturate(170%) blur(18px);
+    backdrop-filter: saturate(170%) blur(18px);
   }
-  .m-code button {
-    min-height: 36px;
-    padding-left: 12px;
-    padding-right: 12px;
-  }
-
-  /* ================= Activity block ================= */
-  /* Smaller indent keeps code visible on narrow screens */
-  .m-activity div[class*="ps-9"] {
-    padding-inline-start: 1rem;
-  }
-  /* Long paths / queries wrap anywhere instead of overflowing */
-  .m-activity div,
-  .m-activity span,
-  .m-activity p {
-    overflow-wrap: anywhere;
-  }
-  /* External-link affordance must not be hover-only on touch */
-  .m-activity a {
-    opacity: 1;
-  }
-
-  /* ================= Preview panel (fullscreen sheet on mobile) ================= */
-  .m-panel button {
-    min-height: 40px;
-    min-width: 40px;
-  }
-
-  /* ================= Dialogs (bottom sheets on mobile) ================= */
-  /* Narrower gutters, but never override an explicit p-0 body */
-  [role="dialog"] > div:not([class*="p-0"]) {
-    padding-left: 1rem;
-    padding-right: 1rem;
-  }
-  /* Switches keep their pill geometry */
-  [role="dialog"] button:not([role="switch"]) {
-    min-height: 44px;
-  }
-  /* iOS zoom guard for every field inside dialogs (settings / auth / admin) */
   [role="dialog"] input,
   [role="dialog"] textarea,
   [role="dialog"] select {
     font-size: 16px;
   }
-}
 
-/* Very small phones: hide the composer hint so buttons always fit */
-@media (max-width: 379.98px) {
-  .m-composer p.truncate {
-    display: none;
+  /* ========================================================================
+     04.5 — طبقة الخَلق (MobileAmbience): كرات ضوء + خط تقدم القراءة
+        الأنماط ملغاة عن الديسكتوب طالما العنصر نفسه متكنش مرسوم هناك.
+     ======================================================================== */
+  body .malg-m-ambience {
+    position: fixed;
+    inset: -18% 0 !important;
+    z-index: -1;
+    pointer-events: none;
+    will-change: transform;
+  }
+  body .malg-m-blob {
+    position: absolute;
+    display: block;
+    border-radius: 9999px;
+    will-change: transform;
+  }
+  body .malg-m-blob-a {
+    width: 74vmax;
+    height: 74vmax;
+    top: -14%;
+    inset-inline-start: -26%;
+    background: radial-gradient(closest-side, var(--m-glow-a), transparent 74%);
+    animation: mlag-m-float 13s ease-in-out infinite alternate;
+  }
+  body .malg-m-blob-b {
+    width: 64vmax;
+    height: 64vmax;
+    top: 26%;
+    inset-inline-end: -30%;
+    background: radial-gradient(closest-side, var(--m-glow-b), transparent 74%);
+    animation: mlag-m-float 17s ease-in-out infinite alternate-reverse;
+  }
+  body .malg-m-blob-c {
+    width: 80vmax;
+    height: 80vmax;
+    bottom: -22%;
+    inset-inline-start: 12%;
+    background: radial-gradient(closest-side, var(--m-glow-c), transparent 76%);
+    animation: mlag-m-float 21s ease-in-out infinite alternate;
+  }
+  @keyframes mlag-m-float {
+    from {
+      transform: translate3d(-4%, -3%, 0) scale(1);
+    }
+    to {
+      transform: translate3d(5%, 4%, 0) scale(1.14);
+    }
+  }
+  /* خط تقدم القراءة: هازل لوني رفيع فوق فوق (RTL: من يمين) */
+  body .malg-m-progress {
+    position: fixed;
+    inset-inline: 0;
+    top: 0;
+    height: 3px;
+    z-index: 66;
+    background: linear-gradient(90deg, var(--accent), #f0a35e, var(--live));
+    opacity: 0;
+    transform: scaleX(0);
+    transform-origin: 100% 50%;
+    transition: opacity 220ms var(--ease-soft);
+    pointer-events: none;
+  }
+  html[dir="ltr"] body .malg-m-progress {
+    transform-origin: 0 50%;
+  }
+
+  /* ========================================================================
+     05 — أمان عام: مفيش تمرير أفقي، أمان المحتوى
+     ======================================================================== */  #lp-scroll,
+  body {
+    overflow-x: hidden !important;
+  }
+  img,
+  video,
+  canvas,
+  iframe {
+    max-width: 100%;
+  }
+
+  /* ======= موباقات صغيرة جدًا (≤ 380px) ======= */
+  @media (max-width: 379.98px) {
+    #hero-title {
+      font-size: clamp(30px, 12vw, 38px) !important;
+    }
+    [aria-labelledby="hero-title"] form .btn-send,
+    .m-composer .btn-send {
+      width: 42px;
+      height: 42px;
+    }
+  }
+
+  /* ======= احترام "تقليل الحركة": كل حاجة ثابتة ======= */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+    body::before {
+      animation: none;
+    }
   }
 }
