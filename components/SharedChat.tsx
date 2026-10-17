@@ -102,7 +102,7 @@ export default function SharedChat({ token }: { token: string }) {
                 m.role === "user" ? (
                   <div key={i} className="flex w-full flex-col items-end py-3 rtl:items-start">
                     <div
-                      className="msg-in max-w-[85%] whitespace-pre-wrap break-words rounded-xl rounded-ee-xs border border-hair bg-surface-3 px-4 py-2.5 text-[15px] leading-7 text-ink shadow-1"
+                      className="msg-in max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-ee-xs border border-hair bg-surface-3 px-4 py-3 text-[15px] leading-7 text-ink shadow-1"
                       dir="auto"
                     >
                       {m.content}

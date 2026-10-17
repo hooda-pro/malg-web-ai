@@ -220,7 +220,7 @@ export function renderFormattedText(text: string, keyPrefix: string): ReactNode 
             return (
               <p
                 key={key}
-                className={`mb-1.5 mt-6 text-balance font-semibold text-ink first:mt-0 ${HEADING_SIZE[block.level]}`}
+                className={`mb-2 mt-6 text-balance font-semibold text-ink first:mt-0 ${HEADING_SIZE[block.level]}`}
               >
                 {parseInline(block.text, key)}
               </p>
@@ -291,7 +291,7 @@ export function renderFormattedText(text: string, keyPrefix: string): ReactNode 
             );
           default:
             return (
-              <p key={key} className="my-2.5 whitespace-pre-wrap break-words text-pretty text-[15px] leading-7 text-ink first:mt-0 last:mb-0 sm:text-[15.5px] sm:leading-8">
+              <p key={key} className="my-3 whitespace-pre-wrap break-words text-pretty text-[15px] leading-7 text-ink first:mt-0 last:mb-0 sm:text-[15.5px] sm:leading-8">
                 {parseInline(block.text, key)}
               </p>
             );

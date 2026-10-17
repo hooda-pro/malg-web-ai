@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useMemo, useRef, useState, type ReactNode } from "react";
-import { Check, ChevronRight, Copy, Eye, FileArchive, FileText, Pencil, Play, RefreshCw, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Check, ChevronRight, Copy, FileArchive, FileText, Pencil, Play, RefreshCw, ThumbsDown, ThumbsUp } from "lucide-react";
 import type { ChatMessage } from "@/lib/types";
 import type { ProjectFile } from "@/lib/parseContent";
 import { dedupeProjectFiles, extractDeliverableFiles, parseMessageContent, parseStreamingContent } from "@/lib/parseContent";
@@ -94,9 +94,6 @@ function MessageItem({
     [isUser, displayContent]
   );
   const hasProjectFiles = !isUser && projectFiles.length > 0;
-  const canPreview =
-    hasProjectFiles &&
-    projectFiles.some((f) => PREVIEWABLE_EXTS.has((f.path.split(".").pop() || "").toLowerCase()));
   const segments = useMemo(
     () => (isUser || isLive ? [] : parseMessageContent(displayContent)),
     [isUser, isLive, displayContent]
@@ -225,8 +222,8 @@ function MessageItem({
         {userMainText && (
           <div
             className={cn(
-              "msg-in max-w-[85%] whitespace-pre-wrap break-words rounded-xl",
-              "bg-surface-3 px-4 py-2.5 text-[15px] leading-7 text-ink"
+              "msg-in max-w-[85%] whitespace-pre-wrap break-words rounded-2xl",
+              "border border-hair bg-surface-3 px-4 py-3 text-[15px] leading-7 text-ink shadow-1"
             )}
             dir="auto"
           >
@@ -370,17 +367,8 @@ function MessageItem({
                 )}
           </div>
 
-          {(canPreview || showContinueRow) && (
+          {showContinueRow && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              {canPreview && (
-                <button
-                  onClick={() => onPreviewFiles(projectFiles)}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1.5 text-[12.5px] font-medium text-accent transition-colors duration-1 hover:bg-accent hover:text-accent-ink"
-                >
-                  <Eye size={13} />
-                  {t("previewPage")}
-                </button>
-              )}
               {isContinuing ? (
                 <span className="inline-flex items-center gap-2 text-[12.5px] text-ink-3">
                   <span className="h-3 w-3 animate-spin-slow rounded-full border-2 border-accent border-t-transparent" />
