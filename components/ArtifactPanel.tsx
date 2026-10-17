@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   Code2,
@@ -21,6 +21,15 @@ import { useSettings } from "./SettingsContext";
 import { cn } from "@/lib/utils";
 
 const PREVIEWABLE_EXTS = new Set(["html", "htm", "css", "js"]);
+
+/* ————— فاصل شاشة المعاينة (ديسكتوب): سحب يمين/شمال لتغيير العرض بين الشات والمعاينة ————— */
+const PANEL_W_KEY = "mlag_artifact_split";
+const PANEL_W_DEFAULT = 46;
+const PANEL_W_MIN = 26;
+const PANEL_W_MAX = 72;
+
+const clampPct = (v: number) =>
+  Number(Math.min(PANEL_W_MAX, Math.max(PANEL_W_MIN, v)).toFixed(2));
 
 function downloadTextFile(name: string, content: string) {
   const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
@@ -141,6 +150,91 @@ export default function ArtifactPanel({
   const [fullscreen, setFullscreen] = useState(false);
   const [runKey, setRunKey] = useState(0);
   const [copied, setCopied] = useState(false);
+
+  /** عرض المعاينة كـ% من الشاشة — قابل للسحب يمين/شمال من الفاصل (ديسكتوب) */
+  const [widthPct, setWidthPct] = useState(PANEL_W_DEFAULT);
+  const [resizing, setResizing] = useState(false);
+  const panelRef = useRef<HTMLElement>(null);
+  const dragState = useRef<{ startX: number; startW: number } | null>(null);
+
+  // الفاصل المحفوظه من كل مرة سحب
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(PANEL_W_KEY);
+      if (saved) {
+        const v = parseFloat(saved);
+        if (Number.isFinite(v)) setWidthPct(clampPct(v));
+      }
+    } catch {
+      // تجاهل
+    }
+  }, []);
+
+  const persistWidth = (pct: number) => {
+    try {
+      localStorage.setItem(PANEL_W_KEY, String(pct));
+    } catch {
+      // تجاهل
+    }
+  };
+
+  const setClampedWidth = (pct: number) => {
+    const next = clampPct(pct);
+    setWidthPct(next);
+    persistWidth(next);
+  };
+
+  const beginResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    const el = panelRef.current;
+    if (!el) return;
+    dragState.current = { startX: e.clientX, startW: el.getBoundingClientRect().width };
+    setResizing(true);
+    document.body.classList.add("mlag-resizing");
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // تجاهل
+    }
+  };
+
+  const onResizeMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = dragState.current;
+    if (!d) return;
+    const vw = window.innerWidth || 1440;
+    // سحب لليسار = توسيع المعاينة (شغالة زي دي في RTL و LTR لأن الفاصل
+    // بيقع على الحد الداخلي (inline-start) للمعاينة في الاتنين)
+    const delta = d.startX - e.clientX;
+    setWidthPct(clampPct(((d.startW + delta) / vw) * 100));
+  };
+
+  const endResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragState.current) return;
+    dragState.current = null;
+    setResizing(false);
+    document.body.classList.remove("mlag-resizing");
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // تجاهل
+    }
+    const el = panelRef.current;
+    const vw = window.innerWidth || 1440;
+    if (el) persistWidth(clampPct((el.getBoundingClientRect().width / vw) * 100));
+  };
+
+  const onResizeKeys = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = e.shiftKey ? 6 : 2;
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      // سهم شمال = توسيع (نفس منطق السحب لليسار)
+      const dir = e.key === "ArrowLeft" ? 1 : -1;
+      setClampedWidth(widthPct + dir * step);
+    }
+  };
+
+  const resetWidth = () => setClampedWidth(PANEL_W_DEFAULT);
+
   const hasWeb = useMemo(
     () => files.some((f) => PREVIEWABLE_EXTS.has((f.path.split(".").pop() || "").toLowerCase())),
     [files]
@@ -192,14 +286,43 @@ export default function ArtifactPanel({
 
   return (
     <section
+      ref={panelRef}
       aria-label={title}
+      style={{ "--m-panel-w": `${widthPct}%` } as React.CSSProperties}
       className={cn(
         "m-panel animate-fade flex flex-col bg-surface",
         fullscreen
           ? "fixed inset-0 z-modal"
-          : "fixed inset-0 z-overlay lg:static lg:z-auto lg:w-[46%] lg:min-w-[440px] lg:border-s lg:border-hair"
+          : "fixed inset-0 z-overlay lg:relative lg:z-auto lg:w-[var(--m-panel-w)] lg:min-w-[340px] lg:max-w-[74vw] lg:border-s lg:border-hair"
       )}
     >
+      {/* فاصل السحب (ديسكتوب فقط): يشد يمين وشمال — يكبر/يصغر المعاينة جنب الشات */}
+      {!fullscreen && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={t("panelResizeHint")}
+          title={t("panelResizeHint")}
+          tabIndex={0}
+          onPointerDown={beginResize}
+          onPointerMove={onResizeMove}
+          onPointerUp={endResize}
+          onPointerCancel={endResize}
+          onDoubleClick={resetWidth}
+          onKeyDown={onResizeKeys}
+          className={cn(
+            "group absolute inset-y-0 z-20 hidden w-3.5 cursor-col-resize touch-none select-none",
+            "items-center justify-center outline-none start-[-7px] lg:flex"
+          )}
+        >
+          <span
+            className={cn(
+              "h-full w-[3.5px] rounded-full transition-colors duration-1",
+              resizing ? "bg-accent" : "bg-hair-2 group-hover:bg-accent-line"
+            )}
+          />
+        </div>
+      )}
       <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-hair bg-surface-2/60 px-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <Segmented<Tab>

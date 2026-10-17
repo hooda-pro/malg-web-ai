@@ -290,6 +290,7 @@ const ar: Dict = {
     "فاهم إن الحذف نهائي بعد مهلة الـ 30 يوم لو مستسجلش دخول، ومفيش استرجاع بعد التنفيذ.",
   deletionConfirmBtn: "تأكيد الحذف",
   close: "إغلاق",
+  panelResizeHint: "اسحب يمين وشمال لتغيير عرض المعاينة جنب المحادثة — دبل كليك يرجع الوضع الافتراضي",
   deletionAccountLine: "الحساب اللي هيتحذف:",
   deletionAutoLogoutNote:
     "بعد ما تدوس تأكيد الحذف: هيتعمل تسجيل خروج تلقائي فورًا والحساب يتجمد لمدة 30 يوم.",
@@ -641,6 +642,7 @@ const en: Dict = {
     "I understand the deletion is permanent after the 30-day window if I don't sign in, and nothing can be recovered afterwards.",
   deletionConfirmBtn: "Confirm deletion",
   close: "Close",
+  panelResizeHint: "Drag right or left to resize the preview beside the chat — double-click resets the default",
   deletionAccountLine: "Account to be deleted:",
   deletionAutoLogoutNote:
     "After you confirm, you're signed out automatically and the account goes dormant for 30 days.",
@@ -969,6 +971,7 @@ const fr: Dict = {
     "Je comprends que la suppression est définitive après le délai de 30 jours sans connexion, et qu'aucune récupération n'est possible après l'exécution.",
   deletionConfirmBtn: "Confirmer la suppression",
   close: "Fermer",
+  panelResizeHint: "Faites glisser à droite ou à gauche pour redimensionner l'aperçu à côté du chat — double-clic pour revenir à la valeur par défaut",
   deletionAccountLine: "Compte à supprimer :",
   deletionAutoLogoutNote:
     "Après votre confirmation, vous serez déconnecté automatiquement et le compte sera mis en sommeil pendant 30 jours.",
@@ -1297,6 +1300,7 @@ const es: Dict = {
     "Entiendo que la eliminación es definitiva tras el período de 30 días si no inicio sesión, y que no habrá recuperación después de ejecutarse.",
   deletionConfirmBtn: "Confirmar la eliminación",
   close: "Cerrar",
+  panelResizeHint: "Arrastra a la derecha o a la izquierda para cambiar el tamaño de la vista previa junto al chat — doble clic restaura el valor por defecto",
   deletionAccountLine: "Cuenta que se eliminará:",
   deletionAutoLogoutNote:
     "Tras confirmar, se cerrará tu sesión automáticamente y la cuenta quedará inactiva durante 30 días.",

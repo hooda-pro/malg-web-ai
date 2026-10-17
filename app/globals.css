@@ -862,3 +862,14 @@ html.no-anim *::after {
 .animate-pop {
   animation: mlag-pop var(--dur-2) var(--ease-spring) both;
 }
+
+/* ————— سحب فاصل المعاينة (ديسكتوب): أثناء الشد مفيش تحديد نصوص،
+   والاطار iframe الخاص بالمعاينة ميتفرشش السحب ويكسر الـpointer ————— */
+body.mlag-resizing {
+  cursor: col-resize !important;
+  user-select: none;
+  -webkit-user-select: none;
+}
+body.mlag-resizing iframe {
+  pointer-events: none !important;
+}
