@@ -10,6 +10,7 @@ import {
   ScrollText,
   Search,
   ShieldCheck,
+  UserMinus,
   Users,
   Wrench,
   XCircle,
@@ -18,6 +19,7 @@ import type { SessionUser } from "@/lib/types";
 import StatsOverview from "./StatsOverview";
 import UsersList from "./UsersList";
 import UserDetail from "./UserDetail";
+import DeletionsList from "./DeletionsList";
 import AdminLogs from "./AdminLogs";
 import AdminSecurity from "./AdminSecurity";
 import AdminProvider from "./AdminProvider";
@@ -25,11 +27,12 @@ import AdminSearch from "./AdminSearch";
 import AdminMcp from "./AdminMcp";
 import Logo from "../Logo";
 
-type Section = "overview" | "users" | "provider" | "search" | "logs" | "security" | "mcp";
+type Section = "overview" | "users" | "deletions" | "provider" | "search" | "logs" | "security" | "mcp";
 
 const SECTIONS: { id: Section; label: string; icon: typeof Users }[] = [
   { id: "overview", label: "نظرة عامة", icon: LayoutDashboard },
   { id: "users", label: "المستخدمين", icon: Users },
+  { id: "deletions", label: "حذف الحسابات", icon: UserMinus },
   { id: "provider", label: "الموديلات والمزوّدون", icon: PlugZap },
   { id: "search", label: "البحث", icon: Search },
   { id: "logs", label: "سجل الإجراءات", icon: ScrollText },
@@ -40,6 +43,7 @@ const SECTIONS: { id: Section; label: string; icon: typeof Users }[] = [
 const SECTION_TITLES: Record<Section, string> = {
   overview: "نظرة عامة",
   users: "المستخدمين",
+  deletions: "حذف الحسابات (طلبات معلقة)",
   provider: "الموديلات والمزوّدون (API)",
   search: "البحث الحقيقي",
   logs: "سجل إجراءات الأدمن",
@@ -160,6 +164,7 @@ export default function AdminPanel({
               <UsersList onSelect={openUser} />
             ))}
           {section === "logs" && <AdminLogs />}
+          {section === "deletions" && <DeletionsList onOpenUser={openUser} />}
           {section === "provider" && <AdminProvider notify={notify} />}
           {section === "search" && <AdminSearch notify={notify} />}
           {section === "security" && <AdminSecurity admin={admin} notify={notify} />}

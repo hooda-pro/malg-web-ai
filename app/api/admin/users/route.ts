@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
 
   const rows = (await sql`
     SELECT u.id, u.email, u.display_name, u.is_admin, u.is_banned, u.banned_at, u.created_at,
+           u.deletion_requested_at,
            q.total_allocated_tokens, q.used_tokens, q.quota_exhausted_at,
            (SELECT COUNT(*)::int FROM chat_sessions s WHERE s.user_id = u.id) AS sessions_count,
            (SELECT COUNT(*)::int FROM chat_messages m
@@ -33,6 +34,7 @@ export async function GET(req: NextRequest) {
     is_banned: boolean;
     banned_at: string | null;
     created_at: string;
+    deletion_requested_at: string | null;
     total_allocated_tokens: unknown;
     used_tokens: unknown;
     quota_exhausted_at: string | null;
@@ -49,6 +51,7 @@ export async function GET(req: NextRequest) {
       isBanned: r.is_banned,
       bannedAt: r.banned_at,
       createdAt: r.created_at,
+      deletionRequestedAt: r.deletion_requested_at,
       totalAllocatedTokens: Number(r.total_allocated_tokens ?? 0),
       usedTokens: Number(r.used_tokens ?? 0),
       quotaExhaustedAt: r.quota_exhausted_at,

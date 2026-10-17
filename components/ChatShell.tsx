@@ -12,7 +12,7 @@ import MessageList, { type LiveReplyState } from "./MessageList";
 import BottomInputBar, { type ComposerAttachment } from "./BottomInputBar";
 import ChatEndedNotice from "./ChatEndedNotice";
 import QuotaExhaustedNotice from "./QuotaExhaustedNotice";
-import AuthModal from "./AuthModal";
+import AuthModal, { DELETE_CANCELLED_KEY } from "./AuthModal";
 import RechargeModal from "./RechargeModal";
 import PlansModal from "./PlansModal";
 import VoiceStudio from "./VoiceStudio";
@@ -162,6 +162,20 @@ export default function ChatShell() {
       // تجاهل
     }
   }, []);
+
+  // لو آخر تسجيل دخول ألغى طلب حذف الحساب — أعلن المستخدم الخبر الحلو
+  useEffect(() => {
+    if (!user) return;
+    try {
+      if (localStorage.getItem(DELETE_CANCELLED_KEY) === "1") {
+        localStorage.removeItem(DELETE_CANCELLED_KEY);
+        showToast(t("toastDeletionCancelled"));
+      }
+    } catch {
+      // تجاهل
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
   const currentSessionRef = useRef<string | null>(null);
   currentSessionRef.current = currentSessionId;
   const messagesRef = useRef<ChatMessage[]>([]);

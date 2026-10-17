@@ -241,6 +241,13 @@ export function ensureSchema(): Promise<void> {
       await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_banned BOOLEAN NOT NULL DEFAULT FALSE`;
       await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_at TIMESTAMPTZ`;
 
+      // ——— حذف الحساب بمهلة: المستخدم يطلب الحذف (بسبب)، الحساب يتجمد،
+      // ولو سجل دخول تاني قبل المهلة الطلب بيتلغى. العمود بتاخد وقت الطلب
+      // والسبب بيتسجل عشان الأدمن يشوفه في قسم «حذف الحسابات» ———
+      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_requested_at TIMESTAMPTZ`;
+      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_reason TEXT`;
+      await sql`CREATE INDEX IF NOT EXISTS idx_users_deletion ON users(deletion_requested_at) WHERE deletion_requested_at IS NOT NULL`;
+
       await sql`
         CREATE TABLE IF NOT EXISTS admin_logs (
           id TEXT PRIMARY KEY,

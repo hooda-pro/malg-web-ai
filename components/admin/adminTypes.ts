@@ -13,6 +13,21 @@ export interface AdminUserRow {
   quotaExhaustedAt: string | null;
   sessionsCount: number;
   messagesCount: number;
+  /** لو محدد: الحساب مجدول للحذف (مهلة 30 يوم شغالة) */
+  deletionRequestedAt?: string | null;
+}
+
+/** صف من قايمة «حذف الحسابات» — طلبات الحذف المعلقة */
+export interface AdminDeletionRow {
+  id: string;
+  email: string;
+  displayName: string;
+  reason: string | null;
+  requestedAt: string;
+  createdAt: string;
+  sessionsCount: number;
+  messagesCount: number;
+  usedTokens: number;
 }
 
 export interface AdminSessionRow {
@@ -81,6 +96,9 @@ export const ACTION_LABELS: Record<string, string> = {
   delete_user: "حذف حساب",
   ban_user: "حظر حساب",
   unban_user: "فك حظر حساب",
+  request_account_deletion: "طلب حذف الحساب",
+  cancel_account_deletion: "رفض/إلغاء طلب حذف الحساب",
+  finalize_account_deletion: "تنفيذ حذف الحساب",
   recharge_tokens: "شحن توكنز",
   set_tokens: "تعيين رصيد",
   reset_usage: "تصفير استهلاك",
@@ -100,6 +118,9 @@ export const ACTION_LABELS: Record<string, string> = {
 /** لون كل إجراء في السجل */
 export const ACTION_COLORS: Record<string, string> = {
   delete_user: "text-danger bg-danger-soft border-hair",
+  request_account_deletion: "text-warn bg-warn-soft border-hair",
+  cancel_account_deletion: "text-live bg-live-soft border-hair",
+  finalize_account_deletion: "text-danger bg-danger-soft border-hair",
   ban_user: "text-warn bg-warn-soft border-hair",
   unban_user: "text-accent bg-accent-soft border-accent-line",
   recharge_tokens: "text-accent bg-accent-soft border-accent-line",

@@ -15,6 +15,9 @@ import {
 import { Button, Dialog, Field } from "./ui/Controls";
 import { useSettings } from "./SettingsContext";
 
+/** علامة محلية إن تسجيل الدخول ده الغى طلب حذف حساب — ChatShell بيستهلكها ويحولها توست */
+export const DELETE_CANCELLED_KEY = "mlag_deletion_cancelled";
+
 /** أيقونة جوجل الرسمية (SVG بألوانها الأصلية) */
 function GoogleIcon() {
   return (
@@ -74,6 +77,15 @@ export default function AuthModal({
     if (!res.ok) {
       setError(data.error || t("errGeneric"));
       return;
+    }
+    // لو الحساب كان مجدولًا للحذف وdowLoggedIn قبل المهلة — السيرفر ألغى الطلب؛
+    // نخزّن علامة يعرضها ChatShell كتوست مفهوم بعد الدخول.
+    if (data.deletionCancelled) {
+      try {
+        localStorage.setItem(DELETE_CANCELLED_KEY, "1");
+      } catch {
+        // تجاهل
+      }
     }
     if (data.needsProfile) {
       setName(data.user.displayName || "");

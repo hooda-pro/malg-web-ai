@@ -116,6 +116,7 @@ export default function UsersList({ onSelect }: { onSelect: (id: string) => void
                     </span>
                     {u.isAdmin && <Badge className="bg-accent-soft text-accent">أدمن</Badge>}
                     {u.isBanned && <Badge className="bg-danger-soft text-danger">محظور</Badge>}
+                    {u.deletionRequestedAt && <Badge className="bg-warn-soft text-warn">حذف مجدول</Badge>}
                   </span>
                   <span className="tnum block truncate text-[11.5px] text-ink-3" dir="ltr">
                     {u.email}

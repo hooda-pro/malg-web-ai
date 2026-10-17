@@ -4,6 +4,14 @@ import { sql, ensureSchema } from "@/lib/db";
 import { COOKIE_NAME, SESSION_COOKIE_MAX_AGE, signSession } from "@/lib/auth";
 import { verifyGoogleIdToken, saveProfileToFirestore } from "@/lib/firebaseAdmin";
 import { REGISTERED_TOKEN_QUOTA } from "@/lib/systemPrompt";
+import {
+  DELETION_ACCOUNT_EXPIRED_MESSAGE,
+  cancelAccountDeletion,
+  deletionExpired,
+  fetchPendingDeletion,
+  finalizeAccountDeletion,
+  logDeletionExpired,
+} from "@/lib/accountDeletion";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +47,7 @@ export async function POST(req: NextRequest) {
         }[]
       | undefined;
     const existing = rows?.[0];
+    let deletionCancelled = false;
 
     let row: {
       id: string;
@@ -55,6 +64,19 @@ export async function POST(req: NextRequest) {
           { error: "تم حظر هذا الحساب من إدارة المنصة — تواصل مع الدعم لو عندك استفسار." },
           { status: 403 }
         );
+      }
+      // ——— حذف الحساب بمهلة: الدخول قيد المهلة = إلغاء الطلب ———
+      const pending = await fetchPendingDeletion(existing.id);
+      if (pending) {
+        if (deletionExpired(pending.deletion_requested_at)) {
+          // انتهى الــ 30 يوم من غير دخول → الحذف النهائي بكل البيانات
+          await finalizeAccountDeletion(existing.id);
+          await logDeletionExpired(pending);
+          return NextResponse.json({ error: DELETION_ACCOUNT_EXPIRED_MESSAGE }, { status: 403 });
+        }
+        // سجل دخول قبل انتهاء المهلة → إلغاء عملية الحذف وحسابك عاد طبيعي
+        await cancelAccountDeletion(existing.id);
+        deletionCancelled = true;
       }
       // اربط الـ firebase_uid بالحساب لو أول مرة (حساب اتعمل قبل كده بنفس الإيميل)
       await sql`UPDATE users SET firebase_uid = ${identity.uid} WHERE id = ${existing.id}`;
@@ -98,7 +120,7 @@ export async function POST(req: NextRequest) {
     };
     const token = signSession(user);
 
-    const res = NextResponse.json({ user, needsProfile: !row.profile_complete });
+    const res = NextResponse.json({ user, needsProfile: !row.profile_complete, deletionCancelled });
     res.cookies.set(COOKIE_NAME, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

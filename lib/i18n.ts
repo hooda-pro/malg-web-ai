@@ -277,6 +277,26 @@ const ar: Dict = {
   emailLabel: "البريد الإلكتروني",
   displayNameLabel: "الاسم",
   logoutHint: "تسجيل الخروج من الجهاز ده",
+
+  // حذف الحساب — جدولة الحذف بمهلة 30 يوم
+  deleteAccountTitle: "حذف الحساب",
+  deleteAccountHint:
+    "جدولة حذف نهائي كل محادثاتك وبياناتك بعد 30 يوم من عدم الدخول — ولو دخلت تاني قبل المهلة العملية بتتالغى تلقائيًا.",
+  deletionIntro:
+    "قبل ما ننفذ، عايزين نعرف سبب الحذف — بيساعدنا نطوّر المنصة. بعدين الحساب بيتجمد 30 يوم: خلال المدة لو سجّلت الدخول أي مرة، الطلب بيتلغى وحسابك بيرجع زي ما كان بالظبط. لو عدّى الـ 30 يوم من غير أي دخول، الحساب وكل محادثاته وبياناته بيتحذف نهائيًا ومفيش استرجاع.",
+  deletionReasonLabel: "إيه سبب حذف الحساب؟",
+  deletionReasonPh: "اكتب سببك هنا (على الأقل 10 حروف) — بيوصل للدعم ولوحة الإدارة…",
+  deletionAck:
+    "فاهم إن الحذف نهائي بعد مهلة الـ 30 يوم لو مستسجلش دخول، ومفيش استرجاع بعد التنفيذ.",
+  deletionRequestBtn: "اطلب حذف الحساب",
+  deletionScheduledTitle: "سيتم حذف حسابك بعد 30 يوم",
+  deletionScheduledLine1: "طلب الحذف اتسجل، وكل بياناتك هتتحذف نهائيًا بتاريخ",
+  deletionScheduledCancelNote:
+    "لو سجّلت الدخول تاني قبل التاريخ ده، عملية الحذف هتتلغى لوحدها وبياناتك هترجع زي ما كانت.",
+  deletionScheduledSupportNote:
+    "الدعم شايف طلبك وسببك في لوحة الإدارة، ولو حابب تراجع قبل المهلة سجّل دخول بسهولة.",
+  deletionLogoutBtn: "تسجيل خروج دلوقتي",
+  toastDeletionCancelled: "تم إلغاء طلب حذف حسابك — حسابك رجع زي ما كان بالظبط 🎉",
   usageTitle: "رصيد الشات",
   usageUsed: "{used} مستخدم من {total}",
   usageRemaining: "متبقي",
@@ -605,6 +625,26 @@ const en: Dict = {
   emailLabel: "Email",
   displayNameLabel: "Name",
   logoutHint: "Sign out on this device",
+
+  // Deleting an account — a 30-day grace period
+  deleteAccountTitle: "Delete account",
+  deleteAccountHint:
+    "Schedules a permanent deletion of all your chats and data after 30 days of no sign-in — logging in again before the deadline cancels it automatically.",
+  deletionIntro:
+    "Before we proceed, tell us why you're leaving — it helps us improve. Your account then goes dormant for 30 days: during that window, any sign-in cancels the deletion and restores everything exactly as it was. If 30 days pass without any sign-in, the account and all of its chats and data are permanently erased with no recovery.",
+  deletionReasonLabel: "Why are you deleting your account?",
+  deletionReasonPh: "Write your reason here (at least 10 characters) — it goes to support and the admin panel…",
+  deletionAck:
+    "I understand the deletion is permanent after the 30-day window if I don't sign in, and nothing can be recovered afterwards.",
+  deletionRequestBtn: "Request account deletion",
+  deletionScheduledTitle: "Your account will be deleted in 30 days",
+  deletionScheduledLine1: "Your deletion request is recorded — all your data will be permanently erased on",
+  deletionScheduledCancelNote:
+    "If you sign in again before that date, the deletion cancels itself and your data stays exactly as it is.",
+  deletionScheduledSupportNote:
+    "Support can see your request and reason in the admin panel.",
+  deletionLogoutBtn: "Sign out now",
+  toastDeletionCancelled: "Your account deletion has been cancelled — everything is back exactly as it was 🎉",
   usageTitle: "Chat credits",
   usageUsed: "{used} used of {total}",
   usageRemaining: "Remaining",
@@ -910,6 +950,26 @@ const fr: Dict = {
   emailLabel: "E-mail",
   displayNameLabel: "Nom",
   logoutHint: "Se déconnecter sur cet appareil",
+
+  // Suppression de compte — délai de grâce de 30 jours
+  deleteAccountTitle: "Supprimer le compte",
+  deleteAccountHint:
+    "Programme une suppression définitive de tous vos chats et données après 30 jours sans connexion — se reconnecter avant le délai annule tout automatiquement.",
+  deletionIntro:
+    "Avant d'aller plus loin, dites-nous pourquoi vous partez — cela nous aide à améliorer la plateforme. Votre compte sera ensuite en sommeil pendant 30 jours : pendant cette période, toute connexion annule la suppression et tout revient exactement comme avant. Si 30 jours passent sans connexion, le compte et toutes ses données seront définitivement effacés, sans récupération.",
+  deletionReasonLabel: "Pourquoi supprimez-vous votre compte ?",
+  deletionReasonPh: "Écrivez votre raison ici (au moins 10 caractères) — accessible au support et à la console admin…",
+  deletionAck:
+    "Je comprends que la suppression est définitive après le délai de 30 jours sans connexion, et qu'aucune récupération n'est possible après l'exécution.",
+  deletionRequestBtn: "Demander la suppression du compte",
+  deletionScheduledTitle: "Votre compte sera supprimé dans 30 jours",
+  deletionScheduledLine1: "Votre demande est enregistrée — toutes vos données seront définitivement effacées le",
+  deletionScheduledCancelNote:
+    "Si vous vous reconnectez avant cette date, la suppression s'annule automatiquement et vos données restent intactes.",
+  deletionScheduledSupportNote:
+    "Le support peut voir votre demande et votre raison dans la console d'administration.",
+  deletionLogoutBtn: "Se déconnecter maintenant",
+  toastDeletionCancelled: "La suppression de votre compte a été annulée — tout est de retour exactement comme avant 🎉",
   usageTitle: "Crédits de chat",
   usageUsed: "{used} utilisés sur {total}",
   usageRemaining: "Restant",
@@ -1215,6 +1275,26 @@ const es: Dict = {
   emailLabel: "Correo",
   displayNameLabel: "Nombre",
   logoutHint: "Cerrar sesión en este dispositivo",
+
+  // Eliminación de cuenta — período de gracia de 30 días
+  deleteAccountTitle: "Eliminar cuenta",
+  deleteAccountHint:
+    "Programa una eliminación definitiva de todos tus chats y datos tras 30 días sin iniciar sesión; si inicias sesión de nuevo antes del plazo, se cancela automáticamente.",
+  deletionIntro:
+    "Antes de continuar, cuéntanos por qué vas a eliminar tu cuenta; nos ayuda a mejorar. Tu cuenta quedará inactiva durante 30 días: durante ese tiempo, si inicias sesión, la solicitud se cancela y todo vuelve exactamente como estaba. Si pasan 30 días sin iniciar sesión, la cuenta y todos sus datos se borran de forma permanente, sin posibilidad de recuperación.",
+  deletionReasonLabel: "¿Por qué eliminas tu cuenta?",
+  deletionReasonPh: "Escribe tu motivo aquí (al menos 10 caracteres) — llega al soporte y al panel admin…",
+  deletionAck:
+    "Entiendo que la eliminación es definitiva tras el período de 30 días si no inicio sesión, y que no habrá recuperación después de ejecutarse.",
+  deletionRequestBtn: "Solicitar eliminación de la cuenta",
+  deletionScheduledTitle: "Tu cuenta se eliminará en 30 días",
+  deletionScheduledLine1: "Tu solicitud está registrada; todos tus datos se eliminarán definitivamente el",
+  deletionScheduledCancelNote:
+    "Si inicias sesión de nuevo antes de esa fecha, la eliminación se cancela automáticamente y tus datos quedan como están.",
+  deletionScheduledSupportNote:
+    "El soporte puede ver tu solicitud y tu motivo en el panel de administración.",
+  deletionLogoutBtn: "Cerrar sesión ahora",
+  toastDeletionCancelled: "La eliminación de tu cuenta ha sido cancelada — todo está exactamente como antes 🎉",
   usageTitle: "Saldo del chat",
   usageUsed: "{used} usados de {total}",
   usageRemaining: "Restante",
