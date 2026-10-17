@@ -316,6 +316,9 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   const modelDisplayName = modelCfg?.displayName ?? "MALG AI";
   const costMult = modelCfg && Number.isFinite(modelCfg.costMultiplier) && modelCfg.costMultiplier > 0 ? modelCfg.costMultiplier : 1;
   const videoNative = modelCfg?.supportsVideo === true;
+  // الصوت الحقيقي (input_audio) مربوط بنفس علم «المايك» اللي بيزوده الأدمن لموديل معين:
+  // لو الموديل بيدعم المايك، يبقى بيدعم سماع التسجيلات الصوتية كذلك.
+  const audioNative = modelCfg?.supportsMic === true;
 
   // حقائق المستخدم المحفوظة — قراءة DB رخيصة، وفشلها لا يوقف الرد.
   const { getTopFacts, buildFactsBlock } = await import("@/lib/facts");
@@ -352,7 +355,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   windowMsgs.forEach((m, i) => {
     if (m.role !== "user") return;
     lastUserIdx = i;
-    if (extractAttachmentsMeta(m.content).attachments.some((a) => (a.kind === "image" && (a.previewUrl || a.remoteUrl)) || (a.kind === "video" && (a.frames?.length ?? 0) > 0))) lastImageIdx = i;
+    if (extractAttachmentsMeta(m.content).attachments.some((a) => (a.kind === "image" && (a.previewUrl || a.remoteUrl)) || (a.kind === "video" && (a.frames?.length ?? 0) > 0) || ((a.kind === "image" || a.kind === "video" || a.kind === "audio") && !!a.audioUrl))) lastImageIdx = i;
   });
 
   const apiMessages: ApiMessage[] = [
@@ -367,6 +370,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
               inlineBudgetChars: i === lastUserIdx ? API_INLINE_TOTAL_MAX_CHARS : OLDER_INLINE_BUDGET_CHARS,
               includeImages: i === lastImageIdx,
               videoNative,
+              audioNative,
             })
           : extractAgentStepsMeta(m.content).visibleText,
     })),

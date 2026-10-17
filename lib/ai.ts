@@ -45,7 +45,8 @@ export function normalizeModelId(_raw: unknown): ModelId {
 export type ApiContentPart =
   | { type: "text"; text: string }
   | { type: "image_url"; image_url: { url: string } }
-  | { type: "video_url"; video_url: { url: string } };
+  | { type: "video_url"; video_url: { url: string } }
+  | { type: "input_audio"; input_audio: { data: string; format: string } };
 
 export interface ApiMessage {
   role: string;
@@ -104,6 +105,7 @@ function apiContentToText(content: string | ApiContentPart[]): string {
       if (p.type === "text") return p.text;
       if (p.type === "image_url") return "[image]";
       if (p.type === "video_url") return "[video]";
+      if (p.type === "input_audio") return "[voice]";
       return "";
     })
     .join("\n");
@@ -114,13 +116,23 @@ function apiContentToResponsesContent(
 ): string | Array<{ type: string; text?: string; image_url?: string }> {
   if (typeof content === "string") return content;
   if (content.length === 0) return "";
-  // لو كله نص، ابعته كنص مدمج (أبسط وأوسع توافقًا)
+  // لو كله نص، ابعته كنص مدمج (أبسط وأوسع توافقًا) — الصور/الصوت بتتحول لعلامة نصية
   const hasImage = content.some((p) => p.type === "image_url");
-  if (!hasImage) return content.map((p) => (p.type === "text" ? p.text : "")).join("\n");
+  if (!hasImage) {
+    return content
+      .map((p) => {
+        if (p.type === "text") return p.text;
+        if (p.type === "input_audio") return "[voice recording]";
+        return "";
+      })
+      .join("\n");
+  }
   return content.map((p) => {
     if (p.type === "text") return { type: "input_text", text: p.text };
     if (p.type === "image_url") return { type: "input_image", image_url: p.image_url.url };
-    return { type: "input_text", text: "[video]" };
+    // الصوت في بروتوكول Responses مش مضمون على كل المزوّدين — بنحوّله سطر نصي
+    // بدل ما نبعت part غريب يرمي 400. بروتوكول chat_completions هو اللي بيبعت الصوت الأصلي.
+    return { type: "input_text", text: "[voice recording]" };
   });
 }
 

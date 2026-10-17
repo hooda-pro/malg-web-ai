@@ -1,5 +1,5 @@
 /**
- * مرفقات الشات (صور + فيديو + ملفات نصية/كود/PDF/مضغوطة):
+ * مرفقات الشات (صور + فيديو + تسجيلات صوتية + ملفات نصية/كود/PDF/مضغوطة):
  * - الصور: بتترفع كـ data URI، وبتتعرض للمستخدم في فقاعته، وكمان بتتبعت فعليًا
  *   للموديل كصورة حقيقية (مش بس اسمها) — Token Harbor / DeepSeek V4.1 Flash
  *   بيدعم رؤية (vision) فعلاً، شوف buildApiMessageContent تحت وlib/ai.ts.
@@ -15,7 +15,7 @@
 
 import type { ProjectFile } from "./parseContent";
 
-export type AttachmentKind = "image" | "text" | "video";
+export type AttachmentKind = "image" | "text" | "video" | "audio";
 
 export interface PendingAttachment {
   id: string;
@@ -562,6 +562,9 @@ export interface StoredAttachmentMeta {
   frames?: { url: string; at: number }[];
   durationSec?: number;
   videoUrl?: string;
+  /** تسجيل صوتي (kind: "audio" من التطبيق): data:audio/... base64 جاهز لبثّه للموديل
+   * كـ input_audio — من التطبيق مباشرة، أو بعد ما السيرفر يسترجع remoteUrl. */
+  audioUrl?: string;
 }
 
 interface AttachmentLike {
@@ -644,7 +647,25 @@ export function extractAttachmentsPromptSection(text: string): {
 export type ApiContentPart =
   | { type: "text"; text: string }
   | { type: "image_url"; image_url: { url: string } }
-  | { type: "video_url"; video_url: { url: string } };
+  | { type: "video_url"; video_url: { url: string } }
+  | { type: "input_audio"; input_audio: { data: string; format: string } };
+
+/**
+ * بيحلل data URL صوتي (data:audio/...) ويرجّع الـ base64 + الصيغة بصيغة input_audio
+ * القياسية (wav / mp3) — null لو مش data URL صالح.
+ */
+export function audioDataUrlParts(
+  dataUrl: string
+): { base64: string; format: "wav" | "mp3" } | null {
+  if (!dataUrl || !dataUrl.startsWith("data:")) return null;
+  const i = dataUrl.indexOf("base64,");
+  if (i < 0) return null;
+  const sep = dataUrl.indexOf(";", 5);
+  const mime = (sep > 5 ? dataUrl.slice(5, sep) : "").toLowerCase();
+  const format: "wav" | "mp3" = mime.includes("mp3") || mime.includes("mpeg") ? "mp3" : "wav";
+  const base64 = dataUrl.slice(i + 7);
+  return base64.length > 150 ? { base64, format } : null;
+}
 
 // ---------------------------------------------------------------------------
 // قراءة الملفات المرفقة من النص المخزّن
@@ -733,7 +754,10 @@ export interface ApiContentOptions {
   /** ميزانية الحروف اللي مسموح تتحط inline من الملفات الصغيرة في الرسالة دي (0 = قايمة أسماء بس). */
   inlineBudgetChars?: number;
   videoNative?: boolean;
-  /** false → الصور مبتتبعتش (بتتحول لسطر نصي) — لرسايل قديمة عشان نوفر توكنز. */
+  /** الموديل بيسمع التسجيلات الصوتية فعليًا — بتتبعت كـ input_audio (مربوط بعلم «المايك» للـ
+   * موديل من لوحة الأدمن). false = السلوك القديم: الصوت يتجاهل تمامًا. */
+  audioNative?: boolean;
+  /** false → الصور (والصوت) مبتتبعتش (بتتحول لسطر نصي) — لرسايل قديمة عشان نوفر توكنز. */
   includeImages?: boolean;
 }
 
@@ -765,6 +789,8 @@ export function buildFilesManifest(files: AttachedFile[], inlinedPaths: Set<stri
  *   يقرا اللي محتاجه بأداة read_file. ده اللي بيمنع رسالة فيها zip من إنها تاكل
  *   100 ألف توكن في كل نداء.
  * - الصور: بتتبعت كصورة حقيقية بس لو includeImages (آخر رسالة فيها صور).
+ * - التسجيلات الصوتية من التطبيق: بتتبعت كـ input_audio (صوت حقيقي يسمعه الموديل)
+ *   بس لو audioNative مفعّلة (علم «المايك» للموديل من الأدمن) — ودي آخر رسالة فيها وسائط.
  */
 export function toApiUserContent(content: string, opts: ApiContentOptions = {}): string | ApiContentPart[] {
   const inlineBudget = opts.inlineBudgetChars ?? 0;
@@ -806,17 +832,30 @@ export function toApiUserContent(content: string, opts: ApiContentOptions = {}):
   const videos = attachments.filter(
     (a) => a.kind === "video" && ((a.frames && a.frames.length > 0) || !!a.remoteUrl)
   );
-  if (images.length === 0 && videos.length === 0) return text;
+  // التسجيلات الصوتية: بتتبعت للموديل كـ input_audio بس لو الموديل مدعوم («المايك» متفعّل له)،
+  // وبيانات الصوت لازم تكون متاحة (audioUrl = data:base64). remoteUrl لوحده مش كفاية هنا
+  // لأن التحويل لـ inline بيحصل في materializeRemoteAttachments قبل نداء الموديل.
+  // (فحص رخيص هنا — التحليل الكامل لبيانات الصوت بيحصل مرة واحدة تحت عند بناء الـ parts.)
+  const audioNative = opts.audioNative === true;
+  const audios = audioNative
+    ? attachments.filter((a) => {
+        if (a.kind !== "audio") return false;
+        const u = a.audioUrl ?? "";
+        return u.startsWith("data:") && u.indexOf("base64,") > 0 && u.length > 200;
+      })
+    : [];
+  if (images.length === 0 && videos.length === 0 && audios.length === 0) return text;
   const videoNative = opts.videoNative === true;
 
   if (!includeImages) {
     const bits = [
       ...images.map((a) => a.name),
       ...videos.map((v) => `${v.name} (video)`),
+      ...audios.map((a) => `${a.name} (تسجيل صوتي)`),
     ];
-    const total = images.length + videos.reduce((n, v) => n + (v.frames?.length ?? 0), 0);
+    const total = images.length + videos.reduce((n, v) => n + (v.frames?.length ?? 0), 0) + audios.length;
     const names = bits.join(", ");
-    return `${text}\n\n[المستخدم كان بعت ${total} صورة/لقطة (${names}) في رسالة قديمة — اتشالت من السياق لتوفير التوكنز]`.trim();
+    return `${text}\n\n[المستخدم كان بعت ${total} مرفق وسائط (صور/فيديو/صوت) (${names}) في رسالة قديمة — اتشالت من السياق لتوفير التوكنز]`.trim();
   }
 
   let labeledText = text;
@@ -832,6 +871,14 @@ export function toApiUserContent(content: string, opts: ApiContentOptions = {}):
     });
     labeledText = `${text}\n\n${lines.join("\n")}`.trim();
   }
+  if (audios.length > 0) {
+    const lines = audios.map(
+      (a) =>
+        `The user attached a VOICE RECORDING ("${a.name}", ${a.durationSec ?? 0}s) - the following input_audio part is its complete audio. ` +
+        `ACTUALLY LISTEN to it: the spoken words are the real message content (the typed text may be empty). Never invent words that were not said.`
+    );
+    labeledText = `${labeledText}\n\n${lines.join("\n")}`.trim();
+  }
 
   const parts: ApiContentPart[] = [{ type: "text", text: labeledText }];
   for (const a of attachments) {
@@ -845,6 +892,11 @@ export function toApiUserContent(content: string, opts: ApiContentOptions = {}):
       } else if (a.remoteUrl) {
         parts.push({ type: "video_url", video_url: { url: a.remoteUrl } });
       }
+    } else if (a.kind === "audio") {
+      // الصوت بيتبعت كـ input_audio (صيغة OpenAI القياسية للصوت الجاهز). الفلتر في أول الدالة
+      // (audioDataUrlParts) مكان هو اللي بيختبر الصلاحية، فأي تسجيل وصل هنا = data URL سليم.
+      const p = audioDataUrlParts(a.audioUrl ?? "");
+      if (p) parts.push({ type: "input_audio", input_audio: { data: p.base64, format: p.format } });
     }
   }
   return parts;
@@ -867,6 +919,7 @@ export function apiUserContentLength(content: string | ApiContentPart[]): { char
   for (const p of content) {
     if (p.type === "text") chars += p.text.length;
     else if (p.type === "video_url") images += 8;
+    else if (p.type === "input_audio") images += 8; // تقدير — الصوت الحقيقي بيحتسب بالمزوّد نفسه
     else images += 1;
   }
   return { chars, images };
@@ -1044,6 +1097,19 @@ export async function materializeRemoteAttachments(content: string): Promise<str
         });
       }
       continue;
+    }
+    if (a.kind === "audio") {
+      // التسجيل الصوتي من التطبيق (remoteUrl): بيتسحب وبيتحول data URL base64 جاهز
+      // يبثّه toApiUserContent للموديل كـ input_audio. remoteUrl بيفضل موجود للعرض/التشغيل.
+      if (fetched.buf.byteLength <= REMOTE_FILE_MAX_BYTES) {
+        const mime = fetched.contentType.startsWith("audio/")
+          ? fetched.contentType.split(";")[0]
+          : a.name.toLowerCase().endsWith(".mp3")
+            ? "audio/mpeg"
+            : "audio/wav";
+        a.audioUrl = `data:${mime};base64,${fetched.buf.toString("base64")}`;
+      }
+      continue; // لو أكبر من السقف بيفضل رابطًا (للعرض بس) وميبعتش للموديل
     }
     // video: بيفضل رابطًا (رفع الفيديو موقوف من الواجهة أصلًا)
   }

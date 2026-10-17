@@ -167,6 +167,7 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
   const continueCfg = await getModelProvider(model).catch(() => null);
   const modelDisplayName = continueCfg?.displayName ?? "MALG AI";
   const videoNative = continueCfg?.supportsVideo === true;
+  const audioNative = continueCfg?.supportsMic === true;
 
   // حقائق المستخدم المحفوظة — الرد المكمَّل يشوف نفس السياق.
   const { getTopFacts, buildFactsBlock } = await import("@/lib/facts");
@@ -188,7 +189,7 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
       win.forEach((m, i) => {
         if (m.role !== "user") return;
         lastUser = i;
-        if (extractAttachmentsMeta(m.content).attachments.some((a) => (a.kind === "image" && a.previewUrl) || (a.kind === "video" && (a.frames?.length ?? 0) > 0))) lastImage = i;
+        if (extractAttachmentsMeta(m.content).attachments.some((a) => (a.kind === "image" && a.previewUrl) || (a.kind === "video" && (a.frames?.length ?? 0) > 0) || ((a.kind === "image" || a.kind === "video" || a.kind === "audio") && !!a.audioUrl))) lastImage = i;
       });
       return win.map((m, i) => ({
         role: m.role,
@@ -198,6 +199,7 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
                 inlineBudgetChars: i === lastUser ? API_INLINE_TOTAL_MAX_CHARS : 8_000,
                 includeImages: i === lastImage,
                 videoNative,
+                audioNative,
               })
             : m.content,
       }));
