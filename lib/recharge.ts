@@ -20,12 +20,12 @@ export interface RechargePackage {
   badge?: string;
 }
 
-/** باقات شحن التوكنز — مليون توكنز = 30 جنيه تقريبًا مع خصم على الباقات الأكبر */
+/** باقات شحن التوكنز — كل مليون توكنز = 120 جنيه بالظبط */
 export const RECHARGE_PACKAGES: RechargePackage[] = [
   {
     id: "starter",
     tokens: 250_000,
-    price: 10,
+    price: 30,
     emoji: "🌱",
     label: "باقة البداية",
     hint: "250 ألف توكنز — تكفي تجارب واستخدام خفيف",
@@ -33,7 +33,7 @@ export const RECHARGE_PACKAGES: RechargePackage[] = [
   {
     id: "plus",
     tokens: 500_000,
-    price: 18,
+    price: 60,
     emoji: "⚡",
     label: "باقة بلس",
     hint: "نص مليون توكنز — رصيد أساسي قوي",
@@ -41,7 +41,7 @@ export const RECHARGE_PACKAGES: RechargePackage[] = [
   {
     id: "pro",
     tokens: 1_000_000,
-    price: 30,
+    price: 120,
     emoji: "🔥",
     label: "باقة برو",
     hint: "مليون توكنز كاملة — استخدم براحتك",
@@ -50,11 +50,11 @@ export const RECHARGE_PACKAGES: RechargePackage[] = [
   {
     id: "legend",
     tokens: 2_500_000,
-    price: 65,
+    price: 300,
     emoji: "👑",
     label: "باقة الأسطورة",
-    hint: "2.5 مليون توكنز — أوفر باقة على الإطلاق",
-    badge: "أفضل قيمة",
+    hint: "2.5 مليون توكنز — أكبر رصيد دفعة واحدة",
+    badge: "أكبر باقة",
   },
 ];
 
