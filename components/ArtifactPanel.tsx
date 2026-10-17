@@ -31,6 +31,15 @@ const PANEL_W_MAX = 72;
 const clampPct = (v: number) =>
   Number(Math.min(PANEL_W_MAX, Math.max(PANEL_W_MIN, v)).toFixed(2));
 
+/** بيانات لحظة التأليف أثناء سحب فاصل المعاينة */
+interface ResizeDragState {
+  /** طرف المعاينة الثابت أثناء الشد (اللي مش الفاصل) */
+  panelLeft: number;
+  panelRight: number;
+  /** RTL = المعاينة جنب الشمال، LTR = جنب اليمين */
+  isRTL: boolean;
+}
+
 function downloadTextFile(name: string, content: string) {
   const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -155,9 +164,9 @@ export default function ArtifactPanel({
   const [widthPct, setWidthPct] = useState(PANEL_W_DEFAULT);
   const [resizing, setResizing] = useState(false);
   const panelRef = useRef<HTMLElement>(null);
-  const dragState = useRef<{ startX: number; startW: number } | null>(null);
+  const dragState = useRef<ResizeDragState | null>(null);
 
-  // الفاصل المحفوظه من كل مرة سحب
+  // استرجاع آخر عرض محفوظ من السحب السابق
   useEffect(() => {
     try {
       const saved = localStorage.getItem(PANEL_W_KEY);
@@ -188,7 +197,15 @@ export default function ArtifactPanel({
     if (e.pointerType === "mouse" && e.button !== 0) return;
     const el = panelRef.current;
     if (!el) return;
-    dragState.current = { startX: e.clientX, startW: el.getBoundingClientRect().width };
+    const rect = el.getBoundingClientRect();
+    // اتجاه اللغة من الواقع مش مفترض: في RTL المعاينة على الشمال وفاصلها
+    // على ضلعها اليمين، وفي LTR بالعكس — الفاصل بيتحرك ويتبع المؤشر مباشرة.
+    const isRTL = getComputedStyle(el).direction !== "ltr";
+    dragState.current = {
+      panelLeft: rect.left,
+      panelRight: rect.right,
+      isRTL,
+    };
     setResizing(true);
     document.body.classList.add("mlag-resizing");
     try {
@@ -202,10 +219,11 @@ export default function ArtifactPanel({
     const d = dragState.current;
     if (!d) return;
     const vw = window.innerWidth || 1440;
-    // سحب لليسار = توسيع المعاينة (شغالة زي دي في RTL و LTR لأن الفاصل
-    // بيقع على الحد الداخلي (inline-start) للمعاينة في الاتنين)
-    const delta = d.startX - e.clientX;
-    setWidthPct(clampPct(((d.startW + delta) / vw) * 100));
+    // العرض بيحسبه من مكان المؤشر بالنسبة للطرف الثابت للمعاينة:
+    // RTL: الطرف الثابت شمال (يسار الصفحة) → العرض = المؤشر - الشمال
+    // LTR: الطرف الثابت يمين الصفحة → العرض = اليمين - المؤشر
+    const widthPx = d.isRTL ? e.clientX - d.panelLeft : d.panelRight - e.clientX;
+    setWidthPct(clampPct((Math.max(widthPx, 0) / vw) * 100));
   };
 
   const endResize = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -227,8 +245,9 @@ export default function ArtifactPanel({
     const step = e.shiftKey ? 6 : 2;
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
       e.preventDefault();
-      // سهم شمال = توسيع (نفس منطق السحب لليسار)
-      const dir = e.key === "ArrowLeft" ? 1 : -1;
+      // زي السحب: السهم بيحرك "حد المعاينة" في نفس الاتجاه الفعلي للغة
+      const rtl = getComputedStyle(panelRef.current ?? document.body).direction !== "ltr";
+      const dir = (e.key === "ArrowLeft" ? 1 : -1) * (rtl ? -1 : 1);
       setClampedWidth(widthPct + dir * step);
     }
   };
