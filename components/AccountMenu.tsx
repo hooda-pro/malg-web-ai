@@ -59,6 +59,8 @@ export default function AccountMenu({
   onOpenPlans,
   onOpenShortcuts,
   onLogout,
+  /** (موبايل = false): يخفي شرائح Ctrl/, وسطر «الاختصارات» — دي كلام كمبيوتر وكيبورد */
+  showShortcuts = true,
 }: {
   user: SessionUser;
   quota: { total: number; used: number } | null;
@@ -68,6 +70,7 @@ export default function AccountMenu({
   onOpenPlans: () => void;
   onOpenShortcuts: () => void;
   onLogout: () => void;
+  showShortcuts?: boolean;
 }) {
   const { t, theme, setTheme } = useSettings();
   const [open, setOpen] = useState(false);
@@ -197,23 +200,27 @@ export default function AccountMenu({
               label={t("menuSettings")}
               onSelect={run(() => onOpenSettings("general"))}
               trailing={
-                <span className="flex items-center gap-1">
-                  <Kbd>{mod}</Kbd>
-                  <Kbd>,</Kbd>
-                </span>
+                showShortcuts ? (
+                  <span className="flex items-center gap-1">
+                    <Kbd>{mod}</Kbd>
+                    <Kbd>,</Kbd>
+                  </span>
+                ) : undefined
               }
             />
-            <MenuItem
-              icon={<Keyboard size={16} />}
-              label={t("menuShortcuts")}
-              onSelect={run(onOpenShortcuts)}
-              trailing={
-                <span className="flex items-center gap-1">
-                  <Kbd>{mod}</Kbd>
-                  <Kbd>/</Kbd>
-                </span>
-              }
-            />
+            {showShortcuts && (
+              <MenuItem
+                icon={<Keyboard size={16} />}
+                label={t("menuShortcuts")}
+                onSelect={run(onOpenShortcuts)}
+                trailing={
+                  <span className="flex items-center gap-1">
+                    <Kbd>{mod}</Kbd>
+                    <Kbd>/</Kbd>
+                  </span>
+                }
+              />
+            )}
           </MenuGroup>
 
           <div className="flex items-center justify-between gap-3 border-t border-hair px-3.5 py-2.5">

@@ -376,6 +376,7 @@ export default function ChatDrawer({
               onOpenPlans={onOpenPlans}
               onOpenShortcuts={onOpenShortcuts}
               onLogout={onLogout}
+              showShortcuts={false}
             />
           ) : (
             <Button variant="primary" onClick={onOpenAuth} className="w-full">

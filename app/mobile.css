@@ -669,11 +669,21 @@
     box-shadow: 0 14px 32px -18px rgba(0, 0, 0, 0.8), var(--highlight);
   }
   .m-topbar button {
-    min-height: 40px;
-    min-width: 40px;
+    min-height: 0;
+    min-width: 0;
   }
   .m-topbar button:active {
     transform: scale(0.9);
+  }
+  /* نوسّع نطاق اللمس بدون تكبر الشكل — الايقونة تفضل في مركزها بالظبط */
+  .m-topbar button:not([class*="absolute"]) {
+    position: relative;
+  }
+  .m-topbar button:not([class*="absolute"])::after {
+    content: "";
+    position: absolute;
+    inset: -6px;
+    border-radius: inherit;
   }
   /* أسماء الموديلات الطويلة متزعش الكبسولة */
   .m-topbar button > span[dir="ltr"] {
@@ -748,6 +758,10 @@
   .m-drawer nav {
     overscroll-behavior-y: contain;
   }
+  /* شرائح مفاتيح الكيبورد (Ctrl , …) — كلام كمبيوتر، متتشالش من الموبايل */
+  .m-drawer kbd {
+    display: none !important;
+  }
 
   /* الفقاعة بتاعة المستخدم: اسمها "رسالتي" — تدرّج لون أكجنت + ذيل */
   .m-msg .msg-in.bg-surface-3,
@@ -792,9 +806,21 @@
   .m-composer [class*="max-h-"] {
     max-height: 34dvh;
   }
+  /* أزرار الكومبوزر: مفيش تفرض أبعاد — التكبير min-* كان يزوّع الايقونة
+     من مركزها (الازرار المثبّتة bottom-2/left-2 بتنزف لفوق ولليمين).
+     البديل: نوسّع نطاق اللمس بـ hit area غير مرئي حوالي الشكل الأصلي. */
   .m-composer button {
-    min-height: 44px;
-    min-width: 44px;
+    min-height: 0;
+    min-width: 0;
+  }
+  .m-composer button:not([class*="absolute"]) {
+    position: relative;
+  }
+  .m-composer button:not([class*="absolute"])::after {
+    content: "";
+    position: absolute;
+    inset: -7px;
+    border-radius: inherit;
   }
   .m-composer .btn-send {
     width: 46px;
@@ -814,7 +840,17 @@
     max-width: 100%;
   }
   .m-msg button {
-    min-height: 40px;
+    min-height: 0;
+    min-width: 0;
+  }
+  .m-msg button:not([class*="absolute"]) {
+    position: relative;
+  }
+  .m-msg button:not([class*="absolute"])::after {
+    content: "";
+    position: absolute;
+    inset: -7px;
+    border-radius: inherit;
   }
 
   /* الدايالوجات: شيتات من تحت بنزة + زجاج */
