@@ -19,6 +19,7 @@ import VoiceStudio from "./VoiceStudio";
 import type { SubscriptionInfo } from "@/lib/plans";
 import ArtifactPanel from "./ArtifactPanel";
 import SettingsModal from "./SettingsModal";
+import AccountDeletionScreen from "./AccountDeletionScreen";
 import ShortcutsDialog from "./ShortcutsDialog";
 import Toast from "./Toast";
 import WelcomeHero from "./WelcomeHero";
@@ -107,6 +108,8 @@ export default function ChatShell() {
   const [authChecked, setAuthChecked] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  /** شاشة حذف الحساب الكاملة (فول سكرين) — بتتفتح من الإعدادات وبتعيش بعد الخروج */
+  const [deletionScreenOpen, setDeletionScreenOpen] = useState(false);
 
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -598,7 +601,7 @@ export default function ChatShell() {
     }
   };
 
-  const handleLogout = async () => {
+  const handleLogout = async (opts?: { skipAuthModal?: boolean }) => {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } finally {
@@ -609,13 +612,17 @@ export default function ChatShell() {
       }
       setUser(null);
       setDrawerOpen(false);
-      setShowAuthModal(true);
+      // في تدفق حذف الحساب مش بنفتح شاشة تسجيل الدخول تلقائيًا
+      if (!opts?.skipAuthModal) {
+        setShowAuthModal(true);
+      }
     }
   };
 
   const handleAuthenticated = (u: SessionUser) => {
     setUser(u);
     setShowAuthModal(false);
+    setDeletionScreenOpen(false);
   };
 
   const handleNameUpdated = (newName: string) => {
@@ -1439,10 +1446,20 @@ export default function ChatShell() {
           onClose={() => setSettingsTab(null)}
           onNameUpdated={handleNameUpdated}
           onLogout={handleLogout}
+          onOpenAccountDeletion={() => setDeletionScreenOpen(true)}
           onOpenRecharge={openRecharge}
           onOpenPlans={openPlans}
           onClearAll={handleClearAll}
           onToast={showToast}
+        />
+      )}
+
+      {deletionScreenOpen && (
+        <AccountDeletionScreen
+          open
+          email={user?.email ?? null}
+          onClose={() => setDeletionScreenOpen(false)}
+          onAutoLogout={() => void handleLogout({ skipAuthModal: true })}
         />
       )}
 

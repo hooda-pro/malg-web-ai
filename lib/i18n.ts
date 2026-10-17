@@ -288,14 +288,17 @@ const ar: Dict = {
   deletionReasonPh: "اكتب سببك هنا (على الأقل 10 حروف) — بيوصل للدعم ولوحة الإدارة…",
   deletionAck:
     "فاهم إن الحذف نهائي بعد مهلة الـ 30 يوم لو مستسجلش دخول، ومفيش استرجاع بعد التنفيذ.",
-  deletionRequestBtn: "اطلب حذف الحساب",
+  deletionConfirmBtn: "تأكيد الحذف",
+  close: "إغلاق",
+  deletionAccountLine: "الحساب اللي هيتحذف:",
+  deletionAutoLogoutNote:
+    "بعد ما تدوس تأكيد الحذف: هيتعمل تسجيل خروج تلقائي فورًا والحساب يتجمد لمدة 30 يوم.",
   deletionScheduledTitle: "سيتم حذف حسابك بعد 30 يوم",
   deletionScheduledLine1: "طلب الحذف اتسجل، وكل بياناتك هتتحذف نهائيًا بتاريخ",
   deletionScheduledCancelNote:
     "لو سجّلت الدخول تاني قبل التاريخ ده، عملية الحذف هتتلغى لوحدها وبياناتك هترجع زي ما كانت.",
   deletionScheduledSupportNote:
     "الدعم شايف طلبك وسببك في لوحة الإدارة، ولو حابب تراجع قبل المهلة سجّل دخول بسهولة.",
-  deletionLogoutBtn: "تسجيل خروج دلوقتي",
   toastDeletionCancelled: "تم إلغاء طلب حذف حسابك — حسابك رجع زي ما كان بالظبط 🎉",
   usageTitle: "رصيد الشات",
   usageUsed: "{used} مستخدم من {total}",
@@ -636,14 +639,17 @@ const en: Dict = {
   deletionReasonPh: "Write your reason here (at least 10 characters) — it goes to support and the admin panel…",
   deletionAck:
     "I understand the deletion is permanent after the 30-day window if I don't sign in, and nothing can be recovered afterwards.",
-  deletionRequestBtn: "Request account deletion",
+  deletionConfirmBtn: "Confirm deletion",
+  close: "Close",
+  deletionAccountLine: "Account to be deleted:",
+  deletionAutoLogoutNote:
+    "After you confirm, you're signed out automatically and the account goes dormant for 30 days.",
   deletionScheduledTitle: "Your account will be deleted in 30 days",
   deletionScheduledLine1: "Your deletion request is recorded — all your data will be permanently erased on",
   deletionScheduledCancelNote:
     "If you sign in again before that date, the deletion cancels itself and your data stays exactly as it is.",
   deletionScheduledSupportNote:
     "Support can see your request and reason in the admin panel.",
-  deletionLogoutBtn: "Sign out now",
   toastDeletionCancelled: "Your account deletion has been cancelled — everything is back exactly as it was 🎉",
   usageTitle: "Chat credits",
   usageUsed: "{used} used of {total}",
@@ -961,14 +967,17 @@ const fr: Dict = {
   deletionReasonPh: "Écrivez votre raison ici (au moins 10 caractères) — accessible au support et à la console admin…",
   deletionAck:
     "Je comprends que la suppression est définitive après le délai de 30 jours sans connexion, et qu'aucune récupération n'est possible après l'exécution.",
-  deletionRequestBtn: "Demander la suppression du compte",
+  deletionConfirmBtn: "Confirmer la suppression",
+  close: "Fermer",
+  deletionAccountLine: "Compte à supprimer :",
+  deletionAutoLogoutNote:
+    "Après votre confirmation, vous serez déconnecté automatiquement et le compte sera mis en sommeil pendant 30 jours.",
   deletionScheduledTitle: "Votre compte sera supprimé dans 30 jours",
   deletionScheduledLine1: "Votre demande est enregistrée — toutes vos données seront définitivement effacées le",
   deletionScheduledCancelNote:
     "Si vous vous reconnectez avant cette date, la suppression s'annule automatiquement et vos données restent intactes.",
   deletionScheduledSupportNote:
     "Le support peut voir votre demande et votre raison dans la console d'administration.",
-  deletionLogoutBtn: "Se déconnecter maintenant",
   toastDeletionCancelled: "La suppression de votre compte a été annulée — tout est de retour exactement comme avant 🎉",
   usageTitle: "Crédits de chat",
   usageUsed: "{used} utilisés sur {total}",
@@ -1286,14 +1295,17 @@ const es: Dict = {
   deletionReasonPh: "Escribe tu motivo aquí (al menos 10 caracteres) — llega al soporte y al panel admin…",
   deletionAck:
     "Entiendo que la eliminación es definitiva tras el período de 30 días si no inicio sesión, y que no habrá recuperación después de ejecutarse.",
-  deletionRequestBtn: "Solicitar eliminación de la cuenta",
+  deletionConfirmBtn: "Confirmar la eliminación",
+  close: "Cerrar",
+  deletionAccountLine: "Cuenta que se eliminará:",
+  deletionAutoLogoutNote:
+    "Tras confirmar, se cerrará tu sesión automáticamente y la cuenta quedará inactiva durante 30 días.",
   deletionScheduledTitle: "Tu cuenta se eliminará en 30 días",
   deletionScheduledLine1: "Tu solicitud está registrada; todos tus datos se eliminarán definitivamente el",
   deletionScheduledCancelNote:
     "Si inicias sesión de nuevo antes de esa fecha, la eliminación se cancela automáticamente y tus datos quedan como están.",
   deletionScheduledSupportNote:
     "El soporte puede ver tu solicitud y tu motivo en el panel de administración.",
-  deletionLogoutBtn: "Cerrar sesión ahora",
   toastDeletionCancelled: "La eliminación de tu cuenta ha sido cancelada — todo está exactamente como antes 🎉",
   usageTitle: "Saldo del chat",
   usageUsed: "{used} usados de {total}",

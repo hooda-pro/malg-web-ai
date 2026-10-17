@@ -54,6 +54,7 @@ export default function SettingsModal({
   onClose,
   onNameUpdated,
   onLogout,
+  onOpenAccountDeletion,
   onOpenRecharge,
   onClearAll,
   onToast,
@@ -66,6 +67,7 @@ export default function SettingsModal({
   onClose: () => void;
   onNameUpdated: (newName: string) => void;
   onLogout: () => void;
+  onOpenAccountDeletion: () => void;
   onOpenRecharge: () => void;
   onOpenPlans: () => void;
   onClearAll: () => Promise<void>;
@@ -141,7 +143,7 @@ export default function SettingsModal({
                   onClose();
                   onLogout();
                 }}
-                onClose={onClose}
+                onOpenDeletion={onOpenAccountDeletion}
               />
             )}
           </div>
@@ -689,18 +691,17 @@ function AccountTab({
   user,
   onNameUpdated,
   onLogout,
-  onClose,
+  onOpenDeletion,
 }: {
   user: SessionUser;
   onNameUpdated: (newName: string) => void;
   onLogout: () => void;
-  onClose: () => void;
+  onOpenDeletion: () => void;
 }) {
   const { t } = useSettings();
   const [nameDraft, setNameDraft] = useState(user.displayName);
   const [nameStatus, setNameStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [nameError, setNameError] = useState<string | null>(null);
-  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const saveName = async () => {
     const newName = nameDraft.trim();
@@ -827,177 +828,15 @@ function AccountTab({
               </p>
               <p className="mt-1 text-[12.5px] leading-6 text-ink-3">{t("deleteAccountHint")}</p>
             </div>
-            <Button size="sm" variant="danger" className="shrink-0" onClick={() => setDeleteOpen(true)}>
+            <Button size="sm" variant="danger" className="shrink-0" onClick={onOpenDeletion}>
               <Trash2 size={13} />
               {t("deleteAccountTitle")}
             </Button>
           </div>
         </Panel>
       </div>
-
-      {deleteOpen && (
-        <DeletionDialog
-          user={user}
-          onClose={() => setDeleteOpen(false)}
-          onLogoutAndClose={() => {
-            setDeleteOpen(false);
-            onClose();
-            onLogout();
-          }}
-        />
-      )}
     </>
   );
 }
 
-/**
- * نافذة جدولة حذف الحساب:
- * - خطوة 1: كتابة السبب (ليه بتحذف؟) + تأكيد الفهم إنه حذف نهائي بعد 30 يوم.
- * - خطوة 2: شاشة التأكيد — الحساب اتجمّد وسيتم الحذف بعد 30 يوم من عدم الدخول،
- *   مع زر «تسجيل خروج». لو دخل تاني قبل المهلة، السيرفر بيلغي الطلب لوحده.
- */
-function DeletionDialog({
-  user,
-  onClose,
-  onLogoutAndClose,
-}: {
-  user: SessionUser;
-  onClose: () => void;
-  onLogoutAndClose: () => void;
-}) {
-  const { t } = useSettings();
-  const [reason, setReason] = useState("");
-  const [ack, setAck] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [scheduledAfter, setScheduledAfter] = useState<string | null>(null);
 
-  const reasonValid = reason.trim().length >= 10;
-
-  const submit = async () => {
-    if (!reasonValid || !ack || busy) return;
-    setBusy(true);
-    setErr(null);
-    try {
-      const res = await fetch("/api/auth/account/delete-request", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: reason.trim() }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setErr(data.error || t("errGeneric"));
-        return;
-      }
-      setScheduledAfter(data.deleteAfter as string);
-    } catch {
-      setErr(t("errConn"));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const fmtDate = (iso: string) => {
-    try {
-      return new Date(iso).toLocaleDateString("ar-EG", {
-        year: "numeric", month: "long", day: "numeric",
-      });
-    } catch {
-      return iso;
-    }
-  };
-
-  // ——— شاشة «سيتم حذف حسابك بعد 30 يوم» ———
-  if (scheduledAfter) {
-    return (
-      <Dialog
-        open
-        onClose={onClose}
-        labelledBy="mlag-deletion-scheduled-title"
-        title={t("deletionScheduledTitle")}
-        size="md"
-      >
-        <div className="flex flex-col items-center gap-4 px-2 pb-7 pt-4 text-center">
-          <span className="grid h-16 w-16 place-items-center rounded-full bg-danger-soft">
-            <Trash2 size={28} className="text-danger" />
-          </span>
-          <p className="max-w-sm text-[13.5px] leading-7 text-ink-2" dir="rtl">
-            {t("deletionScheduledLine1")}{" "}
-            <span className="tnum font-semibold text-danger">{fmtDate(scheduledAfter)}</span>.
-          </p>
-          <p className="max-w-sm rounded-lg border border-live-line bg-live-soft px-4 py-3 text-[13px] font-medium leading-6 text-ink" dir="rtl">
-            {t("deletionScheduledCancelNote")}
-          </p>
-          <div className="w-full rounded-lg border border-hair bg-surface-2 px-4 py-3 text-start">
-            <p className="text-[12.5px] leading-6 text-ink-2" dir="rtl">
-              <Lock size={13} className="me-1.5 inline-block align-[-2px] text-ink-3" />
-              {t("deletionScheduledSupportNote")}
-            </p>
-          </div>
-          <Button variant="primary" onClick={onLogoutAndClose} className="mt-1 w-full sm:w-auto">
-            <LogOut size={15} className="flip-rtl" />
-            {t("deletionLogoutBtn")}
-          </Button>
-        </div>
-      </Dialog>
-    );
-  }
-
-  // ——— خطوة 1: السبب + التأكيد ———
-  return (
-    <Dialog open onClose={onClose} labelledBy="mlag-deletion-title" title={t("deleteAccountTitle")} size="md">
-      <div className="flex flex-col gap-4 px-5 pb-7 pt-1 sm:px-6">
-        <p className="text-[13.5px] leading-7 text-ink-2" dir="rtl">
-          {t("deletionIntro")}
-        </p>
-        <label htmlFor="mlag-deletion-reason" className="block text-[13.5px] font-medium text-ink">
-          {t("deletionReasonLabel")}
-        </label>
-        <textarea
-          id="mlag-deletion-reason"
-          value={reason}
-          onChange={(e) => {
-            setReason(e.target.value);
-            setErr(null);
-          }}
-          rows={3}
-          maxLength={500}
-          placeholder={t("deletionReasonPh")}
-          className={cn(
-            "min-h-24 w-full resize-none rounded-md border border-hair bg-surface-2 px-3 py-2.5",
-            "text-[14px] text-ink placeholder:text-ink-3 transition-all duration-1",
-            "hover:border-hair-2 focus:bg-surface focus:outline-none"
-          )}
-        />
-        <label className="flex cursor-pointer items-start gap-2.5 text-[12.5px] leading-6 text-ink-2">
-          <input
-            type="checkbox"
-            checked={ack}
-            onChange={(e) => setAck(e.target.checked)}
-            className="mt-1 h-4 w-4 shrink-0"
-          />
-          {t("deletionAck")}
-        </label>
-        {err && (
-          <p role="alert" className="text-[12.5px] text-danger">
-            {err}
-          </p>
-        )}
-        <div className="flex flex-col gap-2.5 sm:flex-row-reverse">
-          <Button
-            variant="danger"
-            onClick={submit}
-            disabled={!reasonValid || !ack || busy}
-            className="w-full sm:w-auto"
-          >
-            <Trash2 size={14} />
-            {t("deletionRequestBtn")}
-          </Button>
-          <Button onClick={onClose} className="w-full sm:w-auto">
-            {t("cancel")}
-          </Button>
-        </div>
-      </div>
-    </Dialog>
-  );
-}
