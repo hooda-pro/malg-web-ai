@@ -42,9 +42,11 @@ import {
 import { createHash } from "crypto";
 import { getSandboxMemoryMb, isSandboxConfigured, SandboxSession } from "@/lib/sandbox";
 import {
+  EDIT_FILE_LINES_TOOL,
   EDIT_FILE_TOOL,
   INSTALL_SKILL_TOOL,
   LIST_FILES_TOOL,
+  MULTI_EDIT_TOOL,
   READ_FILE_TOOL,
   READ_SKILL_FILE_TOOL,
   READ_SKILL_TOOL,
@@ -53,8 +55,10 @@ import {
   classifyCommandTool,
   collectSessionProjectFiles,
   isProjectTool,
+  runEditLinesTool,
   runEditTool,
   runInstallSkillTool,
+  runMultiEditTool,
   runProjectTool,
   runReadSkillFileTool,
   runReadSkillTool,
@@ -459,7 +463,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   // (SEARCH_ON متعرفة فوق جنب deepSearch)
   const availableTools: unknown[] = [
     ...(SEARCH_ON ? [WEB_SEARCH_TOOL] : []),
-    ...(initialProjectFiles.length > 0 ? [LIST_FILES_TOOL, READ_FILE_TOOL, EDIT_FILE_TOOL] : []),
+    ...(initialProjectFiles.length > 0 ? [LIST_FILES_TOOL, READ_FILE_TOOL, EDIT_FILE_TOOL, EDIT_FILE_LINES_TOOL, MULTI_EDIT_TOOL] : []),
     // مهارات المستخدم المحلية: تظهر للموديل بس لو فعلاً فيه مهارات في الرسالة دي
     ...(skillsOn ? [READ_SKILL_TOOL, READ_SKILL_FILE_TOOL] : []),
     // install_skill: دايمًا متاحة — بتخلي المستخدم يقدر يثبّت مهارة من لينك أثناء الشات حتى لو مفيش مهارات قبله.
@@ -1037,6 +1041,85 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
               if (r.ok && r.updated) {
                 // النسخة المحدّثة تنزل للقارئ واللوحة والـ sandbox ككتلة ملف عادية —
                 // بنفس الشكل لو الموديل كتبها بنفسه (وتُدمج مع أي نسخة سابقة بالمسار).
+                const ext = (r.updated.path.split(".").pop() || "text").toLowerCase();
+                const fence = "\n```" + ext + " path=\"" + r.updated.path + "\"\n" + r.updated.content + "\n```\n";
+                contentParts.push(fence);
+                emit("content", fence);
+              }
+              continue;
+            }
+
+            // --- edit_file_lines (تعديل نطاق أسطر — بلا مطابقة نصية، أضمن للملفات الطويلة) ---
+            if (callName === "edit_file_lines") {
+              if (!argsValid) {
+                const msg = "معاملات الأداة مش JSON صالح.";
+                sendAgentEvent({ type: "tool_error", tool: "edit_file_lines", id: call.id, message: msg });
+                sandboxSteps.push({ id: call.id, tool: "edit_file_lines", status: "error", message: msg });
+                pushToolMessage({ ok: false, error: msg });
+                continue;
+              }
+              const editPath = typeof args.path === "string" ? args.path : "";
+              const lineHint = `${typeof args.start_line === "number" ? args.start_line : "?"}–${typeof args.end_line === "number" ? args.end_line : "?"}`;
+              sendAgentEvent({ type: "tool_start", tool: "edit_file_lines", id: call.id, path: editPath || "ملف", message: lineHint });
+              const r = runEditLinesTool(args, projectFiles);
+              const editMsg = r.ok ? r.message || "تم التعديل" : r.message || "فشل التعديل";
+              sendAgentEvent({
+                type: r.ok ? "tool_result" : "tool_error",
+                tool: "edit_file_lines",
+                id: call.id,
+                path: r.path ?? (editPath || undefined),
+                message: editMsg,
+                detail: r.detail,
+              });
+              sandboxSteps.push({
+                id: call.id,
+                tool: "edit_file_lines",
+                path: r.path ?? editPath,
+                status: r.ok ? "done" : "error",
+                message: editMsg,
+                detail: r.detail,
+              });
+              pushToolMessage(r.payload);
+              if (r.ok && r.updated) {
+                const ext = (r.updated.path.split(".").pop() || "text").toLowerCase();
+                const fence = "\n```" + ext + " path=\"" + r.updated.path + "\"\n" + r.updated.content + "\n```\n";
+                contentParts.push(fence);
+                emit("content", fence);
+              }
+              continue;
+            }
+
+            // --- multi_edit (دفعة تعديلات جراحية على نفس الملف — جولة واحدة بدل كتير نداءات) ---
+            if (callName === "multi_edit") {
+              if (!argsValid) {
+                const msg = "معاملات الأداة مش JSON صالح.";
+                sendAgentEvent({ type: "tool_error", tool: "multi_edit", id: call.id, message: msg });
+                sandboxSteps.push({ id: call.id, tool: "multi_edit", status: "error", message: msg });
+                pushToolMessage({ ok: false, error: msg });
+                continue;
+              }
+              const editPath = typeof args.path === "string" ? args.path : "";
+              sendAgentEvent({ type: "tool_start", tool: "multi_edit", id: call.id, path: editPath || "ملف" });
+              const r = runMultiEditTool(args, projectFiles);
+              const editMsg = r.ok ? r.message || "تم تطبيق التعديلات" : r.message || "فشل التطبيق";
+              sendAgentEvent({
+                type: r.ok ? "tool_result" : "tool_error",
+                tool: "multi_edit",
+                id: call.id,
+                path: r.path ?? (editPath || undefined),
+                message: editMsg,
+                detail: r.detail,
+              });
+              sandboxSteps.push({
+                id: call.id,
+                tool: "multi_edit",
+                path: r.path ?? editPath,
+                status: r.ok ? "done" : "error",
+                message: editMsg,
+                detail: r.detail,
+              });
+              pushToolMessage(r.payload);
+              if (r.ok && r.updated) {
                 const ext = (r.updated.path.split(".").pop() || "text").toLowerCase();
                 const fence = "\n```" + ext + " path=\"" + r.updated.path + "\"\n" + r.updated.content + "\n```\n";
                 contentParts.push(fence);

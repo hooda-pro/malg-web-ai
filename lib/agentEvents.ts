@@ -24,6 +24,8 @@ export type AgentToolName =
   | "read_file"
   | "write_file"
   | "edit_file"
+  | "edit_file_lines"
+  | "multi_edit"
   | "create_file"
   | "delete_file"
   | "list_files"
@@ -130,6 +132,8 @@ const TOOL_LABELS: Record<AgentToolName, { verbDoing: string; verbDone: string }
   read_file: { verbDoing: "بيقرأ", verbDone: "قرأ" },
   write_file: { verbDoing: "بيكتب", verbDone: "كتب" },
   edit_file: { verbDoing: "بيعدّل", verbDone: "عدّل" },
+  edit_file_lines: { verbDoing: "بيعدّل أسطر", verbDone: "عدّل أسطر" },
+  multi_edit: { verbDoing: "بيطبّق تعديلات متعددة", verbDone: "طبّق تعديلات متعددة" },
   create_file: { verbDoing: "بينشئ", verbDone: "أنشأ" },
   delete_file: { verbDoing: "بيحذف", verbDone: "حذف" },
   list_files: { verbDoing: "بيستعرض الملفات", verbDone: "استعرض الملفات" },

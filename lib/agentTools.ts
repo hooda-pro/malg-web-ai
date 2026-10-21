@@ -400,7 +400,9 @@ export function runEditTool(args: Record<string, unknown>, files: ProjectFile[])
       message: "الملف مش موجود",
     };
   }
-  const occurrences = file.content.split(oldString).length - 1;
+  // توحيد نهايات الأسطر قبل المطابقة (read_file بيرجّع LF — فالنسخ منه بيطابق دايمًا)
+  const content = file.content.replace(/\r\n?/g, "\n");
+  const occurrences = content.split(oldString).length - 1;
   if (occurrences === 0) {
     return {
       ok: false,
@@ -408,7 +410,7 @@ export function runEditTool(args: Record<string, unknown>, files: ProjectFile[])
       payload: {
         ok: false,
         error: "النص القديم مش موجود حرفيًا في الملف (غالبًا فرق مسافات أو أسطر).",
-        hint: "اقرأ الجزء ده بـ read_file وانسخ منه حرفيًا.",
+        hint: "اقرأ الجزء ده بـ read_file وانسخ منه حرفيًا — أو استخدم edit_file_lines لو عارف أرقام الأسطر.",
       },
       message: "لا تطابق",
     };
@@ -425,15 +427,215 @@ export function runEditTool(args: Record<string, unknown>, files: ProjectFile[])
       message: "نص مكرر",
     };
   }
-  const updated = file.content.replace(oldString, args.new_string as string);
-  const preview = filePreview(updated);
+  const updated = content.replace(oldString, args.new_string as string);
+  const oldLines = content.split("\n").length;
+  const newLines = updated.split("\n").length;
+  const delta = newLines - oldLines;
+  const added = args.new_string as string;
+  const preview = added.trim() ? filePreview(added, 6, 400) : { lines: 0, preview: "(حذف)" };
   return {
     ok: true,
     path: file.path,
-    payload: { ok: true, path: file.path },
-    message: "عدّل " + file.path,
+    payload: { ok: true, path: file.path, ...(delta !== 0 ? { line_delta: delta } : {}) },
+    message: "عدّل " + file.path + (delta !== 0 ? ` (${delta > 0 ? "+" : ""}${delta} سطر)` : ""),
     detail: { lines: preview.lines, preview: preview.preview },
     updated: { path: file.path, content: updated },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// edit_file_lines — تعديل بنطاق أسطر (بلا مطابقة نصية). read_file بيرجّع أرقام
+// أسطر — فالموديل بيحط ال range مباشرة: صفر أخطاء مسافات، وسريع للملفات الضخمة.
+// multi_edit — دفعة تعديلات جراحية (old→new) على نفس الملف في جولة واحدة.
+// ---------------------------------------------------------------------------
+
+const MAX_EDIT_LINES_REPLACEMENT_CHARS = 60_000;
+const MAX_MULTI_EDIT_EDITS = 10;
+
+export const EDIT_FILE_LINES_TOOL = {
+  type: "function",
+  function: {
+    name: "edit_file_lines",
+    description:
+      "عدّل ملف موجود بديلاً للنطاق: حدد start_line وend_line (من قراءة read_file المرقّمة) " +
+      "والنص البديل replacement (ممكن أسطر جديدة، ممكن محذوف بـreplacement=\"\"). " +
+      "دي أضمن طريقة للملفات الطويلة — مفيش مطابقة نصية ولا أخطاء مسافات، ولا حاجة لإعادة كتابة الملف كله. " +
+      "الأسطر بخارج النطاق بتفضل زي هيها بالظبط.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "مسار الملف موجود في المشروع" },
+        start_line: { type: "integer", description: "أول سطر يتعدل (من 1 — زي ما ظهر في read_file)" },
+        end_line: { type: "integer", description: "آخر سطر (شامل). الافتراضي start_line (سطر واحد)" },
+        replacement: { type: "string", description: "النص البديل للأسطر دي (فاضي يبقى حذف للنطاق)" },
+      },
+      required: ["path", "start_line", "replacement"],
+    },
+  },
+} as const;
+
+export const MULTI_EDIT_TOOL = {
+  type: "function",
+  function: {
+    name: "multi_edit",
+    description:
+      "طبّق مجموعة تعديلات جراحية (old_string → new_string) على ملف واحد في جولة واحدة بدل استدعاء edit_file أكتر من مرة. " +
+      "كل نص قديم لازم يطابق مرة واحدة بالظبط في حالته وقت الدور بتاعه (تعديل سابق بيغير النص اللي بعده يقييم عليه). " +
+      "لو واحد فشل، مفيش أي تعديل يتطبق — صسّله وتابع. للأنطاق الكبيرة استخدم edit_file_lines بدلها.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "مسار الملف" },
+        edits: {
+          type: "array",
+          description: "لحد 10 — بالترتيب اللي المفروض يتطبقوا بيه",
+          items: {
+            type: "object",
+            properties: {
+              old_string: { type: "string", description: "النص القديم حرفيًا (فريد وقت الدور بتاعه)" },
+              new_string: { type: "string", description: "النص البديل" },
+            },
+            required: ["old_string", "new_string"],
+          },
+        },
+      },
+      required: ["path", "edits"],
+    },
+  },
+} as const;
+
+/** edit_file_lines: استبدال نطاق أسطر بالمؤشر مرت، خالي من مشاكل التطابقات والمسافات. */
+export function runEditLinesTool(args: Record<string, unknown>, files: ProjectFile[]): ProjectToolResult {
+  const rawPath = typeof args.path === "string" ? args.path : "";
+  if (!rawPath.trim()) {
+    return { ok: false, payload: { ok: false, error: "لازم تحدد path." }, message: "path فاضي" };
+  }
+  const replacement = typeof args.replacement === "string" ? args.replacement : "";
+  if (replacement.length > MAX_EDIT_LINES_REPLACEMENT_CHARS) {
+    return {
+      ok: false,
+      path: rawPath,
+      payload: {
+        ok: false,
+        error: `replacement أكبر من الحد (${MAX_EDIT_LINES_REPLACEMENT_CHARS} حرف) — قسّم التعديل على أكثر من نداء.`,
+      },
+      message: "النص البديل ضخم",
+    };
+  }
+  const file = findFile(files, rawPath);
+  if (!file) {
+    return {
+      ok: false,
+      path: rawPath,
+      payload: {
+        ok: false,
+        error: "الملف " + rawPath + " مش موجود في ملفات المشروع.",
+        hint: "استخدم list_files للمسارات الصحيحة، أو اكتب الملف بكتلة path لو جديد.",
+      },
+      message: "الملف مش موجود",
+    };
+  }
+  const lines = file.content.replace(/\r\n?/g, "\n").split("\n");
+  const total = lines.length;
+  const start = Math.floor(Number(args.start_line) || 0);
+  if (!start || start < 1 || start > total) {
+    return {
+      ok: false,
+      path: file.path,
+      payload: { ok: false, error: `start_line ${args.start_line} خارج النطاق (الملف فيه ${total} سطر).`, hint: "اقرأ الملف بـ read_file الأول عشان تاخد الأرقام الصح." },
+      message: "start_line خارج النطاق",
+    };
+  }
+  const requestedEnd = Math.floor(Number(args.end_line) || start);
+  const end = Math.min(total, Math.max(start, requestedEnd));
+  const removed = lines.slice(start - 1, end);
+  const replacementLines = replacement === "" ? [] : replacement.replace(/\r\n?/g, "\n").split("\n");
+  const updated = [...lines.slice(0, start - 1), ...replacementLines, ...lines.slice(end)].join("\n");
+  const preview = replacement.trim() ? filePreview(replacement, 6, 400) : { lines: 0, preview: "(حذف)" };
+  return {
+    ok: true,
+    path: file.path,
+    payload: { ok: true, path: file.path, replaced: { start, end, removed_lines: removed.length, inserted_lines: replacementLines.length } },
+    message: `عدّل ${file.path} (سطور ${start}–${end}: ${removed.length}→${replacementLines.length})`,
+    detail: { lines: replacementLines.length, preview: preview.preview },
+    updated: { path: file.path, content: updated },
+  };
+}
+
+/** multi_edit: دفعة تعديلات نصية حرفية على نفس الملف — ذرّية (كل نفس أو كله). */
+export function runMultiEditTool(args: Record<string, unknown>, files: ProjectFile[]): ProjectToolResult {
+  const rawPath = typeof args.path === "string" ? args.path : "";
+  if (!rawPath.trim()) {
+    return { ok: false, payload: { ok: false, error: "لازم تحدد path." }, message: "path فاضي" };
+  }
+  const edits = Array.isArray(args.edits) ? (args.edits as unknown[]) : [];
+  if (edits.length === 0) {
+    return { ok: false, path: rawPath, payload: { ok: false, error: "القايمة edits فاضية." }, message: "edits فاضية" };
+  }
+  if (edits.length > MAX_MULTI_EDIT_EDITS) {
+    return {
+      ok: false,
+      path: rawPath,
+      payload: { ok: false, error: `الحد ${MAX_MULTI_EDIT_EDITS} تعديلات في النداء الواحد — قسّمها على نداءين.` },
+      message: "تعديلات كتيرة",
+    };
+  }
+  const file = findFile(files, rawPath);
+  if (!file) {
+    return {
+      ok: false,
+      path: rawPath,
+      payload: { ok: false, error: "الملف " + rawPath + " مش موجود في ملفات المشروع." },
+      message: "الملف مش موجود",
+    };
+  }
+  let content = file.content.replace(/\r\n?/g, "\n");
+  const oldLines = content.split("\n").length;
+  for (let i = 0; i < edits.length; i++) {
+    const e = edits[i] as Record<string, unknown> | null;
+    const oldStr = e && typeof e.old_string === "string" ? e.old_string : null;
+    const newStr = e && typeof e.new_string === "string" ? e.new_string : "";
+    if (!oldStr) {
+      return {
+        ok: false,
+        path: file.path,
+        payload: { ok: false, error: `التعديل رقم ${i + 1} ناقص old_string — مفيش حاجة اتعدلت (ذرّية).` },
+        message: "تعديل تالف",
+      };
+    }
+    const n = content.split(oldStr).length - 1;
+    if (n === 0) {
+      return {
+        ok: false,
+        path: file.path,
+        payload: {
+          ok: false,
+          error: `التعديل رقم ${i + 1}: النص القديم مش موجود حرفيًا — مفيش حاجة اتعدلت (ذرّية).`,
+          hint: "اقرأ الملف بالجزء اللي فشل بـ read_file وانسخ النص حرفيًا، أو شغّل الباقي.",
+        },
+        message: "لا تطابق",
+      };
+    }
+    if (n > 1) {
+      return {
+        ok: false,
+        path: file.path,
+        payload: { ok: false, error: `التعديل رقم ${i + 1}: النص القديم مكرر ${n} مرات — لازم يكون فريدًا. مفيش حاجة اتعدلت (ذرّية).` },
+        message: "نص مكرر",
+      };
+    }
+    content = content.replace(oldStr, newStr);
+  }
+  const newLines = content.split("\n").length;
+  const delta = newLines - oldLines;
+  const preview = filePreview(content, 6, 400);
+  return {
+    ok: true,
+    path: file.path,
+    payload: { ok: true, path: file.path, applied: edits.length, ...(delta !== 0 ? { line_delta: delta } : {}) },
+    message: `${edits.length} تعديلات في ${file.path}${delta !== 0 ? ` (${delta > 0 ? "+" : ""}${delta} سطر)` : ""}`,
+    detail: { lines: edits.length, preview: preview.preview },
+    updated: { path: file.path, content },
   };
 }
 

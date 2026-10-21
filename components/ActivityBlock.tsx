@@ -77,6 +77,8 @@ function ToolGlyph({ tool }: { tool: AgentStep["tool"] }) {
     case "write_file":
       return <FileCode2 size={13} className={cls} />;
     case "edit_file":
+    case "edit_file_lines":
+    case "multi_edit":
       return <Pencil size={13} className={cls} />;
     case "create_file":
       return <FilePlus2 size={13} className={cls} />;
