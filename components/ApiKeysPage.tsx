@@ -142,8 +142,8 @@ Model ID       malg-ai`,
       };
     case "codex":
       return {
-        code: `# ~/.codex/config.toml — على نفس جسر LiteLLM من تاب Claude Code
-model = "malg-ai"
+        code: `# ~/.codex/config.toml — على نفس جسر LiteLLM بتاع تاب Claude Code
+model = "claude-malg"
 model_provider = "MALG"
 web_search = "disabled"
 
@@ -162,7 +162,7 @@ multi_agent = false`,
       return {
         code: `# 1) config.yaml — جسر LiteLLM (Anthropic <-> Chat Completions)
 model_list:
-  - model_name: malg-ai
+  - model_name: claude-malg
     litellm_params:
       model: openai/malg-ai
       api_base: ${url}
@@ -170,10 +170,11 @@ model_list:
 
 # 2) pip install "litellm[proxy]" && litellm --config config.yaml
 
-# 3) متغيرات البيئة بتاعتها لكلود كود
+# 3) متغيرات Claude Code
 export ANTHROPIC_BASE_URL="http://localhost:4000"
 export ANTHROPIC_AUTH_TOKEN="sk-..."   # نفس قيمة LITELLM_MASTER_KEY
-export ANTHROPIC_MODEL="malg-ai"`,
+export ANTHROPIC_MODEL="claude-malg"
+export CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1`,
         note: t("akNoteClaude"),
         warn: true,
       };
@@ -609,6 +610,9 @@ export default function ApiKeysPage() {
           </Panel>
           <p className="mt-3 px-1 text-pretty text-[12.5px] leading-6 text-ink-3">
             {t("akEvenInTools")}
+          </p>
+          <p className="mt-2 px-1 text-pretty text-[12.5px] leading-6 text-ink-3">
+            {t("akBaseUrlHint")}
           </p>
         </section>
 

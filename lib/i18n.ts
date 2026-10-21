@@ -423,6 +423,8 @@ const ar: Dict = {
   akQuickHint: "بيانات الربط بتاعتك جاهزة في الأمثلة.",
   akEvenInTools:
     "حتى جوه أدوات زي Cline، الموديل بيعرّف نفسه كـ MALG — الهوية دي مفروضة على مستوى الـ API ومش بتأثر على أداء المهمة.",
+  akBaseUrlHint:
+    "الرابط بينتهي بـ/v1 — أدوات بروتوكول OpenAI (زي Cline) بتاخده زي ما هو. أدوات عيلة Anthropic (زي Claude Code) بتحط /v1 من نفسها، فالأضمن ما تدّيهاش الرابط من غير الـ/v1 الآخيرة: …/api/malg — ولو الـ/v1 اتكرر (…/v1/v1/…) فالسيرفر عندنا بيلغي التكرار داخليًا بدل الـ404.",
   akTopupTitle: "شحن رصيد الـ API",
   akTopupHint: "{price} جنيه لكل مليون توكن — بيتضاف يدويًا بعد تأكيد الدفع.",
   akAmountAria: "كمية الشحن",
@@ -453,7 +455,7 @@ const ar: Dict = {
   akNoteCline: "من إعدادات Cline في VS Code أو JetBrains. اسم الـ Model ID شكلي بس — الموديل محدد من المفتاح.",
   akNoteOpencode: "حطه في opencode.json، وبعدين opencode auth login ← Other ← اكتب MALG ← الصق مفتاحك، واختار MALG/malg-ai من /models.",
   akNoteCodex: "كودكس الحديث (من فبراير 2026) بيتكلم OpenAI Responses API بس — wire_api = \"chat\" اتشال نهائيًا. MALG بيقدم Chat Completions، فبوصّل كودكس على جسر LiteLLM (نفس اللي في تاب Claude Code) بيترجم تلقائيًا، ومتفتكرش multi_agent = false. من غير جسر: Cline أو OpenCode.",
-  akNoteClaude: "من غير جسر مش هيشتغل — Claude Code بيتكلم بروتوكول Anthropic (Messages API) بس. LiteLLM بيترجم /v1/messages ↔ Chat Completions تلقائيًا، وأسهل من كده كتير: Cline أو OpenCode.",
+  akNoteClaude: "من غير جسر مش هيشتغل — Claude Code بيتكلم بروتوكول Anthropic (Messages API) بس. LiteLLM بيترجم /v1/messages ↔ Chat Completions تلقائيًا. مهم: لما تسمي الموديل في LiteLLM خلي الاسم فيه كلمة claude (زي claude-malg) — فلتر Claude Code مش بياخد غير الـid اللي فيه claude أو anthropic.",
 
   // --- لاندينغ: البطل والأمثلة ---
   hcpField: "اكتب طلبك لـ MALG",
@@ -940,6 +942,8 @@ const en: Dict = {
   akQuickHint: "Your connection details are ready in the examples.",
   akEvenInTools:
     "Even inside tools like Cline, the model identifies itself as MALG — this identity is enforced at the API level and does not affect task performance.",
+  akBaseUrlHint:
+    "The URL ends in /v1 — OpenAI-protocol tools (like Cline) use it as-is. Anthropic-family tools (like Claude Code) add /v1 themselves, so it's safest to give them the URL without the trailing /v1: …/api/malg — and if the /v1 gets duplicated (…/v1/v1/…), our server collapses it internally instead of returning a 404.",
   akTopupTitle: "Top up API balance",
   akTopupHint: "{price} EGP per million tokens — added manually after payment is confirmed.",
   akAmountAria: "Top-up amount",
@@ -970,7 +974,7 @@ const en: Dict = {
   akNoteCline: "From Cline settings in VS Code or JetBrains. The Model ID name is cosmetic — the model comes from the key.",
   akNoteOpencode: "Put it in opencode.json, then opencode auth login ← Other ← type MALG ← paste your key, and pick MALG/malg-ai from /models.",
   akNoteCodex: "Modern Codex (since Feb 2026) speaks the OpenAI Responses API only — wire_api = \"chat\" was removed entirely. MALG serves Chat Completions, so point Codex at a LiteLLM bridge (same as the Claude Code tab) which translates automatically, and don't forget multi_agent = false. Without a bridge: Cline or OpenCode.",
-  akNoteClaude: "It won't connect without a bridge — Claude Code speaks the Anthropic protocol (Messages API) only. LiteLLM translates /v1/messages ↔ Chat Completions automatically. A much simpler alternative: Cline or OpenCode.",
+  akNoteClaude: "It won't connect without a bridge — Claude Code speaks the Anthropic protocol (Messages API) only. LiteLLM translates /v1/messages ↔ Chat Completions automatically. Important: when naming the model in LiteLLM, keep the word claude in it (like claude-malg) — Claude Code's filter only keeps ids containing claude or anthropic.",
 
   // --- Landing: hero composer & examples ---
   hcpField: "Write your request to MALG",
@@ -1434,6 +1438,8 @@ const fr: Dict = {
   akQuickHint: "Vos informations de connexion sont prêtes dans les exemples.",
   akEvenInTools:
     "Même dans des outils comme Cline, le modèle s'identifie comme MALG — cette identité est imposée au niveau de l'API et n'affecte pas les performances.",
+  akBaseUrlHint:
+    "L'URL se termine par /v1 — les outils au protocole OpenAI (comme Cline) l'utilisent telle quelle. Les outils de la famille Anthropic (comme Claude Code) ajoutent eux-mêmes /v1, donc le plus sûr est de leur donner l'URL sans le /v1 final : …/api/malg — et si le /v1 se duplique (…/v1/v1/…), notre serveur le fusionne en interne au lieu d'un 404.",
   akTopupTitle: "Recharger le solde API",
   akTopupHint: "{price} EGP par million de tokens — ajoutés manuellement après confirmation du paiement.",
   akAmountAria: "Montant de la recharge",
@@ -1464,7 +1470,7 @@ const fr: Dict = {
   akNoteCline: "Depuis les paramètres de Cline dans VS Code ou JetBrains. Le nom du Model ID est purement décoratif — le modèle vient de la clé.",
   akNoteOpencode: "Placez-le dans opencode.json, puis opencode auth login ← Other ← tapez MALG ← collez votre clé, et choisissez MALG/malg-ai dans /models.",
   akNoteCodex: "Le Codex moderne (depuis février 2026) ne parle que l'API OpenAI Responses — wire_api = \"chat\" a été supprimé définitivement. MALG sert des Chat Completions, donc pointez Codex vers un pont LiteLLM (comme l'onglet Claude Code) qui traduit automatiquement, et n'oubliez pas multi_agent = false. Sans pont : Cline ou OpenCode.",
-  akNoteClaude: "Sans pont, ça ne marchera pas — Claude Code ne parle que le protocole Anthropic (API Messages). LiteLLM traduit /v1/messages ↔ Chat Completions automatiquement. Beaucoup plus simple : Cline ou OpenCode.",
+  akNoteClaude: "Sans pont, ça ne marchera pas — Claude Code ne parle que le protocole Anthropic (API Messages). LiteLLM traduit /v1/messages ↔ Chat Completions automatiquement. Important : quand vous nommez le modèle dans LiteLLM, gardez le mot claude (comme claude-malg) — le filtre de Claude Code ne garde que les ids contenant claude ou anthropic.",
 
   // --- Landing : héros et exemples ---
   hcpField: "Écrivez votre demande à MALG",
@@ -1928,6 +1934,8 @@ const es: Dict = {
   akQuickHint: "Los datos de conexión están listos en los ejemplos.",
   akEvenInTools:
     "Incluso dentro de herramientas como Cline, el modelo se identifica como MALG — esta identidad se aplica a nivel de API y no afecta el rendimiento.",
+  akBaseUrlHint:
+    "La URL termina en /v1 — las herramientas de protocolo OpenAI (como Cline) la usan tal cual. Las herramientas de la familia Anthropic (como Claude Code) añaden /v1 por sí solas, así que lo más seguro es darles la URL sin el /v1 final: …/api/malg — y si el /v1 quedó duplicado (…/v1/v1/…), nuestro servidor lo colapsa internamente en lugar de dar 404.",
   akTopupTitle: "Recargar saldo API",
   akTopupHint: "{price} EGP por millón de tokens — se añade manualmente tras confirmar el pago.",
   akAmountAria: "Monto de recarga",
@@ -1958,7 +1966,7 @@ const es: Dict = {
   akNoteCline: "Desde los ajustes de Cline en VS Code o JetBrains. El nombre del Model ID es decorativo — el modelo viene de la clave.",
   akNoteOpencode: "Ponlo en opencode.json, luego opencode auth login ← Other ← escribe MALG ← pega tu clave, y elige MALG/malg-ai en /models.",
   akNoteCodex: "El Codex moderno (desde febrero de 2026) solo habla la API OpenAI Responses — wire_api = \"chat\" se eliminó por completo. MALG sirve Chat Completions, así que apunta Codex a un puente LiteLLM (como la pestaña Claude Code) que traduce automáticamente, y no olvides multi_agent = false. Sin puente: Cline u OpenCode.",
-  akNoteClaude: "Sin puente no funcionará — Claude Code solo habla el protocolo Anthropic (API Messages). LiteLLM traduce /v1/messages ↔ Chat Completions automáticamente. Una alternativa mucho más simple: Cline u OpenCode.",
+  akNoteClaude: "Sin puente no funcionará — Claude Code solo habla el protocolo Anthropic (API Messages). LiteLLM traduce /v1/messages ↔ Chat Completions automáticamente. Importante: al nombrar el modelo en LiteLLM, incluye la palabra claude (como claude-malg) — el filtro de Claude Code solo conserva ids que contengan claude o anthropic.",
 
   // --- Landing: héroe y ejemplos ---
   hcpField: "Escribe tu petición a MALG",

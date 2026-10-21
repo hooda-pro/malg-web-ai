@@ -1,31 +1,12 @@
-# CHANGELOG — التحقق في توافق مفتاح الـAPI مع Codex CLI و Claude Code (+ إصلاح الأمثلة زي ما اتحققت من المراجع الرسمية)
+# CHANGELOG — التحقق في توافق مفتاح الـAPI مع Codex CLI و Claude Code (+ إصلاح الأمثلة والتدقيق العميق)
 
-## اللي طلع من البحث (بتواريخ ومصادر رسمية)
+## ملخص البحث (مصادر رسمية)
 
 | الأداة | البروتوكول اللي بيتكلمه | يشتغل مباشرة على `/api/malg/v1`؟ |
 | --- | --- | --- |
 | Cline / OpenCode | OpenAI Chat Completions | ✅ مباشرة (tools + streaming + tool_calls مدعومين) |
 | Codex CLI (0.95.0+، فبراير 2026) | OpenAI **Responses API** فقط | ❌ مباشرة — محتاج جسر |
 | Claude Code | Anthropic Messages API (`/v1/messages`) | ❌ مباشرة — محتاج جسر |
-
-### أكتشافات Codex (الأهم)
-- `wire_api = "chat"` (Chat Completions) **اتشال نهائيًا من Codex في فبراير
-  2026 (إصدار 0.95.0)** — اتأكد أعلان الاستغناء عنها في ديسمبر 2025، والقيمة
-  دلوقتي بترمي خطأ صريح بيهدي على الموضوع.
-- المرجع الرسمي للكونفيج (`developers.openai.com/codex/config-reference`)
-  حرفيًا: `model_providers.<id>.wire_api` → القيمة المدعومة الوحيدة هي
-  `responses` وهي كمان الافتراضية. يعني كودكس بيبعت `POST {base_url}/responses`
-  — وموقعنا ما عندهوش المسار ده أصلاً (عندنا بس `/chat/completions`)
-  فلو صوّبناه على الموقع مباشرة هيضرب 404.
-- تفصيلة خاصة بالـbackends من برة: `features.multi_agent = false` انتهية
-  (أدوات زي `tool_search` بتكسر الجلسة فتطلع "stream disconnected")، وكمان
-  `web_search = "disabled"` لبعض المزودين.
-
-### أكتشافات Claude Code
-- كلود كود بيتكلم بروتوكول Anthropic بس — مفيش أي إعداد "OpenAI-compatible"
-  في نفسه؛ الرابط الرسمي للربط بموديلات غير-Anthropic هو **LiteLLM Proxy**
-  اللي عنده `/v1/messages` أصلي، مع ثلاث متغيرات:
-  `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` (مفتاح LiteLLM) / `ANTHROPIC_MODEL`.
 
 ## الإصلاحات المطبقة
 
@@ -35,40 +16,104 @@
   "responses"`) مع `web_search = "disabled"` و`[features]
   multi_agent = false`. النموذج القديم اللي بعت `wire_api = "chat"` مباشرة
   على الموقع كان هيضرب خطأ مع أي كودكس حديث.
-- **claude**: وصفة كاملة واحدة: `config.yaml` بتاع LiteLLM (موديل
-  `openai/malg-ai` + `api_base` = رابطنا + مفتاحنا من env) + أمر التشغيل
-  `pip install "litellm[proxy]" && litellm --config config.yaml` + تصدير
-  المتغيرات الثلاثة تباع كلود كود.
-- استخدام المفاتيح `akClaudeCode1/2/akClaudeRedirect` اتشال من الصفحة.
+- **claude**: وصفة كاملة: `config.yaml` بتاع LiteLLM (alias اسمه
+  `claude-malg` → `openai/malg-ai` على رابطنا) + أمر التشغيل
+  `pip install "litellm[proxy]" && litellm --config config.yaml` +
+  تصدير `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` /
+  `ANTHROPIC_MODEL=claude-malg` /
+  `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1`.
 
-### 2) `lib/i18n.ts` — تحديث ونضافة (الأربع لغات)
-- `akNoteCodex`: الصيغة الجديدة بتقول الحقيقة: كودكس الحديث Responses API بس،
-  `wire_api = "chat"` اتشال، والربط عن طريق جسر LiteLLM، و`multi_agent =
-  false` مهمة، وبدون جسر: Cline أو OpenCode.
-- `akNoteClaude`: من غير جسر مش هيشتغل — بروتوكول Anthropic بس، LiteLLM
-  بيترجم تلقائيًا، والأسهل Cline أو OpenCode.
-- حذف مفاتيح ميتة: `akClaudeCode1` + `akClaudeCode2` + `akClaudeRedirect`
-  (ar/en/fr/es) لأن المثالات الجديدة مش محتجاها.
+### 2) `lib/i18n.ts` — تحديث وإضافة (الأربع لغات)
+- `akNoteCodex` + `akNoteClaude` بالصيغ الصحيحة (كودكس Responses API بس /
+  Claude Code محتاج جسر + شرط الاسم فيه كلمة claude للفلتر).
+- مفتاح جديد `akBaseUrlHint`: أدوات بروتوكول OpenAI بتاخد الرابط زي ما هو
+  بالـ`/v1`، وأدوات عيلة Anthropic بتضيفه بنفسها.
+- حذف مفاتيح ميتة: `akClaudeCode1` + `akClaudeCode2` + `akClaudeRedirect`.
 
 ### 3) `app/api/malg/v1/chat/completions/route.ts` — تسامح أكثر مع العملاء
-- دور `developer` (اللي بتبعته الـSDKات الحديثة بتاع OpenAI) بيتعامل كـ
-  `system` بدل ما يترفض بـ«شكل الرسائل غير صحيح».
-- `content` كصف أجزاء (`[{type:"text", text:"..."}]`) بيضم في نص واحد
-  بـ`\n` بدل الرفض — الـSDKات متعددة الوسائط بتبعته كده أحيانًا.
-- كل حاجة تانية زي ما هي (Bearer auth، SSE بتنسيق OpenAI، function calling
-  كامل بـ`finish_reason: "tool_calls"`، `[DONE]`، إعادة المحاولة عند الرد الفاضي).
+- دور `developer` (اللي بتبعته الـSDKات حديثة من OpenAI) بيتعامل كـ`system`.
+- `content` كصف أجزاء (`[{type:"text", text:"..."}]`) بيضم في نص واحد.
+- الباقي زي ما هو: Bearer auth، SSE بصيغة OpenAI، function calling كامل
+  (`finish_reason: "tool_calls"`)، `[DONE]`، إعادة المحاولة عند الرد الفاضي.
 
-## المصادر المتحقق منها
-- كودكس — مرجع الكونفيج الرسمي: https://developers.openai.com/codex/config-reference/ (`wire_api`: `responses` القيمة الوحيدة)
+---
+
+## التحديث بعد تجربة فعلية — خطأ 404 على `…/v1/v1/models` (قصة الاكتشاف)
+
+### السبب الجذري (بتأكيد رسمي من دليل Claude Code)
+دليل التوافق الرسمي
+(`code.claude.com/docs/en/llm-gateway-protocol#model-discovery`) بيشرح
+خطوتين:
+1. الـ"Model discovery" هو طلب `GET /v1/models?limit=1000` فوق الـbase URL
+   (بمهلة 3 ثواني، وأي redirect بيتحسب فشل) — الرابط بتاعنا بينتهي أصلاً
+   بـ`/v1` فالطلب بقى `…/api/malg/v1/v1/models` → 404.
+2. **حتى لو الرد رجع 200، فيه فلتر تاني**: Claude Code بيفلتر قائمة
+   الـ`data[]` وما بياخدش غير الموديل اللي الـid فيه كلمة `claude`
+   أو `anthropic` (مطابقة بتتجاهل الحالة) — يعني `malg-ai` كانت
+   هتتلغي خالص من القائمة.
+
+### الإصلاح المطبق
+1. **`next.config.mjs`**: rewrite داخلي `/api/malg/v1/v1/:path*` →
+   `/api/malg/v1/:path*` — أي مسار بمضاعفة `/v1` بيتصحح تلقائيًا (rewrite
+   داخلي، مفيش HTTP redirect).
+2. **`app/api/malg/v1/models/route.ts`**: الرد بيحقق شكلين — حقول OpenAI
+   (`object:"list"`, `object:"model"`) زي ما هي + حقول Anthropic
+   (`type:"model"` لكل عنصر، و`first_id` / `last_id` / `has_more` فوق)
+   عشان أي عميل بيتكلم شكل Anthropic يقراها صح.
+3. **اسم الـalias في LiteLLM بقى `claude-malg`**: اسم فيه كلمة claude
+   عشان يعدي فلتر Claude Code ويظهر الموديل في الـpicker — وبنفس الاسم
+   في تاب كودكس لأن الاتنين على نفس الجسر.
+4. **الصفحة**: تلميح `akBaseUrlHint` (٤ لغات) + ملاحظة `akNoteClaude`
+   موضحين الحاجتين.
+
+## التحقق العميق — تأييدات من مراجع رسمية اتقريت حرفيًا
+- `developers.openai.com/codex/config-reference.md`:
+  `model_providers.<id>.wire_api` — "`responses` is the only supported
+  value, and it is the default when omitted" (يعني القيمة `chat`
+  اتشالت فعلًا).
+  و`web_search`: القيم الرسمية `disabled | cached | indexed | live`
+  ("disabled to remove the tool"). و`env_key`: "Environment variable
+  supplying the provider API key". وكمان `features.multi_agent`
+  متثبتة في الجدول (stable; on by default).
+- `docs.litellm.ai/docs/providers/openai_compatible`: توثيق صريح:
+  "لو ظهر Not Found Error عند الاختبار، تأكد إن `api_base` فيه
+  الـpostfix `/v1`" — يعني `api_base: …/api/malg/v1` في وصفنا صحيح،
+  وعميل openai بيضيف استدعاء `/chat/completions` بنفسه من غير أي
+  postfix إضافي.
+- `code.claude.com/docs/en/llm-gateway-connect`: بيشرح رسميًا إن
+  `ANTHROPIC_AUTH_TOKEN` = Authorization: Bearer، و
+  `ANTHROPIC_BASE_URL` في الأمثلة الرسمية من غير `/v1`، واختبار
+  `POST $ANTHROPIC_BASE_URL/v1/messages`.
+- اكتشاف Claude Code بيتوقع شكل Anthropic: بيقرا `id` و
+  `display_name` و`description` من `data[]` — ورد `/models` بتاعنا بعد
+  التعديل بيناسب الشكل ده (والحقول الزيادة متتجاهل من أي عميل OpenAI).
+
+## الاختبار المحلي الفعلي (سيرفر الإنتاج محليًا على بورت 3311)
+- `GET /api/malg/v1/models?limit=1000` → 200 بصيغة `object:"list"` ✅
+- `GET /api/malg/v1/v1/models?limit=1000` (المسار المضاعف) → **200 بدل
+  الـ404** — الـrewrite شغال حقيقي ✅
+- `POST /api/malg/v1/v1/chat/completions` (المسار المضاعف) → الطلب عدى
+  من الـrewrite ووصل لجوه الـroute فعليًا (طلع 500 محليًا لأن مفيش
+  `DATABASE_URL` على جهازنا — وفي الإنتاج هيرجع 401/402/429/200
+  زي التصميم) ✅
+- على الإنتاج الحالي (كود قديم قبل الرفع): `/api/malg/v1/models` → 200
+  بـ**7 موديلات**، و`/v1/v1/models` → 404 (هيتصلح بعد الـdeploy الجديد).
+
+## المصادر
+- كودكس — مرجع الكونفيج الرسمي: https://developers.openai.com/codex/config-reference/
 - إعلان استغناء عن Chat Completions: https://github.com/openai/codex/discussions/7782
 - مشكلة تقارب خطأ «chat wire API deprecated» بعد التحديث: https://github.com/janhq/jan/issues/7413
 - نقل إزالتها (فبراير 2026 / 0.95.0) + `multi_agent = false`: https://opper.ai/blog/codex-router/
 - كلود كود + LiteLLM (الوصفة الرسمية): https://docs.litellm.ai/docs/tutorials/claude_non_anthropic_models
+- LiteLLM OpenAI-Compatible: https://docs.litellm.ai/docs/providers/openai_compatible
+- Claude Code — دليل توافق الجيت واي (Model discovery): https://code.claude.com/docs/en/llm-gateway-protocol
+- Claude Code — الربط بالجيت واي: https://code.claude.com/docs/en/llm-gateway-connect
 
 ## الجاي (اقتراح)
-- نقطة نهاية أصيلة `/api/malg/v1/responses` (OpenAI Responses API فرعي
-  متوافق مع كودكس: أحداث `response.created` / `output_item.added|done` /
+- نقطة نهاية أصيلة `/api/malg/v1/messages` (Anthropic Messages فرعي)
+  أو `/api/malg/v1/responses` (OpenAI Responses API فرعي متوافق مع
+  كودكس: أحداث `response.created` / `output_item.added|done` /
   `output_text.delta` / `response.completed` + تحويل `function_call` ↔
-  `function_call_output`) — وقتها كودكس يبقى شغال مباشرة من غير أي جسر.
-  محتاج تحقق فعلًا بتنزيل كودكس CLI على جهازنا ومفتاح اختبار مؤقت — دي
-  حاجة تستحق تيرن لوحدها.
+  `function_call_output`) — وقتها كودكس وكلود كود يلقو شغالين مباشرة من
+  غير أي جسر. محتاج تحقق فعلي بتنزيل الأداة على جهازنا ومفتاح اختبار
+  مؤقت — دي حاجة تستحق تيرن لوحدها.

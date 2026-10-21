@@ -32,6 +32,10 @@ export async function GET() {
     const data = rows.map((r) => ({
       id: r.id,
       object: "model" as const,
+      // حقل صنارة Anthropic إضافي — Claude Code بيعمل model discovery على
+      // /v1/models بصيغة Anthropic (متوقع type:"model")، وأي عميل OpenAI
+      // بيتجاهل الحقل زيادة بلا أثر.
+      type: "model" as const,
       created: r.created_at ? Math.floor(new Date(r.created_at).getTime() / 1000) : 0,
       owned_by: "malg",
       display_name: r.name,
@@ -41,7 +45,15 @@ export async function GET() {
       is_default: r.is_default === true,
     }));
 
-    return NextResponse.json({ object: "list", data });
+    return NextResponse.json({
+      object: "list",
+      data,
+    // حقول قائمة Anthropic (ListModels: first_id/last_id/has_more) — نفس
+    // الهدف: عميل Anthropic يلاقي رد شكل صحيح، وعميل OpenAI ميتأثرش.
+    first_id: data.length > 0 ? data[0].id : null,
+    last_id: data.length > 0 ? data[data.length - 1].id : null,
+    has_more: false,
+  });
   } catch (e) {
     console.error("models endpoint failed", e);
     return NextResponse.json({ object: "list", data: [] });

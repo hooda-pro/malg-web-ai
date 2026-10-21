@@ -5,6 +5,17 @@ const nextConfig = {
   allowedDevOrigins: ["localhost", "127.0.0.1"],
   /* مفيش أي badge/شريط أدوات أثناء التطوير — نفسي من العميلة `N` الصغيرة. */
   devIndicators: false,
+  async rewrites() {
+    return [
+      {
+        // أدوات عيلة Anthropic (زي Claude Code) بتضيف /v1 من نفسها فوق الـbase —
+        // وbase بتاعنا أصلاً بينتهي بـ/v1، فبتبقى /v1/v1/… وبترمي 404
+        // (زي …/v1/v1/models). بنلغي التكرار داخليًا: نفس المسار ببساطة.
+        source: "/api/malg/v1/v1/:path*",
+        destination: "/api/malg/v1/:path*",
+      },
+    ];
+  },
   async headers() {
     return [
       {
