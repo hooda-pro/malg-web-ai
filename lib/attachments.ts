@@ -1,0 +1,1204 @@
+/**
+ * مرفقات الشات (صور + فيديو + تسجيلات صوتية + ملفات نصية/كود/PDF/مضغوطة):
+ * - الصور: بتترفع كـ data URI، وبتتعرض للمستخدم في فقاعته، وكمان بتتبعت فعليًا
+ *   للموديل كصورة حقيقية (مش بس اسمها) — Token Harbor / DeepSeek V4.1 Flash
+ *   بيدعم رؤية (vision) فعلاً، شوف buildApiMessageContent تحت وlib/ai.ts.
+ * - الملفات النصية/الكود: بيتقرأ محتواها ويتحط في نص الرسالة قبل ما تتبعت.
+ * - PDF: استخراج نص خفيف (بدون مكتبة خارجية) — بيشتغل مع أغلب الـ PDF البسيطة
+ *   (نص غير مضغوط)، ومش مضمون 100% مع كل PDF (خصوصاً الممسوحة ضوئيًا/المصورة).
+ * - ZIP: بيتفك في المتصفح ويتقرأ كل ملف نصي جواه؛ الملفات الثنائية (صور...)
+ *   بيتسرد اسمها بس من غير محتوى (ماعدا الفيديو - شوف تحت).
+ * - الفيديو (MP4/WebM/MOV/...): بيتستخرج منه لقطات JPEG في المتصفح نفسه عبر
+ *   canvas وبتتبعت للموديل كصور حقيقية بالترتيب الزمني - من غير سيرفر ومن غير
+ *   مكتبات خارجية. الموديلات النصية البحتة هتشوف اللقطات كصور عادية.
+ */
+
+import type { ProjectFile } from "./parseContent";
+
+export type AttachmentKind = "image" | "text" | "video" | "audio";
+
+export interface PendingAttachment {
+  id: string;
+  file: File;
+  kind: AttachmentKind;
+  /** data URI — للصور بس، لعرض الصورة قبل وبعد الإرسال */
+  previewUrl?: string;
+  /** رابط Firebase Storage الدائم — بعد رفع الملف من /api/uploads */
+  remoteUrl?: string;
+  /** المحتوى النصي المستخرج (لملفات النص/الكود/PDF/ملفات الـ zip الداخلية) */
+  extractedText?: string;
+  /** true أثناء القراءة/الاستخراج */
+  loading: boolean;
+  /** لو فشل الاستخراج (PDF معقد، ملف ثنائي غير مدعوم...) */
+  error?: string;
+  /** ملاحظة معلوماتية (مش خطأ): مثلًا "اتقرا 98 ملف — اتخطّينا node_modules" */
+  note?: string;
+  frames?: { dataUrl: string; atSec: number }[];
+  durationSec?: number;
+  videoDataUrl?: string;
+}
+
+const TEXT_EXTENSIONS = new Set([
+  "txt", "md", "csv", "json", "xml", "yml", "yaml", "ini", "env", "log",
+  "js", "jsx", "ts", "tsx", "mjs", "cjs", "py", "rb", "php", "java", "kt",
+  "c", "h", "cpp", "hpp", "cs", "go", "rs", "swift", "sql", "sh", "bash",
+  "html", "htm", "css", "scss", "less", "vue", "svelte", "graphql", "toml",
+  "dockerfile", "gitignore", "conf", "properties", "svg", "mdx", "prisma", "gradle", "kts", "dart",
+]);
+
+// حد التخزين لكل ملف (الملف بيتخزّن كامل عشان الـ sandbox يشتغل على نسخة سليمة).
+// ده مش الحد اللي بيتبعت للموديل — اللي بيتبعت للموديل قايمة أسماء + أداة read_file
+// (شوف toApiUserContent تحت)، فحجم الملفات هنا مبيتحوّلش لتوكنز تلقائيًا.
+const MAX_STORED_CHARS_PER_FILE = 300_000;
+const MAX_ZIP_ENTRIES_READ = 400;
+// سقف إجمالي محتوى الـ zip المتخزّن في الرسالة (حماية لحجم الطلب وقاعدة البيانات).
+const MAX_ZIP_TOTAL_CHARS = 1_500_000;
+// مجلدات/ملفات مش مفيدة للموديل ولا للـ sandbox وبتاكل الميزانية على الفاضي.
+const SKIP_PATH_RE = /(^|\/)(node_modules|\.git|\.next|\.turbo|\.vercel|dist|build|coverage|__pycache__|\.venv|venv)(\/|$)/;
+const SKIP_FILE_RE = /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb|\.DS_Store)$/;
+
+/** حدود ما يتبعت فعليًا للموديل (بالحروف) — شوف toApiUserContent. */
+export const API_INLINE_FILE_MAX_CHARS = 12_000;
+export const API_INLINE_TOTAL_MAX_CHARS = 24_000;
+export const API_MANIFEST_MAX_ENTRIES = 200;
+
+// الصور من الموبايل بتيجي كبيرة (5-12MB) — إرسالها base64 كاملة بيخلي طلب
+// /api/chat ضخمًا فطبقة الاستضافة بترفضه (403 من غير JSON). أكبر ضلع بيتصغّر
+// لـ 1600px قبل الإرسال — الموديل مش محتاج أكتر من كده لرؤية المحتوى.
+export const MAX_IMAGE_DIMENSION = 1600;
+const IMAGE_JPEG_QUALITY = 0.82;
+// سقف حجم طلب /api/chat بالحروف — فوقه الاستضافة بترفض الطلب قبل ما يوصل
+// للتطبيق، فبنمنعه من الواجهة برسالة واضحة بدل فشل غامض.
+export const MAX_CHAT_PAYLOAD_CHARS = 3_000_000;
+// المفتاح الرئيسي لرفع الملفات — false = معطّل مؤقتًا من الواجهة
+// (زر الإرفاق + السحب والإفلات + لصق الملفات). رجّعه true لإعادة التفعيل.
+export const ATTACHMENTS_ENABLED = true;
+// سقف حجم الملف الواحد عند الاختيار — فوقه بنرفض فورًا من غير ما نقراه في الذاكرة.
+export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+
+function loadImageElement(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("img-load-failed"));
+    img.src = src;
+  });
+}
+
+/** بيصغّر صورة data URL لو أكبر من الحد — بيرجّع الأصل لو صغيرة أو GIF (عشان الحركة) أو فشل التصغير. */
+export async function downscaleImageDataUrl(dataUrl: string): Promise<string> {
+  if (dataUrl.startsWith("data:image/gif")) return dataUrl;
+  try {
+    const img = await loadImageElement(dataUrl);
+    const w = img.naturalWidth || img.width;
+    const h = img.naturalHeight || img.height;
+    if (!w || !h || Math.max(w, h) <= MAX_IMAGE_DIMENSION) return dataUrl;
+    const scale = MAX_IMAGE_DIMENSION / Math.max(w, h);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(2, Math.round(w * scale));
+    canvas.height = Math.max(2, Math.round(h * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return dataUrl;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    // JPEG أصغر بكتير من PNG للصور الفوتوغرافية.
+    return canvas.toDataURL("image/jpeg", IMAGE_JPEG_QUALITY);
+  } catch {
+    return dataUrl;
+  }
+}
+
+function extOf(name: string): string {
+  const parts = name.toLowerCase().split(".");
+  return parts.length > 1 ? parts[parts.length - 1] : "";
+}
+
+function isImageFile(file: File): boolean {
+  return file.type.startsWith("image/");
+}
+
+function isZipFile(file: File): boolean {
+  return extOf(file.name) === "zip" || file.type === "application/zip";
+}
+
+function isPdfFile(file: File): boolean {
+  return extOf(file.name) === "pdf" || file.type === "application/pdf";
+}
+
+function isPlainTextFile(file: File): boolean {
+  if (TEXT_EXTENSIONS.has(extOf(file.name))) return true;
+  return file.type.startsWith("text/") || file.type === "application/json";
+}
+
+const VIDEO_EXTENSIONS = new Set([
+  "mp4", "webm", "mov", "mkv", "avi", "m4v", "3gp", "ogv", "mpg", "mpeg",
+]);
+
+export function isVideoFile(file: File): boolean {
+  if (file.type.startsWith("video/")) return true;
+  return VIDEO_EXTENSIONS.has(extOf(file.name));
+}
+
+// سقف اللقطات وحجمها: 6 لقطات × ~640px بجودة متوسطة ≈ نص ميجا إجمالي،
+// رقم معقول يتحفظ في الرسالة ويتبعت للموديل من غير ما ياكل التوكنز.
+const MAX_VIDEO_FRAMES = 24;
+const MAX_VIDEO_FRAME_WIDTH = 512;
+const VIDEO_NATIVE_MAX_BYTES = 8 * 1024 * 1024;
+const VIDEO_FRAME_QUALITY = 0.65;
+const VIDEO_SEEK_TIMEOUT_MS = 8000;
+
+function fmtClock(sec: number): string {
+  const s = Math.max(0, Math.floor(sec));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function seekVideo(video: HTMLVideoElement, at: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error("seek-timeout"));
+    }, VIDEO_SEEK_TIMEOUT_MS);
+    const cleanup = () => {
+      clearTimeout(timer);
+      video.onseeked = null;
+      video.onerror = null;
+    };
+    video.onerror = () => {
+      cleanup();
+      reject(new Error("seek-error"));
+    };
+    video.onseeked = () => {
+      cleanup();
+      resolve();
+    };
+    try {
+      video.currentTime = at;
+    } catch (e) {
+      cleanup();
+      reject(e);
+    }
+  });
+}
+
+export interface VideoFramesResult {
+  frames: { dataUrl: string; atSec: number }[];
+  durationSec: number;
+}
+
+/** Frames spread across the video (5%-95%) via hidden video element + canvas. */
+export async function extractVideoFrames(
+  file: File,
+  maxFrames = MAX_VIDEO_FRAMES
+): Promise<VideoFramesResult> {
+  const url = URL.createObjectURL(file);
+  const video = document.createElement("video");
+  video.muted = true;
+  video.preload = "auto";
+  (video as HTMLVideoElement & { playsInline?: boolean }).playsInline = true;
+  // عنصر مخفي في الصفحة (بعض المتصفحات - خصوصا iOS - ترفض الالتقاط من عنصر منفصل)
+  video.style.cssText =
+    "position:fixed;left:-9999px;top:0;width:4px;height:4px;opacity:0;pointer-events:none;";
+  document.body.appendChild(video);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("meta-timeout")), VIDEO_SEEK_TIMEOUT_MS);
+      video.onloadedmetadata = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      video.onerror = () => {
+        clearTimeout(timer);
+        reject(new Error("load-error"));
+      };
+      video.src = url;
+    });
+    const durationSec =
+      Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 0;
+    if (!durationSec) throw new Error("no-duration");
+    const n = Math.max(6, Math.min(Math.floor(maxFrames), Math.floor(durationSec) || 6));
+    const canvas = document.createElement("canvas");
+    const frames: { dataUrl: string; atSec: number }[] = [];
+    for (let i = 0; i < n; i++) {
+      const at = durationSec * (0.04 + (0.92 * i) / (n - 1));
+      await seekVideo(video, Math.min(at, Math.max(0, durationSec - 0.1)));
+      const vw = video.videoWidth || 640;
+      const vh = video.videoHeight || 360;
+      const scale = Math.min(1, MAX_VIDEO_FRAME_WIDTH / vw);
+      canvas.width = Math.max(2, Math.round(vw * scale));
+      canvas.height = Math.max(2, Math.round(vh * scale));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("no-canvas");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      frames.push({ dataUrl: canvas.toDataURL("image/jpeg", VIDEO_FRAME_QUALITY), atSec: at });
+    }
+    return { frames, durationSec };
+  } finally {
+    URL.revokeObjectURL(url);
+    try {
+      video.removeAttribute("src");
+      video.load();
+    } catch {
+      // ignore
+    }
+    video.remove();
+  }
+}
+
+/**
+ * فيديو -> لقطات صور (kind image) بأسماء مميزة، بتتبعت للموديل كصور حقيقية
+ * بالترتيب عبر نفس مسار الصور (buildApiMessageContent) من غير أي تغيير تاني.
+ */
+export async function processVideoFile(file: File): Promise<PendingAttachment[]> {
+  try {
+    const { frames, durationSec } = await extractVideoFrames(file);
+    if (frames.length === 0) throw new Error("no-frames");
+    const durLabel = fmtClock(durationSec);
+    const poster = frames[Math.floor(frames.length / 2)];
+    let videoDataUrl: string | undefined;
+    if (file.size <= VIDEO_NATIVE_MAX_BYTES) {
+      try {
+        videoDataUrl = await readAsDataURL(file);
+      } catch {
+        videoDataUrl = undefined;
+      }
+    }
+    const att: PendingAttachment = {
+      id: makeAttachmentId(),
+      file,
+      kind: "video",
+      previewUrl: poster.dataUrl,
+      loading: false,
+      durationSec: Math.round(durationSec),
+      videoDataUrl,
+      frames: frames.map((f) => ({ dataUrl: f.dataUrl, atSec: Math.round(f.atSec * 10) / 10 })),
+      note: `${frames.length} frames - ${durLabel}`,
+    };
+    return [att];
+  } catch {
+    return [
+      {
+        id: makeAttachmentId(),
+        file,
+        kind: "text",
+        loading: false,
+        error: "Could not extract frames (unsupported codec). Try MP4.",
+      },
+    ];
+  }
+}
+
+function truncateNote(text: string, limit: number): string {
+  if (text.length <= limit) return text;
+  return text.slice(0, limit) + `\n… (تم اقتطاع الباقي — الملف أطول من ${limit.toLocaleString("en-US")} حرف)`;
+}
+
+function readAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("read-failed"));
+    reader.readAsText(file);
+  });
+}
+
+function readAsDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("read-failed"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function readAsArrayBuffer(file: File): Promise<ArrayBuffer> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as ArrayBuffer);
+    reader.onerror = () => reject(new Error("read-failed"));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+/**
+ * استخراج نص خفيف من PDF بدون مكتبة خارجية: بيدور على أوامر إظهار النص
+ * (Tj / TJ) جوه streams الصفحات ويطلع النص منها. بيشتغل مع PDF نصي بسيط،
+ * ومش هيقدر يقرأ PDF ممسوح ضوئيًا (صورة) أو معقد الترميز.
+ */
+function extractPdfTextBestEffort(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let raw = "";
+  for (let i = 0; i < bytes.length; i++) raw += String.fromCharCode(bytes[i]);
+
+  const chunks: string[] = [];
+  // كل جزء بين BT (بداية نص) و ET (نهاية نص)
+  const btEtRe = /BT([\s\S]*?)ET/g;
+  let m: RegExpExecArray | null;
+  while ((m = btEtRe.exec(raw)) !== null) {
+    const block = m[1];
+    // النص جوه أقواس () قبل Tj، أو جوه [] قبل TJ
+    const tjRe = /\(((?:[^()\\]|\\.)*)\)\s*Tj/g;
+    let tm: RegExpExecArray | null;
+    while ((tm = tjRe.exec(block)) !== null) chunks.push(unescapePdfString(tm[1]));
+
+    const tjArrRe = /\[((?:[^\[\]]|\\.)*)\]\s*TJ/g;
+    let am: RegExpExecArray | null;
+    while ((am = tjArrRe.exec(block)) !== null) {
+      const arr = am[1];
+      const partRe = /\(((?:[^()\\]|\\.)*)\)/g;
+      let pm: RegExpExecArray | null;
+      let line = "";
+      while ((pm = partRe.exec(arr)) !== null) line += unescapePdfString(pm[1]);
+      if (line) chunks.push(line);
+    }
+    chunks.push("\n");
+  }
+
+  return chunks.join(" ").replace(/[ \t]{2,}/g, " ").replace(/\n{2,}/g, "\n").trim();
+}
+
+function unescapePdfString(s: string): string {
+  return s
+    .replace(/\\n/g, "\n")
+    .replace(/\\r/g, "")
+    .replace(/\\t/g, "\t")
+    .replace(/\\\(/g, "(")
+    .replace(/\\\)/g, ")")
+    .replace(/\\\\/g, "\\");
+}
+
+export interface ZipEntryLike {
+  name: string;
+  read: () => Promise<string>;
+}
+
+export interface ZipTextResult {
+  text: string;
+  /** عدد الملفات النصية اللي اتقرت فعلًا */
+  readCount: number;
+  /** ملاحظة جاهزة للعرض للمستخدم لو اتخطينا حاجة (ملفات كتير/كبيرة/ثنائية...) */
+  notice: string | null;
+}
+
+/**
+ * بيبني نص الـ zip من قايمة entries (منفصلة عن JSZip عشان تتختبر لوحدها).
+ * الفورمات: كل ملف "\n=== FILE: المسار ===\nالمحتوى" (الفورمات القديم "--- المسار ---"
+ * لسه بيتقرا للرسايل المخزّنة قبل كده، بس اتغيّر لأن سطر زي "--- x ---" جوه ملف
+ * markdown كان بيتفسّر كبداية ملف جديد). المحتوى بيتخزّن كامل (لحد
+ * MAX_STORED_CHARS_PER_FILE) — مفيش اقتطاع بيتحط جوه المحتوى نفسه إلا لو الملف
+ * فعلًا أكبر من السقف، عشان الـ sandbox ميشتغلش على ملف مكسور.
+ */
+export async function buildZipText(entries: ZipEntryLike[]): Promise<ZipTextResult> {
+  const parts: string[] = [];
+  let read = 0;
+  let total = 0;
+  let skippedIgnored = 0;
+  let skippedBinary = 0;
+  let skippedBudget = 0;
+  let truncatedFiles = 0;
+
+  for (const entry of entries) {
+    if (SKIP_PATH_RE.test(entry.name) || SKIP_FILE_RE.test(entry.name)) {
+      skippedIgnored++;
+      continue;
+    }
+    const ext = extOf(entry.name);
+    const isText = TEXT_EXTENSIONS.has(ext) || ext === "";
+    if (!isText) {
+      skippedBinary++;
+      parts.push(`\n=== FILE: ${entry.name} === (ملف ثنائي — مش هيتقرأ محتواه)`);
+      continue;
+    }
+    if (read >= MAX_ZIP_ENTRIES_READ || total >= MAX_ZIP_TOTAL_CHARS) {
+      skippedBudget++;
+      continue;
+    }
+    try {
+      let text = await entry.read();
+      if (text.length > MAX_STORED_CHARS_PER_FILE) {
+        text = truncateNote(text, MAX_STORED_CHARS_PER_FILE);
+        truncatedFiles++;
+      }
+      if (total + text.length > MAX_ZIP_TOTAL_CHARS) {
+        skippedBudget++;
+        continue;
+      }
+      parts.push(`\n=== FILE: ${entry.name} ===\n${text}`);
+      total += text.length;
+      read++;
+    } catch {
+      parts.push(`\n=== FILE: ${entry.name} === (تعذّرت قراءته كنص)`);
+    }
+  }
+
+  const notes: string[] = [];
+  if (skippedIgnored > 0) notes.push(`اتخطّينا ${skippedIgnored} ملف/مجلد غير مفيد (node_modules / lock files / build...)`);
+  if (skippedBudget > 0) notes.push(`${skippedBudget} ملف نصي مااتقراش لأن الأرشيف أكبر من الحد المسموح`);
+  if (truncatedFiles > 0) notes.push(`${truncatedFiles} ملف اتقطع لأنه ضخم`);
+  if (skippedBinary > 0) notes.push(`${skippedBinary} ملف ثنائي اتسرد اسمه بس`);
+
+  return {
+    text: parts.join("\n"),
+    readCount: read,
+    notice: notes.length ? `اتقرا ${read} ملف — ${notes.join(" • ")}` : null,
+  };
+}
+
+async function extractZipContents(file: File): Promise<ZipTextResult> {
+  const JSZip = (await import("jszip")).default;
+  const zip = await JSZip.loadAsync(file);
+  const entries = Object.values(zip.files)
+    .filter((e) => !e.dir)
+    .map((e) => ({ name: e.name, read: () => e.async("string") }));
+  return buildZipText(entries);
+}
+
+export function formatBytes(n: number): string {
+  if (!n || n <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const i = Math.min(Math.floor(Math.log(n) / Math.log(1024)), units.length - 1);
+  return `${(n / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+let uid = 0;
+export function makeAttachmentId(): string {
+  uid += 1;
+  return `att-${Date.now()}-${uid}`;
+}
+
+/** بيبني PendingAttachment من ملف ويبدأ يقرأ/يستخرج محتواه فورًا. */
+export async function processFile(file: File): Promise<PendingAttachment> {
+  const id = makeAttachmentId();
+
+  if (isImageFile(file)) {
+    const att: PendingAttachment = { id, file, kind: "image", loading: true };
+    try {
+      att.previewUrl = await downscaleImageDataUrl(await readAsDataURL(file));
+    } catch {
+      att.error = "تعذّر تحميل الصورة";
+    }
+    att.loading = false;
+    return att;
+  }
+
+  const att: PendingAttachment = { id, file, kind: "text", loading: true };
+  try {
+    if (isZipFile(file)) {
+      const zipResult = await extractZipContents(file);
+      att.extractedText = zipResult.text;
+      if (zipResult.notice) att.note = zipResult.notice;
+    } else if (isPdfFile(file)) {
+      const buf = await readAsArrayBuffer(file);
+      const text = extractPdfTextBestEffort(buf);
+      if (!text || text.length < 5) {
+        att.error = "الملف PDF ده مش نص عادي (ممكن يكون صورة ممسوحة) — تم رفعه كمرفق بس من غير استخراج نص";
+        att.extractedText = "";
+      } else {
+        att.extractedText = truncateNote(text, MAX_STORED_CHARS_PER_FILE);
+      }
+    } else if (isPlainTextFile(file)) {
+      const text = await readAsText(file);
+      att.extractedText = truncateNote(text, MAX_STORED_CHARS_PER_FILE);
+    } else {
+      att.error = "نوع ملف غير مدعوم للقراءة — تم رفعه كمرفق بس";
+    }
+  } catch {
+    att.error = "تعذّرت قراءة الملف";
+  }
+  att.loading = false;
+  return att;
+}
+
+/**
+ * بيبني الجزء اللي بيتضاف لنص الرسالة المرسلة فعليًا للموديل: محتوى كل ملف
+ * نصي/كود/PDF/zip متسرد بوضوح تحت اسم الملف. الصور مالهاش نص هنا (بتتبعت
+ * كصورة حقيقية منفصلة عبر buildApiMessageContent، مش كنص)، وبيتم تجاهل أي
+ * ملف فشل استخراجه أو من غير محتوى.
+ */
+/** بيختار سياج (fence) أطول من أي سلسلة backticks جوه المحتوى — عشان ملف فيه ``` (زي README) ميقفلش الكتلة بدري. */
+function fenceFor(content: string): string {
+  let longest = 0;
+  for (const m of content.matchAll(/`+/g)) longest = Math.max(longest, m[0].length);
+  return "`".repeat(Math.max(3, longest + 1));
+}
+
+/** معاينة صورة محلية مصغّرة للعرض فقط (لا تُرسل للسيرفر) — null لو فشلت القراءة. */
+export async function readImagePreview(file: File): Promise<string | null> {
+  try {
+    return await downscaleImageDataUrl(await readAsDataURL(file));
+  } catch {
+    return null;
+  }
+}
+
+export function buildAttachmentsPromptBlock(attachments: PendingAttachment[]): string {
+  const withText = attachments.filter((a) => a.kind === "text" && a.extractedText && a.extractedText.trim());
+  if (withText.length === 0) return "";
+
+  const parts = withText.map((a) => {
+    const body = a.extractedText as string;
+    const fence = fenceFor(body);
+    return `### ملف مرفق: ${a.file.name}\n${fence}\n${body}\n${fence}`;
+  });
+  return `\n\n---\nمرفقات المستخدم (محتوى الملفات اللي بعتها):\n${parts.join("\n\n")}`;
+}
+
+/**
+ * الوسم اللي بيلف كتلة بيانات المرفقات الشكلية (صور Base64 + أسماء ملفات) جوه نص الرسالة المخزّن.
+ * ملحوظة مهمة: لازم يكون الوسم مبني من حروف Unicode عادية (هنا استخدمنا نطاق
+ * Private Use Area) وليس بايت NUL (\u0000). Postgres/Neon بيرفض تخزين أي نص
+ * فيه بايت NUL في عمود من نوع text ويطلع خطأ عند الـ INSERT — وده كان بيكسّر
+ * حفظ أي رسالة فيها مرفقات (كل مرة، أي نوع ملف) قبل ما نضيف الحماية دي.
+ */
+export const ATTACHMENTS_META_START = "\uE000MLAG_ATTACHMENTS_START\uE000";
+export const ATTACHMENTS_META_END = "\uE000MLAG_ATTACHMENTS_END\uE000";
+
+export interface StoredAttachmentMeta {
+  name: string;
+  size: number;
+  kind: AttachmentKind;
+  /** data URI — للصور بس (رسايل قديمة قبل التخزين الخارجي) */
+  previewUrl?: string;
+  /** رابط Firebase Storage الدائم — بديل خفيف للـ base64 في طلب الشات */
+  remoteUrl?: string;
+  frames?: { url: string; at: number }[];
+  durationSec?: number;
+  videoUrl?: string;
+  /** تسجيل صوتي (kind: "audio" من التطبيق): data:audio/... base64 جاهز لبثّه للموديل
+   * كـ input_audio — من التطبيق مباشرة، أو بعد ما السيرفر يسترجع remoteUrl. */
+  audioUrl?: string;
+}
+
+interface AttachmentLike {
+  file: File;
+  kind: AttachmentKind;
+  previewUrl?: string;
+  remoteUrl?: string;
+  frames?: { dataUrl: string; atSec: number }[];
+  durationSec?: number;
+  videoDataUrl?: string;
+}
+
+/**
+ * بيبني كتلة بيانات مخفية (JSON بين وسمين فريدين) بتتحط في آخر نص الرسالة
+ * المخزّن في الداتابيز، عشان MessageItem يقدر يستخرج منها صور/أسماء الملفات
+ * ويعرضها فوق فقاعة المستخدم من غير ما تتقرأ كنص عادي وسط الرسالة.
+ */
+export function buildAttachmentsMetaBlock(attachments: AttachmentLike[]): string {
+  if (attachments.length === 0) return "";
+  const meta: StoredAttachmentMeta[] = attachments.map((a) => {
+    // لو الملف مرفوع خارجيًا (remoteUrl) بنبعت الرابط بس — من غير base64،
+    // عشان طلب /api/chat يفضل صغير وميترفضش من طبقة الاستضافة.
+    const remote = a.remoteUrl;
+    return {
+      name: a.file.name,
+      size: a.file.size,
+      kind: a.kind,
+      previewUrl: remote ? undefined : a.kind === "image" || a.kind === "video" ? a.previewUrl : undefined,
+      remoteUrl: remote,
+      videoUrl: a.kind === "video" ? a.videoDataUrl : undefined,
+      frames:
+        a.kind === "video" && a.frames
+          ? a.frames.map((f) => ({ url: f.dataUrl, at: Math.round(f.atSec) }))
+          : undefined,
+      durationSec:
+        a.kind === "video" && typeof a.durationSec === "number" ? Math.round(a.durationSec) : undefined,
+    };
+  });
+  return `\n${ATTACHMENTS_META_START}${JSON.stringify(meta)}${ATTACHMENTS_META_END}`;
+}
+
+/** بيفصل كتلة بيانات المرفقات عن نص الرسالة الأصلي (النص المرئي + الجزء المستخرج للملفات، لو موجود). */
+export function extractAttachmentsMeta(content: string): {
+  visibleText: string;
+  attachments: StoredAttachmentMeta[];
+} {
+  const startIdx = content.indexOf(ATTACHMENTS_META_START);
+  if (startIdx === -1) return { visibleText: content, attachments: [] };
+
+  const endIdx = content.indexOf(ATTACHMENTS_META_END);
+  if (endIdx === -1) return { visibleText: content, attachments: [] };
+
+  const jsonStr = content.slice(startIdx + ATTACHMENTS_META_START.length, endIdx);
+  let attachments: StoredAttachmentMeta[] = [];
+  try {
+    attachments = JSON.parse(jsonStr);
+  } catch {
+    attachments = [];
+  }
+
+  const before = content.slice(0, startIdx);
+  const after = content.slice(endIdx + ATTACHMENTS_META_END.length);
+  return { visibleText: (before + after).trimEnd(), attachments };
+}
+
+/** بيفصل كتلة "مرفقات المستخدم (محتوى الملفات...)" المستخرجة عن باقي النص، عشان تتعرض كقسم قابل للطي. */
+export function extractAttachmentsPromptSection(text: string): {
+  mainText: string;
+  filesSection: string | null;
+} {
+  const marker = "\n\n---\nمرفقات المستخدم (محتوى الملفات اللي بعتها):\n";
+  const idx = text.indexOf(marker);
+  if (idx === -1) return { mainText: text, filesSection: null };
+  return {
+    mainText: text.slice(0, idx).trimEnd(),
+    filesSection: text.slice(idx + marker.length),
+  };
+}
+
+export type ApiContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } }
+  | { type: "video_url"; video_url: { url: string } }
+  | { type: "input_audio"; input_audio: { data: string; format: string } };
+
+/**
+ * بيحلل data URL صوتي (data:audio/...) ويرجّع الـ base64 + الصيغة بصيغة input_audio
+ * القياسية (wav / mp3) — null لو مش data URL صالح.
+ */
+/** علامة ثابتة في نص "التسجيل ماوصلش" — /api/chat بيعتمد عليها عشان ما يلصقش تذكير الصيغة فوق رسالة فاضية. */
+export const VOICE_UNDELIVERED_MARK = "could not be delivered to you";
+
+export function audioDataUrlParts(
+  dataUrl: string
+): { base64: string; format: "wav" | "mp3" } | null {
+  if (!dataUrl || !dataUrl.startsWith("data:")) return null;
+  const i = dataUrl.indexOf("base64,");
+  if (i < 0) return null;
+  const sep = dataUrl.indexOf(";", 5);
+  const mime = (sep > 5 ? dataUrl.slice(5, sep) : "").toLowerCase();
+  const format: "wav" | "mp3" = mime.includes("mp3") || mime.includes("mpeg") ? "mp3" : "wav";
+  const base64 = dataUrl.slice(i + 7);
+  return base64.length > 150 ? { base64, format } : null;
+}
+
+// ---------------------------------------------------------------------------
+// قراءة الملفات المرفقة من النص المخزّن
+// ---------------------------------------------------------------------------
+
+export interface AttachedFile extends ProjectFile {
+  /** true لو الملف اتقطع وقت الرفع لأنه أكبر من السقف */
+  truncated?: boolean;
+}
+
+// محتوى الملف بيتغلف بسياج backticks (3 أو أكتر). الإغلاق لازم يكون بنفس طول
+// السياج وبعده إمّا كتلة ملف تانية أو نهاية النص — ده اللي بيخلّي ملف جواه ```
+// (زي README.md) مايقطعش القراءة بدري زي ما كان بيحصل قبل كده.
+const ATTACHMENT_FILE_BLOCK_RE = /### ملف مرفق: (.+)\n(`{3,})\n([\s\S]*?)\n\2(?=\n\n### ملف مرفق: |\s*$)/g;
+// عنوان entry جوه zip: "\n--- path ---" متبوع بسطر جديد أو علامة "(ملف ثنائي".
+const ZIP_HEADER_RE = /\n=== FILE: ([^\n]+?) ===(?=\n| \()/g;
+// الفورمات القديم (رسايل اتخزنت قبل التعديل) — fallback بس.
+const ZIP_HEADER_RE_LEGACY = /\n--- ([^\n]+?) ---(?=\n| \()/g;
+const TRUNCATION_NOTE_RE = /\n… \(تم اقتطاع الباقي — الملف أطول من [\d,]+ حرف\)$/;
+
+function splitZipEntries(text: string): AttachedFile[] {
+  const headers: { path: string; start: number; end: number }[] = [];
+  const re = new RegExp(text.includes("\n=== FILE: ") ? ZIP_HEADER_RE : ZIP_HEADER_RE_LEGACY);
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    headers.push({ path: m[1].trim(), start: m.index, end: m.index + m[0].length });
+  }
+
+  const files: AttachedFile[] = [];
+  for (let i = 0; i < headers.length; i++) {
+    const h = headers[i];
+    const bodyStart = h.end;
+    const nextStart = i + 1 < headers.length ? headers[i + 1].start : text.length;
+    let body = text.slice(bodyStart, nextStart);
+    // الملفات الثنائية/اللي فشلت قراءتها مالهاش جسم (بعد العنوان مباشرة " (...)").
+    if (body.startsWith(" (")) continue;
+    if (body.startsWith("\n")) body = body.slice(1); // السطر الجديد اللي بعد العنوان
+    // "\n" الفاصل بين الـ entries — موجود بعد كل entry ما عدا الأخير.
+    if (i + 1 < headers.length) body = body.replace(/\n$/, "");
+    files.push(finalizeFile(h.path, body));
+  }
+  return files;
+}
+
+function finalizeFile(path: string, content: string): AttachedFile {
+  if (TRUNCATION_NOTE_RE.test(content)) {
+    return { path, content: content.replace(TRUNCATION_NOTE_RE, ""), truncated: true };
+  }
+  return { path, content };
+}
+
+/**
+ * بيستخرج ملفات المشروع الحقيقية اللي المستخدم رفعها كمرفقات (كود/نصوص/PDF
+ * مستخرج/محتوى zip اتفكّ) من نص رسالة مستخدم مخزّنة — عشان الـ sandbox
+ * (run_command) وأداتين read_file/list_files يقدروا يشتغلوا فعليًا على الملفات
+ * اللي المستخدم رفعها بنفسه. الصور مالهاش محتوى نصي فبتتجاهل هنا.
+ */
+export function extractUserAttachmentFiles(content: string): AttachedFile[] {
+  const { visibleText } = extractAttachmentsMeta(content);
+  const { filesSection } = extractAttachmentsPromptSection(visibleText);
+  if (!filesSection) return [];
+
+  const files: AttachedFile[] = [];
+  const blockRe = new RegExp(ATTACHMENT_FILE_BLOCK_RE);
+  let m: RegExpExecArray | null;
+  while ((m = blockRe.exec(filesSection)) !== null) {
+    const name = m[1].trim();
+    const text = m[3];
+
+    if (extOf(name) === "zip") {
+      const entries = splitZipEntries("\n" + text);
+      if (entries.length > 0) files.push(...entries);
+      else files.push(finalizeFile(name, text));
+    } else {
+      files.push(finalizeFile(name, text));
+    }
+  }
+  return files;
+}
+
+// ---------------------------------------------------------------------------
+// اللي بيتبعت للموديل فعليًا (بدل ما كل محتوى الملفات يتبعت في كل نداء)
+// ---------------------------------------------------------------------------
+
+export interface ApiContentOptions {
+  /** ميزانية الحروف اللي مسموح تتحط inline من الملفات الصغيرة في الرسالة دي (0 = قايمة أسماء بس). */
+  inlineBudgetChars?: number;
+  videoNative?: boolean;
+  /** الموديل بيسمع التسجيلات الصوتية فعليًا — بتتبعت كـ input_audio (مربوط بعلم «المايك» للـ
+   * موديل من لوحة الأدمن). false = السلوك القديم: الصوت يتجاهل تمامًا. */
+  audioNative?: boolean;
+  /** false → الصور (والصوت) مبتتبعتش (بتتحول لسطر نصي) — لرسايل قديمة عشان نوفر توكنز. */
+  includeImages?: boolean;
+}
+
+function countLines(text: string): number {
+  return text ? text.split("\n").length : 0;
+}
+
+/** قايمة الملفات اللي الموديل يقدر يقراها بـ read_file — مختصرة (اسم + عدد أسطر). */
+export function buildFilesManifest(files: AttachedFile[], inlinedPaths: Set<string> = new Set()): string {
+  if (files.length === 0) return "";
+  const shown = files.slice(0, API_MANIFEST_MAX_ENTRIES);
+  const lines = shown.map((f) => {
+    const flags = [
+      `${countLines(f.content)} سطر`,
+      f.truncated ? "مقصوص" : null,
+      inlinedPaths.has(f.path) ? "محتواه فوق" : null,
+    ].filter(Boolean);
+    return `- ${f.path} (${flags.join("، ")})`;
+  });
+  if (files.length > shown.length) lines.push(`- … و${files.length - shown.length} ملف تاني (استخدم list_files لعرضهم كلهم)`);
+  return lines.join("\n");
+}
+
+/**
+ * بيحوّل رسالة مستخدم مخزّنة لـ content بيتبعت للموديل:
+ * - النص المكتوب بيتبعت زي ما هو.
+ * - الملفات المرفقة: مش بتتبعت كلها. الملفات النصية الصغيرة (≤ 12k حرف) بتتحط
+ *   inline لحد ميزانية إجمالية، والباقي (وأي zip) بيتحوّل لقايمة أسماء والموديل
+ *   يقرا اللي محتاجه بأداة read_file. ده اللي بيمنع رسالة فيها zip من إنها تاكل
+ *   100 ألف توكن في كل نداء.
+ * - الصور: بتتبعت كصورة حقيقية بس لو includeImages (آخر رسالة فيها صور).
+ * - التسجيلات الصوتية من التطبيق: بتتبعت كـ input_audio (صوت حقيقي يسمعه الموديل)
+ *   بس لو audioNative مفعّلة (علم «المايك» للموديل من الأدمن) — ودي آخر رسالة فيها وسائط.
+ */
+export function toApiUserContent(content: string, opts: ApiContentOptions = {}): string | ApiContentPart[] {
+  const inlineBudget = opts.inlineBudgetChars ?? 0;
+  const includeImages = opts.includeImages ?? true;
+
+  const { visibleText, attachments } = extractAttachmentsMeta(content);
+  const { mainText, filesSection } = extractAttachmentsPromptSection(visibleText);
+
+  let text = mainText;
+  if (filesSection) {
+    const files = extractUserAttachmentFiles(content);
+
+    // مرشحين الـ inline: الملفات اللي اترفعت كملف مستقل (مش من جوه zip) وصغيرة.
+    const standaloneNames = new Set(attachments.filter((a) => a.kind === "text").map((a) => a.name));
+    let budget = inlineBudget;
+    const inlined = new Set<string>();
+    const inlineParts: string[] = [];
+    for (const f of files) {
+      if (!standaloneNames.has(f.path)) continue;
+      if (f.content.length > API_INLINE_FILE_MAX_CHARS || f.content.length > budget) continue;
+      budget -= f.content.length;
+      inlined.add(f.path);
+      const fence = fenceFor(f.content);
+      inlineParts.push(`### ${f.path}\n${fence}\n${f.content}\n${fence}`);
+    }
+
+    const manifest = buildFilesManifest(files, inlined);
+    const blocks: string[] = [];
+    if (inlineParts.length) blocks.push(inlineParts.join("\n\n"));
+    if (manifest) {
+      blocks.push(
+        `الملفات المرفقة (${files.length}) — قايمة بس عشان التوكنز. اقرا أي ملف تحتاجه بأداة read_file، واعرض القايمة بـ list_files:\n${manifest}`
+      );
+    }
+    if (blocks.length) text = `${mainText}\n\n---\nمرفقات المستخدم:\n${blocks.join("\n\n")}`.trim();
+  }
+
+  const images = attachments.filter((a) => a.kind === "image" && (a.previewUrl || a.remoteUrl));
+  const videos = attachments.filter(
+    (a) => a.kind === "video" && ((a.frames && a.frames.length > 0) || !!a.remoteUrl)
+  );
+  // التسجيلات الصوتية: بتتبعت للموديل كـ input_audio بس لو الموديل مدعوم («المايك» متفعّل له)،
+  // وبيانات الصوت لازم تكون متاحة (audioUrl = data:base64). remoteUrl لوحده مش كفاية هنا
+  // لأن التحويل لـ inline بيحصل في materializeRemoteAttachments قبل نداء الموديل.
+  // (فحص رخيص هنا — التحليل الكامل لبيانات الصوت بيحصل مرة واحدة تحت عند بناء الـ parts.)
+  const audioNative = opts.audioNative === true;
+  const audios = audioNative
+    ? attachments.filter((a) => {
+        if (a.kind !== "audio") return false;
+        const u = a.audioUrl ?? "";
+        return u.startsWith("data:") && u.indexOf("base64,") > 0 && u.length > 200;
+      })
+    : [];
+  // تسجيلات صوتية مش هتوصل للموديل (الموديل مش مفعّل له «المايك»، أو بروتوكوله مش chat_completions، أو السيرفر
+  // ما قدرش يجيب الملف): قبل كده كانت الرسالة بتفضل فاضية والموديل يستلم تذكير الصيغة بس فيرد «فهمت» —
+  // دلوقتي بنقوله بصراحة إن التسجيل ماوصلش عشان يقول للمستخدم بدل ما يتظاهر إنه سمع.
+  const lostVoice = attachments.filter((a) => a.kind === "audio").length - audios.length;
+  if (lostVoice > 0) {
+    const lostNote = includeImages
+      ? `[The user sent ${lostVoice === 1 ? "a voice message" : `${lostVoice} voice messages`}, but the audio ${VOICE_UNDELIVERED_MARK} (this model cannot receive audio, or the recording could not be loaded). Do NOT guess or invent what was said. Tell the user briefly that you could not hear it, and ask them to type the message or try again.]`
+      : "[A voice message sent earlier is not included in this context.]";
+    text = `${text}\n\n${lostNote}`.trim();
+  }
+  if (images.length === 0 && videos.length === 0 && audios.length === 0) return text;
+  const videoNative = opts.videoNative === true;
+
+  if (!includeImages) {
+    const bits = [
+      ...images.map((a) => a.name),
+      ...videos.map((v) => `${v.name} (video)`),
+      ...audios.map((a) => `${a.name} (تسجيل صوتي)`),
+    ];
+    const total = images.length + videos.reduce((n, v) => n + (v.frames?.length ?? 0), 0) + audios.length;
+    const names = bits.join(", ");
+    return `${text}\n\n[المستخدم كان بعت ${total} مرفق وسائط (صور/فيديو/صوت) (${names}) في رسالة قديمة — اتشالت من السياق لتوفير التوكنز]`.trim();
+  }
+
+  let labeledText = text;
+  if (videos.length > 0) {
+    const lines = videos.map((v) => {
+      if (videoNative && v.videoUrl) {
+        return `Attached video "${v.name}" as a FULL native video file (with audio) - the following video part is the complete file. Watch AND listen to it: describe visuals, actions, and anything said or heard.`;
+      }
+      return `Attached video "${v.name}" as ${(v.frames?.length ?? 0)} chronological frames - the following images are its frames in order. ` +
+        `These frames are SILENT stills: there is NO audio. Never invent or quote spoken words, dialogue, lyrics, or sounds ` +
+        `from them. If the user asks what was said/heard, say honestly you cannot hear audio from uploaded videos, ` +
+        `and suggest alternatives: a YouTube/public link (transcribable via tools) or the user describing what was said.`;
+    });
+    labeledText = `${text}\n\n${lines.join("\n")}`.trim();
+  }
+  if (audios.length > 0) {
+    const lines = audios.map(
+      (a) =>
+        `The user attached a VOICE RECORDING ("${a.name}", ${a.durationSec ?? 0}s) - the following input_audio part is its complete audio. ` +
+        `ACTUALLY LISTEN to it: the spoken words are the real message content (the typed text may be empty). Never invent words that were not said.`
+    );
+    labeledText = `${labeledText}\n\n${lines.join("\n")}`.trim();
+  }
+
+  const parts: ApiContentPart[] = [{ type: "text", text: labeledText }];
+  for (const a of attachments) {
+    if (a.kind === "image" && (a.previewUrl || a.remoteUrl)) {
+      parts.push({ type: "image_url", image_url: { url: (a.previewUrl || a.remoteUrl) as string } });
+    } else if (a.kind === "video") {
+      if (videoNative && a.videoUrl) {
+        parts.push({ type: "video_url", video_url: { url: a.videoUrl } });
+      } else if (a.frames) {
+        for (const f of a.frames) parts.push({ type: "image_url", image_url: { url: f.url } });
+      } else if (a.remoteUrl) {
+        parts.push({ type: "video_url", video_url: { url: a.remoteUrl } });
+      }
+    } else if (a.kind === "audio") {
+      // الصوت بيتبعت كـ input_audio (صيغة OpenAI القياسية للصوت الجاهز). الفلتر في أول الدالة
+      // (audioDataUrlParts) مكان هو اللي بيختبر الصلاحية، فأي تسجيل وصل هنا = data URL سليم.
+      const p = audioDataUrlParts(a.audioUrl ?? "");
+      if (p) parts.push({ type: "input_audio", input_audio: { data: p.base64, format: p.format } });
+    }
+  }
+  return parts;
+}
+
+/**
+ * بيشيل بيانات الصوت الكاملة (audioUrl = base64) من نسخة الرسالة اللي بتتخزّن في الداتابيز لو التسجيل ليه remoteUrl
+ * (الملف موجود على Cloudinary — منه بيتشغّل التسجيل في الواجهة). من غير كده كل دقيقة تسجيل كانت بتزوّد ~2.5MB في
+ * الداتابيز وبتتنزّل كلها في كل مرة تفتح المحادثة. النسخة الكاملة بتفضل في الذاكرة للرد الحالي بس.
+ * تسجيل من غير remoteUrl (فشل الرفع من التطبيق وبعت الصوت inline) بيفضل زي ما هو.
+ */
+export function stripInlineAudioForDb(content: string): string {
+  if (!/"kind"\s*:\s*"audio"/.test(content)) return content;
+  const s = content.indexOf(ATTACHMENTS_META_START);
+  const e = content.indexOf(ATTACHMENTS_META_END);
+  if (s === -1 || e === -1 || e < s) return content;
+  let arr: StoredAttachmentMeta[];
+  try {
+    arr = JSON.parse(content.slice(s + ATTACHMENTS_META_START.length, e));
+  } catch {
+    return content;
+  }
+  if (!Array.isArray(arr)) return content;
+  let changed = false;
+  for (const a of arr) {
+    if (a && a.kind === "audio" && a.remoteUrl && a.audioUrl) {
+      delete a.audioUrl;
+      changed = true;
+    }
+  }
+  if (!changed) return content;
+  return content.slice(0, s + ATTACHMENTS_META_START.length) + JSON.stringify(arr) + content.slice(e);
+}
+
+/** توافق مع الكود القديم: نفس السلوك القديم (نص + صور) لكن بقايمة أسماء بدل محتوى الملفات. */
+export function buildApiMessageContent(content: string): string | ApiContentPart[] {
+  return toApiUserContent(content, { inlineBudgetChars: API_INLINE_TOTAL_MAX_CHARS, includeImages: true });
+}
+
+/**
+ * عدد التوكنز (تقدير) اللي رسالة المستخدم بتكلّفه فعليًا لما تتبعت للموديل بعد
+ * التحويل — من غير بيانات الصور Base64 (كل صورة ≈ ثابت) ومن غير محتوى الملفات
+ * اللي مابتتبعتش.
+ */
+export function apiUserContentLength(content: string | ApiContentPart[]): { chars: number; images: number } {
+  if (typeof content === "string") return { chars: content.length, images: 0 };
+  let chars = 0;
+  let images = 0;
+  for (const p of content) {
+    if (p.type === "text") chars += p.text.length;
+    else if (p.type === "video_url") images += 8;
+    else if (p.type === "input_audio") images += 8; // تقدير — الصوت الحقيقي بيحتسب بالمزوّد نفسه
+    else images += 1;
+  }
+  return { chars, images };
+}
+
+// ---------------------------------------------------------------------------
+// التخزين الخارجي: الملفات بتترفع على Firebase Storage عبر /api/uploads،
+// وطلب /api/chat بيشيل روابط صغيرة بس — السيرفر بيسترجع المحتوى وقت الإرسال.
+// ---------------------------------------------------------------------------
+
+/** تصنيف نوع الملف من الاسم والـ MIME — مشترك بين العميل والسيرفر. */
+export function detectAttachmentKind(name: string, mime: string): AttachmentKind {
+  const ext = extOf(name);
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/") || VIDEO_EXTENSIONS.has(ext)) return "video";
+  return "text";
+}
+
+export interface RemoteUploadResult {
+  url: string;
+  name: string;
+  size: number;
+  kind: AttachmentKind;
+}
+
+/** بيرفع ملف خام مباشرة على Cloudinary (unsigned — من المتصفح للسحابة،
+ * من غير ما يعدّي على سيرفر التطبيق). بيرجّع رابطه الدائم. */
+export async function uploadAttachmentFile(file: File): Promise<RemoteUploadResult> {
+  const cloud = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+  const preset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+  if (!cloud || !preset) throw new Error("خدمة رفع الملفات غير مفعّلة بعد — جرّب لاحقًا");
+  const form = new FormData();
+  form.append("file", file, file.name);
+  form.append("upload_preset", preset);
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${cloud}/auto/upload`, {
+    method: "POST",
+    body: form,
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data?.secure_url) {
+    const detail = data?.error?.message ? String(data.error.message) : "";
+    console.error("[upload-failed]", res.status, detail || data);
+    throw new Error(detail ? `Cloudinary: ${detail}` : "تعذّر رفع الملف — حاول مجددًا");
+  }
+  if (String(data.resource_type || "") === "video") throw new Error("رفع الفيديو متوقف حاليا");
+  return {
+    url: String(data.secure_url),
+    name: file.name,
+    size: Number(data.bytes || file.size),
+    kind: String(data.resource_type || "") === "image" ? "image" : "text",
+  };
+}
+
+// --- سيرفر فقط من هنا لتحت (تستخدم Buffer وfetch السيرفر) ---
+
+const REMOTE_FETCH_TIMEOUT_MS = 15_000;
+const REMOTE_FILE_MAX_BYTES = 10 * 1024 * 1024;
+const REMOTE_TOTAL_MAX_BYTES = 20 * 1024 * 1024;
+const REMOTE_IMAGE_INLINE_MAX_BYTES = 6 * 1024 * 1024;
+
+/**
+ * السيرفر بيجيب محتوى المرفقات من الروابط اللي العميل بعتها في الرسالة. من غير فحص، أي مستخدم مسجّل كان يقدر
+ * يبعت رابط داخلي (مثلًا http://169.254.169.254/… أو خدمة جوه الشبكة) والسيرفر يجيبه ويحطه في المحادثة (SSRF).
+ * فبنقبل بس روابط https بتاعة Cloudinary (اللي /api/uploads بيرفع عليها). لو بتستخدم دومين تاني للملفات
+ * ضيفه في متغير البيئة ATTACHMENT_ALLOWED_HOSTS (مفصول بفواصل، مثال: cdn.example.com) — والمضيف المذكور بيتقبل
+ * بـ http كمان (للتجارب المحلية).
+ */
+export function isAllowedRemoteUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    const h = u.hostname.toLowerCase();
+    const extra = (process.env.ATTACHMENT_ALLOWED_HOSTS || "")
+      .split(",")
+      .map((x) => x.trim().toLowerCase())
+      .filter(Boolean);
+    if (extra.some((x) => h === x || h.endsWith("." + x))) return u.protocol === "https:" || u.protocol === "http:";
+    if (u.protocol !== "https:") return false;
+    return h === "res.cloudinary.com" || h.endsWith(".cloudinary.com");
+  } catch {
+    return false;
+  }
+}
+
+async function fetchRemoteBytes(
+  url: string,
+  maxBytes: number
+): Promise<{ buf: Buffer; contentType: string } | null> {
+  try {
+    // التحويلات (redirect) بنتابعها يدويًا وبنفحص كل خطوة على نفس القايمة — عشان رابط مسموح مايحوّلش لحاجة داخلية.
+    let target = url;
+    let res: Response | null = null;
+    for (let hop = 0; hop < 4; hop++) {
+      if (!isAllowedRemoteUrl(target)) return null;
+      res = await fetch(target, { signal: AbortSignal.timeout(REMOTE_FETCH_TIMEOUT_MS), redirect: "manual" });
+      if (res.status >= 300 && res.status < 400) {
+        const loc = res.headers.get("location");
+        if (!loc) return null;
+        target = new URL(loc, target).toString();
+        res = null;
+        continue;
+      }
+      break;
+    }
+    if (!res || !res.ok || !res.body) return null;
+    const contentType = res.headers.get("content-type") || "";
+    const reader = res.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        try {
+          await reader.cancel();
+        } catch {
+          // ignore
+        }
+        return null;
+      }
+      chunks.push(value);
+    }
+    const buf = Buffer.alloc(total);
+    let off = 0;
+    for (const c of chunks) {
+      buf.set(c, off);
+      off += c.byteLength;
+    }
+    return { buf, contentType };
+  } catch {
+    return null;
+  }
+}
+
+/** بيستخرج نص ملف نصي/PDF/ZIP من بايتاته — نفس قواعد الرفع القديم. */
+async function extractRemoteTextFile(
+  name: string,
+  buf: Buffer,
+  contentType: string
+): Promise<string | null> {
+  const ext = extOf(name);
+  try {
+    if (ext === "zip") {
+      const JSZip = (await import("jszip")).default;
+      const zip = await JSZip.loadAsync(new Uint8Array(buf));
+      const entries = Object.values(zip.files)
+        .filter((e) => !e.dir)
+        .map((e) => ({ name: e.name, read: () => e.async("string") }));
+      const r = await buildZipText(entries);
+      return r.text.trim() ? r.text : null;
+    }
+    if (ext === "pdf") {
+      const copy = new Uint8Array(buf.byteLength);
+      copy.set(buf);
+      const text = extractPdfTextBestEffort(copy.buffer);
+      if (!text || text.length < 5) return null;
+      return truncateNote(text, MAX_STORED_CHARS_PER_FILE);
+    }
+    const isText =
+      TEXT_EXTENSIONS.has(ext) ||
+      ext === "" ||
+      contentType.startsWith("text/") ||
+      contentType.includes("json");
+    if (!isText) return null;
+    const text = buf.toString("utf-8");
+    if (!text.trim()) return null;
+    return truncateNote(text, MAX_STORED_CHARS_PER_FILE);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * سيرفر فقط: بيحوّل رسالة مستخدم فيها روابط تخزين خارجي لنسخة مخزّنة كاملة
+ * بنفس فورمات الرسايل القديمة — الصور بتتحط data URI، والنصوص بيتبني لها
+ * كتلة filesSection. الفشل best-effort (الرابط بيفضل كما هو).
+ */
+export async function materializeRemoteAttachments(content: string): Promise<string> {
+  const { visibleText, attachments } = extractAttachmentsMeta(content);
+  if (!attachments.some((a) => a.remoteUrl)) return content;
+  const { mainText, filesSection } = extractAttachmentsPromptSection(visibleText);
+  if (filesSection) return content; // متجهّزة بالفعل (رسايل قديمة)
+  let budget = REMOTE_TOTAL_MAX_BYTES;
+  const updated: StoredAttachmentMeta[] = attachments.map((a) => ({ ...a }));
+  const textParts: PendingAttachment[] = [];
+  for (const a of updated) {
+    if (!a.remoteUrl || budget <= 0) continue;
+    let fetched = await fetchRemoteBytes(a.remoteUrl, Math.min(REMOTE_FILE_MAX_BYTES, budget));
+    if (!fetched && a.kind === "audio") {
+      // أحيانًا الرابط بيتأخر ثواني بعد الرفع على الـ CDN — محاولة تانية قبل ما نستسلم، وبنسجّل السبب في اللوج.
+      await new Promise((r) => setTimeout(r, 800));
+      fetched = await fetchRemoteBytes(a.remoteUrl, Math.min(REMOTE_FILE_MAX_BYTES, budget));
+      if (!fetched) console.error("[chat] voice attachment could not be fetched:", a.remoteUrl.slice(0, 80));
+    }
+    if (!fetched) continue; // يفضل رابطًا كما هو
+    budget -= fetched.buf.byteLength;
+    if (a.kind === "image") {
+      if (fetched.buf.byteLength <= REMOTE_IMAGE_INLINE_MAX_BYTES) {
+        const mime = fetched.contentType.startsWith("image/")
+          ? fetched.contentType.split(";")[0]
+          : a.name.toLowerCase().endsWith(".png")
+            ? "image/png"
+            : "image/jpeg";
+        a.previewUrl = `data:${mime};base64,${fetched.buf.toString("base64")}`;
+        delete a.remoteUrl;
+      }
+      continue;
+    }
+    if (a.kind === "text") {
+      const text = await extractRemoteTextFile(a.name, fetched.buf, fetched.contentType);
+      if (text) {
+        textParts.push({
+          id: "",
+          file: { name: a.name } as File,
+          kind: "text",
+          loading: false,
+          extractedText: text,
+        });
+      }
+      continue;
+    }
+    if (a.kind === "audio") {
+      // التسجيل الصوتي من التطبيق (remoteUrl): بيتسحب وبيتحول data URL base64 جاهز
+      // يبثّه toApiUserContent للموديل كـ input_audio. remoteUrl بيفضل موجود للعرض/التشغيل.
+      if (fetched.buf.byteLength <= REMOTE_FILE_MAX_BYTES) {
+        const mime = fetched.contentType.startsWith("audio/")
+          ? fetched.contentType.split(";")[0]
+          : a.name.toLowerCase().endsWith(".mp3")
+            ? "audio/mpeg"
+            : "audio/wav";
+        a.audioUrl = `data:${mime};base64,${fetched.buf.toString("base64")}`;
+      }
+      continue; // لو أكبر من السقف بيفضل رابطًا (للعرض بس) وميبعتش للموديل
+    }
+    // video: بيفضل رابطًا (رفع الفيديو موقوف من الواجهة أصلًا)
+  }
+  const metaBlock = `\n${ATTACHMENTS_META_START}${JSON.stringify(updated)}${ATTACHMENTS_META_END}`;
+  const promptBlock = buildAttachmentsPromptBlock(textParts);
+  return mainText + metaBlock + promptBlock;
+}

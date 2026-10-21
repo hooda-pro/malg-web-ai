@@ -1,0 +1,92 @@
+<!doctype html>
+<!--
+  معاينة "MALG Pocket" — شكل الموبايل المخصص
+  إطار تليفون فيه الموقع الحقيقي بعرض 390px → media queries بتاعة الموبايل
+  شغالة فعليًا جواه (وهيدر/كومبوزر/دروَر بالحركات). افتحها: /preview.html
+-->
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>معاينة شكل الموبايل — MALG Pocket</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100dvh;
+    font-family: system-ui, "Segoe UI", sans-serif;
+    background: radial-gradient(60% 40% at 50% 0%, rgba(217,119,87,0.16), transparent 70%), #0a0a0c;
+    color: #f5f5f7;
+    display: flex; flex-direction: column; align-items: center; gap: 18px;
+    padding: 28px 16px 40px;
+  }
+  h1 { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
+  p.sub { margin: 0; font-size: 13px; color: #9b9ba3; text-align: center; max-width: 40ch; }
+  .sizes { display: flex; gap: 8px; }
+  .sizes button {
+    background: #1c1c20; color: #f5f5f7; border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 999px; padding: 7px 14px; font: inherit; font-size: 12.5px; cursor: pointer;
+  }
+  .sizes button[data-active="1"] { background: linear-gradient(135deg,#c15f3c,#d97757); border-color: transparent; color: #fff; }
+  .phone {
+    position: relative;
+    width: min(420px, 100%);
+    border-radius: 54px;
+    padding: 12px;
+    background: #17171b;
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow: 0 50px 120px -40px rgba(217,119,87,0.35), 0 30px 80px -30px rgba(0,0,0,0.8);
+  }
+  .screen {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 390 / 844;
+    background: #0b0b0d;
+    border-radius: 44px;
+    overflow: hidden;
+    iframe { width: 100%; height: 100%; border: 0; display: block; background: #fff; }
+  }
+  /* iOS status bar بسيط فوق الشاشة */
+  .screen .bar {
+    position: absolute; inset: 0 0 auto 0; height: 44px; pointer-events: none; z-index: 5;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; font-size: 12px; font-weight: 700; color: #fff; mix-blend-mode: difference;
+  }
+  .screen .bar .pill {
+    width: 110px; height: 26px; border-radius: 999px; background: #0b0b0d;
+    margin: 0 auto;
+  }
+  iframe { transition: width 300ms cubic-bezier(0.34,1.5,0.5,1); }
+</style>
+</head>
+<body>
+  <h1>شكل الموبايل المخصوص — MALG Pocket</h1>
+  <p class="sub">ده الموقع نفسه شغال جوه إطار تليفون حقيقي (عرض 390px) — كل الهيدر والهيرو والكومبوزر والحركة بتاعت الموبايل، والديسكتوب مش متأثر أي حاجة.</p>
+  <div class="sizes" id="sizes">
+    <button data-w="360">iPhone SE · 360</button>
+    <button data-w="390" data-active="1">iPhone 14 · 390</button>
+    <button data-w="430">iPhone 16 Max · 430</button>
+  </div>
+  <div class="phone">
+    <div class="screen">
+      <iframe id="screen" src="http://localhost:4391/" title="معاينة الموبايل"></iframe>
+      <div class="bar"><span style="direction:ltr">9:41</span><span class="pill"></span><span>▮▮▮</span></div>
+    </div>
+  </div>
+  <script>
+    const screen = document.getElementById("screen");
+    const frame = document.querySelector(".screen");
+    document.getElementById("sizes").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-w]");
+      if (!btn) return;
+      document.querySelectorAll("#sizes button").forEach((b) => b.removeAttribute("data-active"));
+      btn.setAttribute("data-active", "1");
+      const w = Number(btn.dataset.w);
+      screen.style.width = w + "px";
+      screen.style.maxWidth = "100%";
+      frame.style.aspectRatio = w + " / 844";
+      screen.src = screen.src; // صفحة جديدة بنفس الاتجاه
+    });
+  </script>
+</body>
+</html>

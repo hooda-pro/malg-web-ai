@@ -1,0 +1,70 @@
+/* قواعد الطباعة: إظهار المحادثة فقط، وإخفاء كل عناصر التفاعل. */
+@media print {
+  /* إخفاء الشريط العلوي، الدرج الجانبي، لوحة الملفات، وصندوق الكتابة */
+  header.m-topbar,
+  aside.m-drawer,
+  section.m-panel,
+  div.m-composer,
+  /* عناصر عامة: الحوارات، القوائم، التنبيهات، روابط التخطي، الخلفية */
+  [role="dialog"],
+  [role="menu"],
+  [role="alertdialog"],
+  [aria-hidden="true"].fixed,
+  .fixed.inset-0,
+  .skip-link,
+  .grain,
+  .toast-drain,
+  form,
+  button,
+  .no-print {
+    display: none !important;
+  }
+
+  /* إظهار المحتوى الرئيسي فقط بعرض كامل */
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  #mlag-main {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  main {
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  main .min-h-0,
+  main .overflow-y-auto,
+  main .overflow-hidden {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  /* كل رسالة في صفحة بيضاء، ولا تنكسر من المنتصف */
+  .m-msg {
+    break-inside: avoid;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  pre,
+  blockquote,
+  table {
+    break-inside: avoid;
+  }
+
+  a {
+    color: #000 !important;
+    text-decoration: none !important;
+  }
+
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+}
