@@ -414,10 +414,9 @@ function MessageItem({
                 title={t("regenerate")}
                 aria-label={isRegenerating ? t("regenerating") : t("regenerate")}
                 disabled={actionsDisabled || isRegenerating}
-                className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[12px] text-ink-3 transition-colors duration-1 hover:bg-surface-3 hover:text-ink disabled:opacity-40"
+                className="grid h-7 w-7 place-items-center rounded-full text-ink-3 transition-colors duration-1 hover:bg-surface-3 hover:text-ink disabled:opacity-40"
               >
                 <RefreshCw size={13} className={cn(isRegenerating && "animate-spin")} />
-                {isRegenerating ? t("regenerating") : t("regenerate")}
               </button>
             )}
             {onFeedback && (

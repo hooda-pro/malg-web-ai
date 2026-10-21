@@ -66,11 +66,6 @@ const config: Config = {
         txt2: "#8aa39a",
         txt3: "#526059",
       },
-      fontFamily: {
-        sans: ["var(--font-latin)"],
-        arabic: ["var(--font-arabic)"],
-        mono: ["var(--font-mono)"],
-      },
       borderRadius: {
         xs: "8px",
         sm: "10px",

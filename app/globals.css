@@ -12,12 +12,6 @@
   :root {
     color-scheme: light;
 
-    /* Typography -------------------------------------------------- */
-    --font-latin: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text",
-      "Segoe UI", system-ui, sans-serif;
-    --font-arabic: var(--font-plex, "Noto Sans Arabic"), "SF Arabic", "Segoe UI", system-ui, sans-serif;
-    --font-mono: var(--font-jetbrains, "JetBrains Mono"), ui-monospace, SFMono-Regular, Menlo, monospace;
-
     /* Surfaces ----------------------------------------------------- */
     --ground: #f4f3ed;
     --surface: #ffffff;
@@ -146,17 +140,11 @@
   }
 
   body {
-    font-family: var(--font-latin);
     font-synthesis-weight: none;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow: hidden;
-  }
-
-  /* Arabic gets the Arabic face; Latin-only locales stay on the SF stack. */
-  html[lang="ar"] body {
-    font-family: var(--font-arabic);
   }
 
   ::selection {
