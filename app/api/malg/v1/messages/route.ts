@@ -177,21 +177,38 @@ export async function POST(req: NextRequest) {
     const translated = translateRequest(body);
     if (!translated.ok) return errorResponse(400, "invalid_request_error", translated.error);
 
-    // 3) نداء داخلي لنقطة الشات — نفس السيرفر، بنفس المفتاح
+    // 3) نداء داخلي لنقطة الشات — بنفس المفتاح. الأول 127.0.0.1:PORT
+    // (الطريق الداخلي الأضمن على Render)، وفشل يجرب الرابط العام.
     const urlObj = new URL(req.url);
     const proto = req.headers.get("x-forwarded-proto") ?? urlObj.protocol.replace(":", "");
     const origin = `${proto}://${urlObj.host}`;
+    const bases: string[] = [];
+    const selfPort = Number(process.env.PORT ?? 0);
+    if (Number.isFinite(selfPort) && selfPort > 0) bases.push(`http://127.0.0.1:${selfPort}`);
+    bases.push(origin);
 
-    let upstream: Response;
-    try {
-      upstream = await fetch(`${origin}/api/malg/v1/chat/completions`, {
-        method: "POST",
-        headers: { "content-type": "application/json", authorization: apiKey },
-        body: JSON.stringify({ ...translated.openai, stream: translated.wantStream }),
-      });
-    } catch (e) {
-      console.error("messages loopback fetch failed", e);
-      return errorResponse(502, "api_error", `فشل توصيل النقطة الداخلية: ${String((e as Error)?.message ?? e)}`);
+    let upstream: Response | null = null;
+    let lastFetchError: unknown = null;
+    for (const base of bases) {
+      try {
+        upstream = await fetch(`${base}/api/malg/v1/chat/completions`, {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: apiKey },
+          body: JSON.stringify({ ...translated.openai, stream: translated.wantStream }),
+        });
+        break;
+      } catch (e) {
+        lastFetchError = e;
+        console.error("messages loopback attempt failed", base, e);
+      }
+    }
+    if (!upstream) {
+      const cause = (lastFetchError as { cause?: { message?: string } })?.cause;
+      const detail = [lastFetchError, cause]
+        .map((x) => String((x as Error)?.message ?? x))
+        .filter(Boolean)
+        .join(" — ");
+      return errorResponse(502, "api_error", `فشل توصيل النقطة الداخلية: ${detail}`);
     }
 
     if (!upstream.ok) {
