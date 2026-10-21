@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUp, FileArchive, FileText, Mic, Paperclip, Plus, Puzzle, Square, X } from "lucide-react";
 import {
   ATTACHMENTS_ENABLED,
@@ -17,6 +17,7 @@ import {
 import { useSettings, type ModelId } from "./SettingsContext";
 import { ModelPicker } from "./TopBar";
 import { cn } from "@/lib/utils";
+import type { SkillRecord } from "@/lib/skills";
 
 export interface ComposerAttachment {
   file: File;
@@ -72,6 +73,7 @@ export default function BottomInputBar({
   micEnabled,
   onOpenSkills,
   skillsActive = 0,
+  skillsMenu = [],
 }: {
   isGenerating: boolean;
   onSend: (text: string, attachments: ComposerAttachment[]) => Promise<boolean> | void;
@@ -88,10 +90,33 @@ export default function BottomInputBar({
   micEnabled?: boolean;
   /** عدد المهارات المحلية الفعّالة (>0 = يظهر شيب صغير) — الضغط يفتح إدارة المهارات */
   skillsActive?: number;
+  /** قايمة المهارات المحلية (اسم + وصف) لمنيو أوامر السلاش / — من جهاز المستخدم */
+  skillsMenu?: Pick<SkillRecord, "name" | "description">[];
   onOpenSkills?: () => void;
 }) {
   const { t, lang, enterToSend } = useSettings();
   const [text, setText] = useState("");
+
+  // --- منيو أوامر المهارات (/): يبان أول ما النص يبدأ بـ / والمستخدم لسه بيكتب الاسم ---
+  const [slashIdx, setSlashIdx] = useState(0);
+  const [slashDismissed, setSlashDismissed] = useState(false);
+  const slashBody = text.startsWith("/") ? text.slice(1) : "";
+  const slashReady = slashBody.length > 0 && !/\s/.test(slashBody); // من غير مسافة = لسه بيكتب الاسم
+  const slashQuery = slashReady ? slashBody.toLowerCase() : "";
+  const slashMatches = useMemo(
+    () => (slashQuery ? skillsMenu.filter((s) => s.name.toLowerCase().includes(slashQuery)).slice(0, 6) : []),
+    [slashQuery, skillsMenu]
+  );
+  // لو الاسم اتبكتب كاملًا (تطابق تام) المنيو يختفي — Enter وقتها يبعت على طول
+  const slashExact = slashQuery.length > 0 && skillsMenu.some((s) => s.name.toLowerCase() === slashQuery);
+  const slashOpen = slashReady && !slashExact && slashMatches.length > 0 && !slashDismissed;
+  useEffect(() => setSlashIdx(0), [slashQuery]);
+  const applySlashChoice = (idx: number) => {
+    const pick = slashMatches[idx];
+    if (!pick) return;
+    setText(`/${pick.name} `);
+    setSlashDismissed(false);
+  };
 
   // نص كتبه الزائر في خانة صفحة الهبوط قبل تسجيل الدخول — بيتحط في الخانة مرة واحدة.
   useEffect(() => {
@@ -306,6 +331,28 @@ export default function BottomInputBar({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (slashOpen) {
+      if (e.key === "Escape") {
+        setSlashDismissed(true);
+        return;
+      }
+      if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSlashIdx((i) => (i + 1) % slashMatches.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSlashIdx((i) => (i - 1 + slashMatches.length) % slashMatches.length);
+        return;
+      }
+      if (e.key === "Tab" || e.key === "Enter") {
+        e.preventDefault();
+        applySlashChoice(slashIdx);
+        return;
+      }
+    }
     if (e.key !== "Enter") return;
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     const withMod = e.metaKey || e.ctrlKey;
@@ -397,11 +444,38 @@ export default function BottomInputBar({
 
       <div
         className={cn(
-          "mx-auto w-full max-w-[760px] rounded-2xl border border-hair bg-surface-2 shadow-2",
+          "relative mx-auto w-full max-w-[760px] rounded-2xl border border-hair bg-surface-2 shadow-2",
           "transition-[border-color] duration-2 ease-soft",
           dragOver && "!border-accent-line"
         )}
       >
+        {slashOpen && (
+          <div className="absolute bottom-full left-0 right-0 z-20 mb-2 overflow-hidden rounded-2xl border border-hair bg-surface-2 shadow-2">
+            {slashMatches.map((s, i) => (
+              <button
+                key={s.name}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  applySlashChoice(i);
+                }}
+                onMouseEnter={() => setSlashIdx(i)}
+                className={cn(
+                  "flex w-full items-baseline gap-2.5 px-3.5 py-2 text-start transition-colors duration-1",
+                  i === slashIdx ? "bg-accent-soft" : "hover:bg-surface-3"
+                )}
+                dir="auto"
+              >
+                <span className="shrink-0 font-mono text-[13px] font-medium text-accent">/{s.name}</span>
+                <span className="truncate text-[11.5px] text-ink-3">{s.description}</span>
+              </button>
+            ))}
+            <div className="border-t border-hair px-3.5 py-1.5 text-[11px] text-ink-3" dir="auto">
+              {t("slashHint")}
+            </div>
+          </div>
+        )}
+
         {dragOver && (
           <div className="pointer-events-none flex items-center justify-center gap-2 rounded-t-xl border-b border-dashed border-accent-line bg-accent-soft px-4 py-3 text-[13px] font-medium text-accent">
             <Paperclip size={14} />
@@ -442,7 +516,10 @@ export default function BottomInputBar({
             data-bwignore
             data-form-type="other"
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              setSlashDismissed(false);
+            }}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             rows={1}

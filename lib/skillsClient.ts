@@ -141,10 +141,21 @@ export function onSkillsChanged(cb: () => void): () => void {
  * وبتقرأ من IndexedDB مباشرة — أي تغيير في إدارة المهارات بيتطبق في الرسالة الجاية.
  * مفيش id ولا enabled ولا أوقات هنا — مجرد بيانات القراءة.
  */
-export async function buildSkillsPayload(): Promise<IncomingSkill[] | undefined> {
+export async function buildSkillsPayload(forcedName?: string): Promise<IncomingSkill[] | undefined> {
   try {
     const all = await listSkills();
-    const enabled = all.filter((s) => s.enabled).slice(0, MAX_ENABLED_SKILLS_PER_MESSAGE);
+    // التفعيل بالأمر (/اسم-الاعجار): المهارة المطلوبة بتيجي أولاً حتى لو مش مفعّلة،
+    // وبعدين المفعّلة — وبنحافظ على حد MAX_ENABLED_SKILLS_PER_MESSAGE من غير تكرار.
+    const ordered: SkillRecord[] = [];
+    if (forcedName) {
+      const want = forcedName.trim().toLowerCase();
+      const forced = all.find((s) => s.name.toLowerCase() === want);
+      if (forced) ordered.push(forced);
+    }
+    for (const s of all) {
+      if (s.enabled && !ordered.some((x) => x.id === s.id)) ordered.push(s);
+    }
+    const enabled = ordered.slice(0, MAX_ENABLED_SKILLS_PER_MESSAGE);
     if (enabled.length === 0) return undefined;
     const out: IncomingSkill[] = [];
     let total = 0;
@@ -365,6 +376,46 @@ export async function importSkill(fls: File[]): Promise<ImportResult> {
       ? `اتسقّط ${(collected.skippedBinary ?? 0)} ملف ثنائي/كبير من المهارة (محدود بالمحتوى النصي).`
       : undefined;
   return { ok: true, name, note };
+}
+
+/**
+ * حفظ مهارة واصلة من السيرفر (جاءت عبر install_skill كحمولة مؤقتة في الـSSE):
+ * نفس المنطق بتاع الاستيراد المحلي تمامًا — المتصفح هو اللي بيحفظ في IndexedDB،
+ * والسيرفر منساش أي نسخة. باسم موجود = استبدال (حالة التفعيل القديمة بتفضل).
+ */
+export async function saveSkillsFromRemote(
+  entries: IncomingSkill[],
+  origin: string
+): Promise<ImportResult> {
+  const first = Array.isArray(entries) ? entries[0] : undefined;
+  if (!first || !first.name?.trim() || !first.body?.trim()) {
+    return { ok: false, error: "المهارة الواصلة فاضية أو مش صالحة" };
+  }
+  const name = first.name.trim().slice(0, 64);
+  const body = first.body.trim().slice(0, MAX_SKILL_BODY_CHARS);
+  const description = (first.description?.trim() || fallbackDescription(body)).slice(0, MAX_SKILL_DESC_CHARS);
+  const files: SkillFile[] = (first.files || [])
+    .slice(0, MAX_SKILL_FILES)
+    .filter((f) => typeof f?.path === "string" && typeof f?.content === "string" && f.content.trim())
+    .map((f) => ({ path: f.path, content: f.content.slice(0, MAX_SKILL_FILE_CHARS) }));
+
+  const existing = (await listAllRaw()).find((s) => s.name === name);
+  const record: SkillRecord = {
+    id: existing?.id || crypto.randomUUID(),
+    name,
+    description,
+    body,
+    files,
+    enabled: true, // التثبيت من اللينك بيفعّلها تلقائيًا — التنفيذ بيحصل في نفس الرد
+    importedAt: new Date().toISOString(),
+    origin: `link:${origin || "github"}`,
+  };
+  try {
+    await saveSkillRecord(record);
+  } catch {
+    return { ok: false, error: "تعذّر حفظ المهارة في التخزين المحلي" };
+  }
+  return { ok: true, name };
 }
 
 /** تصدير المهارة كـ zip — للتخزين عندك أو سَيتها لحد تاني. محتواها هو كان. */

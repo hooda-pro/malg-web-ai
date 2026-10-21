@@ -30,6 +30,7 @@ export type AgentToolName =
   | "search_files"
   | "read_skill"
   | "read_skill_file"
+  | "install_skill"
   | "run_command"
   | "run_tests"
   | "mcp";
@@ -135,6 +136,7 @@ const TOOL_LABELS: Record<AgentToolName, { verbDoing: string; verbDone: string }
   search_files: { verbDoing: "بيدور جوه الملفات", verbDone: "دوّر جوه الملفات" },
   read_skill: { verbDoing: "بيقرأ مهارة محلية", verbDone: "قرأ مهارة محلية" },
   read_skill_file: { verbDoing: "بيقرأ ملف مهارة", verbDone: "قرأ ملف مهارة" },
+  install_skill: { verbDoing: "بينزّل مهارة من اللينك", verbDone: "نزّل مهارة" },
   run_command: { verbDoing: "بيشغّل أمر", verbDone: "شغّل أمر" },
   run_tests: { verbDoing: "بيشغّل الاختبارات", verbDone: "شغّل الاختبارات" },
   mcp: { verbDoing: "بيستخدم أداة خارجية", verbDone: "استخدم أداة خارجية" },

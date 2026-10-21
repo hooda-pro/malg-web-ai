@@ -15,6 +15,7 @@ import {
   FlaskConical,
   FolderOpen,
   Globe,
+  Download,
   Loader2,
   Pencil,
   Puzzle,
@@ -88,6 +89,8 @@ function ToolGlyph({ tool }: { tool: AgentStep["tool"] }) {
     case "read_skill":
     case "read_skill_file":
       return <Puzzle size={13} className={cls} />;
+    case "install_skill":
+      return <Download size={13} className={cls} />;
     default:
       return <FileCode2 size={13} className={cls} />;
   }

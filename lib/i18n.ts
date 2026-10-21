@@ -68,6 +68,13 @@ const ar: Dict = {
   toastDeleteFail: "تعذر حذف المحادثة",
   toastClearFail: "تعذر مسح المحادثات",
   toastNoPreview: "لا يوجد كود صفحة لعرضه بعد — اطلب من MALG بناء صفحة أولًا ✨",
+  // مهارات: أوامر السلاش + التثبيت من لينك
+  toastNoSkillCommand: "مفيش مهارة ولا أمر باسم «{cmd}» — اكتب / عشان تشوف قايمة المهارات",
+  toastSkillSaved: "تم تثبيت مهارة «{name}» في مكتبتك (على جهازك) واتفعّلت ✅",
+  toastSkillSaveFail: "المهارة اتحملت بس فشل حفظها في جهازك — جرّب تاني",
+  skillInvokeNote: "استدعاء مهارة «{name}» — الموديل ملزم بتطبيقها بالحرف.",
+  skillInvokeDefault: "نفّذ مهارة «{name}» على طول.",
+  slashHint: "↑↓ تنقّل — Tab/Enter اختيار — Esc إغلاق",
   toastPreviewReady:
     "اكتمل الكود ✅ لمعاينة الصفحة قبل نشرها اكتب «معاينة» في المحادثة أو اضغط زر المعاينة 👁",
   toastContinueFail: "تعذر متابعة الرد",
@@ -425,6 +432,13 @@ const en: Dict = {
   toastDeleteFail: "Couldn't delete the chat",
   toastClearFail: "Couldn't clear the chats",
   toastNoPreview: "No page code has been built yet to preview — ask MALG to build a page first ✨",
+  // Skills: slash commands + install from link
+  toastNoSkillCommand: "No skill or command named “{cmd}” — type / to see your skills",
+  toastSkillSaved: "Skill “{name}” was installed to your library (on your device) and enabled ✅",
+  toastSkillSaveFail: "The skill was fetched but saving to your device failed — try again",
+  skillInvokeNote: "Invoked skill “{name}” — the model must follow it exactly.",
+  skillInvokeDefault: "Run the “{name}” skill now.",
+  slashHint: "↑↓ navigate — Tab/Enter select — Esc close",
   toastPreviewReady:
     "Code done ✅ Want to see the page before publishing? Type «preview» in the chat or hit the preview button 👁",
   toastContinueFail: "Couldn't continue the reply",
@@ -778,6 +792,13 @@ const fr: Dict = {
   toastDeleteFail: "Impossible de supprimer la discussion",
   toastClearFail: "Impossible d'effacer les discussions",
   toastNoPreview: "Aucun code de page à afficher pour l'instant — demandez à MALG de créer une page d'abord ✨",
+  // Compétences : commandes slash + installation depuis un lien
+  toastNoSkillCommand: "Aucune compétence ni commande nommée « {cmd} » — tapez / pour voir vos compétences",
+  toastSkillSaved: "Compétence « {name} » installée dans votre bibliothèque (sur votre appareil) et activée ✅",
+  toastSkillSaveFail: "La compétence a été récupérée mais l'enregistrement sur votre appareil a échoué — réessayez",
+  skillInvokeNote: "Compétence « {name} » invoquée — le modèle doit la suivre exactement.",
+  skillInvokeDefault: "Exécutez maintenant la compétence « {name} ».",
+  slashHint: "↑↓ naviguer — Tab/Entrée choisir — Échap fermer",
   toastPreviewReady:
     "Code terminé ✅ Vous voulez voir la page avant de la publier ? Écrivez « aperçu » dans le chat ou cliquez sur le bouton d'aperçu 👁",
   toastContinueFail: "Impossible de continuer la réponse",
@@ -1108,6 +1129,13 @@ const es: Dict = {
   toastDeleteFail: "No se pudo eliminar el chat",
   toastClearFail: "No se pudieron borrar los chats",
   toastNoPreview: "Todavía no hay código de página para previsualizar — pídele a MALG que cree una página primero ✨",
+  // Habilidades: comandos slash + instalación desde un enlace
+  toastNoSkillCommand: "No hay ninguna habilidad ni comando llamado «{cmd}» — escribe / para ver tus habilidades",
+  toastSkillSaved: "Habilidad «{name}» instalada en tu biblioteca (en tu dispositivo) y activada ✅",
+  toastSkillSaveFail: "La habilidad se descargó pero falló al guardarla en tu dispositivo — inténtalo de nuevo",
+  skillInvokeNote: "Habilidad «{name}» invocada — el modelo debe seguirla exactamente.",
+  skillInvokeDefault: "Ejecuta ahora la habilidad «{name}».",
+  slashHint: "↑↓ navegar — Tab/Entrada elegir — Esc cerrar",
   toastPreviewReady:
     "Código listo ✅ ¿Quieres ver la página antes de publicarla? Escribe «vista previa» en el chat o pulsa el botón de vista previa 👁",
   toastContinueFail: "No se pudo continuar la respuesta",

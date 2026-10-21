@@ -1,4 +1,5 @@
 import type { AgentEvent } from "./agentEvents";
+import type { IncomingSkill } from "./skills";
 
 export async function consumeSSEStream(
   reader: ReadableStreamDefaultReader<Uint8Array>,
@@ -10,6 +11,8 @@ export async function consumeSSEStream(
     /** رصيد التوكنز خلص في نص الرد والسيرفر وقفه */
     onQuotaExhausted?: () => void;
     onSessionEnded?: (info: { reason?: string; by?: "abuse" | "user" }) => void;
+    /** السيرفر ثبّت مهارة جديدة (install_skill) — بنحفظها في مكتبة المستخدم المحلية */
+    onSkillSaved?: (skills: IncomingSkill[]) => void;
   }
 ) {
   const decoder = new TextDecoder();
@@ -29,6 +32,11 @@ export async function consumeSSEStream(
         const json = JSON.parse(data);
         if (json?.agent_event) {
           handlers.onAgentEvent?.(json.agent_event as AgentEvent);
+          continue;
+        }
+        if (json?.skill_saved) {
+          const skills = (json.skill_saved as { skills?: IncomingSkill[] }).skills;
+          if (Array.isArray(skills) && skills.length > 0) handlers.onSkillSaved?.(skills);
           continue;
         }
         if (json?.quota_exhausted) {

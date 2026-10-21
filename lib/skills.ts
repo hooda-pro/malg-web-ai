@@ -234,6 +234,19 @@ export function buildSkillsManifest(skills: IncomingSkill[]): string {
 }
 
 /**
+ * محدّد أمر السلاش من نص الكومبوزر: "/اسم-المهارة باقي الرسالة".
+ * بيشتغل بالعربي والإنجليزي (حروف/أرقام/_/-) والباقي بتاع الرسالة اختياري.
+ * لو النص "/... مش شكله أمر سليم بيرجّع null — وطالما بيرجّع null، الارسال يتصرف كنص عادي.
+ */
+export function parseSlashCommand(raw: string): { slug: string; rest: string } | null {
+  const text = String(raw ?? "").trim();
+  if (!text.startsWith("/")) return null;
+  const m = /^\/([A-Za-z0-9\u0600-\u06FF_-]{1,64})(?:[ \t]+([\s\S]*))?$/.exec(text);
+  if (!m) return null; // "/" لوحدها أو حروف مش مسموحة — تعامل عادي
+  return { slug: m[1], rest: (m[2] ?? "").trim() };
+}
+
+/**
  * بلوك المهارات لمسار «كمّل» (/api/chat/continue): المسار ده مفيهوش أدوات،
  * فبنرجع النص الكامل مباشرة (بميزانية إجمالية محدودة على غرار المرفقات) —
  * محتوى مؤقت في سياق الريكوست ومش بيتخزن في الداتابيز.

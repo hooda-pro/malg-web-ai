@@ -43,6 +43,7 @@ import { createHash } from "crypto";
 import { getSandboxMemoryMb, isSandboxConfigured, SandboxSession } from "@/lib/sandbox";
 import {
   EDIT_FILE_TOOL,
+  INSTALL_SKILL_TOOL,
   LIST_FILES_TOOL,
   READ_FILE_TOOL,
   READ_SKILL_FILE_TOOL,
@@ -53,6 +54,7 @@ import {
   collectSessionProjectFiles,
   isProjectTool,
   runEditTool,
+  runInstallSkillTool,
   runProjectTool,
   runReadSkillFileTool,
   runReadSkillTool,
@@ -178,6 +180,9 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   const incomingSkills: IncomingSkill[] = sanitizeIncomingSkills(body?.skills);
   const skillsOn = incomingSkills.length > 0;
   const skillsManifest = skillsOn ? buildSkillsManifest(incomingSkills) : "";
+  // مهارات بتتثبّت جوه نفس الرد (install_skill) — متخزنة في ذاكرة الريكوست بس،
+  // لو الموديل استدعى read_skill بعدها يلاقيها موجودة (من غير ما تيجي من العمليل).
+  const extraSkills: IncomingSkill[] = [];
 
   if (!sessionId || !userPrompt) {
     return NextResponse.json({ error: "الرسالة فارغة" }, { status: 400 });
@@ -457,6 +462,8 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
     ...(initialProjectFiles.length > 0 ? [LIST_FILES_TOOL, READ_FILE_TOOL, EDIT_FILE_TOOL] : []),
     // مهارات المستخدم المحلية: تظهر للموديل بس لو فعلاً فيه مهارات في الرسالة دي
     ...(skillsOn ? [READ_SKILL_TOOL, READ_SKILL_FILE_TOOL] : []),
+    // install_skill: دايمًا متاحة — بتخلي المستخدم يقدر يثبّت مهارة من لينك أثناء الشات حتى لو مفيش مهارات قبله.
+    INSTALL_SKILL_TOOL,
     ...(SANDBOX_ON ? [RUN_COMMAND_TOOL] : []),
     ...(mcpTools.defs),
     // أدوات الإشراف: تحذير محترم أولًا، وبعدين إنهاء المحادثة لو السلوك استمر
@@ -874,6 +881,58 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
               continue;
             }
 
+            // --- install_skill (تنزيل/تثبيت مهارة من لينك GitHub/raw/zip) — بدون تخزين على السيرفر ---
+            if (callName === "install_skill") {
+              if (!argsValid) {
+                const msg = "معاملات الأداة مش JSON صالح.";
+                sendAgentEvent({ type: "tool_error", tool: "install_skill", id: call.id, message: msg });
+                sandboxSteps.push({ id: call.id, tool: "install_skill", status: "error", message: msg });
+                pushToolMessage({ ok: false, error: msg });
+                continue;
+              }
+              const urlArg = String(args.url ?? "").trim();
+              sendAgentEvent({ type: "tool_start", tool: "install_skill", id: call.id, path: urlArg || "لينك" });
+              const r = await runInstallSkillTool(args);
+              sendAgentEvent({
+                type: r.ok ? "tool_result" : "tool_error",
+                tool: "install_skill",
+                id: call.id,
+                path: r.path ?? (urlArg || "لينك"),
+                message: r.message,
+                detail: r.detail,
+              });
+              sandboxSteps.push({
+                id: call.id,
+                tool: "install_skill",
+                path: r.path ?? (urlArg || "لينك"),
+                status: r.ok ? "done" : "error",
+                message: r.message,
+                detail: r.detail,
+              });
+              let stored = false;
+              if (r.ok && r.skill) {
+                const clean = sanitizeIncomingSkills([r.skill]);
+                if (clean.length > 0) {
+                  extraSkills.push(clean[0]);
+                  try {
+                    streamController.enqueue(
+                      encoder.encode(
+                        `data: ${JSON.stringify({ skill_saved: { skills: clean, origin: "link" } })}\n\n`
+                      )
+                    );
+                    stored = true;
+                  } catch {}
+                }
+              }
+              const payload = stored
+                ? r.payload
+                : r.ok && r.skill && !stored
+                  ? { ok: false, error: "حصلت المهارة بس فشل التنقية/الإرسال للعميل — جرّب تاني أو استورد ملف SKILL.md يدوي من تاب المهارات." }
+                  : r.payload;
+              pushToolMessage(payload);
+              continue;
+            }
+
             // --- read_skill / read_skill_file (مهارات المستخدم المحلية — من الذاكرة الحية للريكوست) ---
             if (callName === "read_skill" || callName === "read_skill_file") {
               const tool = callName as "read_skill" | "read_skill_file";
@@ -888,10 +947,11 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
               const startPath = tool === "read_skill_file" ? String(args.path ?? "") : undefined;
               const label = startPath ? `${wantedName}/${startPath}` : wantedName;
               sendAgentEvent({ type: "tool_start", tool, id: call.id, path: label });
+              const skillsNow = [...incomingSkills, ...extraSkills];
               const r =
                 tool === "read_skill"
-                  ? runReadSkillTool(args, incomingSkills)
-                  : runReadSkillFileTool(args, incomingSkills);
+                  ? runReadSkillTool(args, skillsNow)
+                  : runReadSkillFileTool(args, skillsNow);
               sendAgentEvent({
                 type: r.ok ? "tool_result" : "tool_error",
                 tool,

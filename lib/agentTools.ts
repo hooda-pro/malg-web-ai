@@ -8,8 +8,20 @@
  *   موجود. التنفيذ الفعلي في lib/sandbox.ts.
  */
 
-import type { IncomingSkill } from "./skills";
 import type { ProjectFile } from "./parseContent";
+import {
+  MAX_SKILL_BODY_CHARS,
+  MAX_SKILL_DESC_CHARS,
+  MAX_SKILL_FILE_CHARS,
+  MAX_SKILL_FILES,
+  MAX_SKILL_NAME_CHARS,
+  MAX_SKILLS_PAYLOAD_TOTAL_CHARS,
+  fallbackDescription,
+  isTextSkillFile,
+  parseSkillFrontmatter,
+  sanitizeSkillPath,
+  type IncomingSkill,
+} from "./skills";
 import { extractDeliverableFiles } from "./parseContent";
 import { extractAgentStepsMeta, filePreview } from "./agentEvents";
 import type { AgentToolName } from "./agentEvents";
@@ -479,6 +491,393 @@ export function runReadSkillTool(
       ...(skill.files.length > 0
         ? { extra_files: skill.files.map((f) => f.path), note2: "لأي ملف منهم استدعي read_skill_file بالاسم والمسار." }
         : {}),
+    },
+  };
+}
+
+export const INSTALL_SKILL_TOOL = {
+  type: "function",
+  function: {
+    name: "install_skill",
+    description:
+      "نزّل مهارة (skill) جديدة من لينك إنترنت وثبّتها في مكتبة المستخدم المحلية (على جهازه) وطبّقها في نفس الرد. " +
+      "استدعيها أول ما المستخدم يبعت لينك مهارة ويطلب تثبيتها: مستودع أو مجلد GitHub " +
+      "(github.com/owner/repo أو github.com/owner/repo/tree/branch/dir)، أو لينك raw لملف SKILL.md، " +
+      "أو لينك ملف .zip جاهز. بعد التثبيت بترجعلك تعليمات المهارة نفسها — اتبعها فورًا في الرد ده.",
+    parameters: {
+      type: "object",
+      properties: {
+        url: {
+          type: "string",
+          description: "لينك المهارة. مثال: github.com/anthropics/skills/tree/main/artifacts-builder",
+        },
+      },
+      required: ["url"],
+    },
+  },
+} as const;
+
+// ---------------------------------------------------------------------------
+// تنفيذ install_skill: ملفات المهارة بتتجمع لحظيًا من الإنترنت للذاكرة الحية
+// بتاعة الريكوست — مفيش أي تخزين على السيرفر. الحمولة النهائية بتتبعت للعميل
+// (SSE) لحفظها في IndexedDB، وتعليمات المهارة بترجع للموديل كنتيجة الأداة.
+// لينكات: مستودع/مجلد/ملف GitHub، raw.githubusercontent.com، أو ملف .zip.
+// ---------------------------------------------------------------------------
+
+const INSTALL_MAX_FILES = MAX_SKILL_FILES;
+const INSTALL_MAX_FILE_CHARS = MAX_SKILL_FILE_CHARS;
+const INSTALL_MAX_TOTAL_CHARS = MAX_SKILLS_PAYLOAD_TOTAL_CHARS;
+const INSTALL_FETCH_TIMEOUT_MS = 45_000;
+const INSTALL_RAW_PREVIEW_CHARS = 14_000;
+
+const INSTALL_SKILL_ARCHIVE_RE = /.zip(\?|$)/i;
+
+const INSTALL_SKIP_PATH_RE = /(^|\/)(node_modules|\.git|\.next|dist|build|__pycache__|\.venv|venv|coverage)(\/|$)/;
+
+function installFetch(url: string, init?: RequestInit): Promise<Response> {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), INSTALL_FETCH_TIMEOUT_MS);
+  return fetch(url, { ...init, signal: ac.signal, redirect: "follow" }).finally(() => clearTimeout(timer));
+}
+
+/**
+ * حاجز SSRF عملي: https بس، نطاقات داخلية/محلية/عناوين IP خاصة ممنوعة،
+ * ولينك IP أصلًا ممنوع — الأداة دي مفتوحة للموديل فالحد ده لازم.
+ */
+function safeHttpsUrl(raw: string): URL | null {
+  const trimmed = String(raw ?? "").trim();
+  if (!trimmed) return null;
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  let u: URL;
+  try {
+    u = new URL(withScheme);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== "https:") return null;
+  const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (!host || !host.includes(".")) return null; // localhost أو أسماء داخلية
+  if (host.endsWith(".internal") || host.endsWith(".local")) return null;
+  if (/^(127|10)\./.test(host)) return null;
+  if (/^192\.168\./.test(host)) return null;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return null;
+  if (/^169\.254\./.test(host)) return null;
+  if (u.username || u.password) return null;
+  return u;
+}
+
+/** بيتأكد إن الرد نصي وصالح ويوحّد نهايات الأسطر — بيرجع null مع أي حاجة نصها مش نص. */
+async function fetchTextFile(res: Response): Promise<string | null> {
+  if (!res.ok) return null;
+  const ct = (res.headers.get("content-type") || "").toLowerCase();
+  if (ct.startsWith("image/") || ct.startsWith("video/") || ct.startsWith("audio/") || ct.includes("font") || /zip|octet-stream|gzip|pdf/.test(ct)) return null;
+  const text = await res.text();
+  if (!text || text.length > INSTALL_MAX_FILE_CHARS) return null;
+  return text.replace(/\r\n?/g, "\n");
+}
+
+/** بيترتيب المداخل: SKILL.md أولوية، وأقرب للمجذّر أعمق الأولوية للملفات. */
+function orderEntries(entries: { path: string; text: string }[]): { path: string; text: string }[] {
+  const isSkill = (s: { path: string }) => /(^|\/)SKILL\.md$/i.test(s.path);
+  return [...entries].sort((a, b) => {
+    if (isSkill(a) && !isSkill(b)) return -1;
+    if (!isSkill(a) && isSkill(b)) return 1;
+    return a.path.split("/").length - b.path.split("/").length;
+  });
+}
+
+/** بيحوّل مداخل مجلدة لنسخة IncomingSkill جاهزة للتخزين/العرض. */
+function skillFromEntries(entries: { path: string; text: string }[]): {
+  skill: { name: string; description: string; body: string; files: { path: string; content: string }[] } | null;
+} {
+  const sorted = orderEntries(entries);
+  const main = sorted[0];
+  if (!main) return { skill: null };
+  const fm = parseSkillFrontmatter(main.text);
+  const body = (fm.body || main.text).trim().slice(0, MAX_SKILL_BODY_CHARS);
+  if (!body.trim()) return { skill: null };
+  const stem = (main.path.split("/").pop() || "skill").replace(/\.mdx?$/i, "").replace(/[^A-Za-z0-9\u0600-\u06FF_-]+/g, "-").slice(0, 56);
+  const name = (fm.name || stem || "skill").trim().slice(0, MAX_SKILL_NAME_CHARS);
+  const description = (fm.description || fallbackDescription(body)).trim().slice(0, MAX_SKILL_DESC_CHARS);
+  const files: { path: string; content: string }[] = [];
+  let total = body.length;
+  for (const e of sorted.slice(1)) {
+    if (files.length >= INSTALL_MAX_FILES) break;
+    const content = e.text.trim().slice(0, INSTALL_MAX_FILE_CHARS);
+    if (!content) continue;
+    total += content.length;
+    if (total > INSTALL_MAX_TOTAL_CHARS) break;
+    files.push({ path: e.path, content });
+  }
+  return { skill: { name, description, body, files } };
+}
+
+/** بيقدّر يجيب شجرة المستودع بمرجع Git؛ بيرجع مسارات الـblobs فقط. */
+async function ghTree(owner: string, repo: string, ref: string) {
+  const headers = { Accept: "application/vnd.github+json", "User-Agent": "MALG-web-ai" };
+  try {
+    const res = await installFetch(`https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`, { headers });
+    if (!res.ok) return null;
+    const j = (await res.json().catch(() => null)) as { tree?: { path: string; type: string }[] } | null;
+    return j?.tree?.filter((t) => t.type === "blob" && typeof t.path === "string") ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** بيحلّ مرجع GitHub فعلًا (اللي جوه اللينك / HEAD / main / master / default_branch). */
+async function resolveGhRef(owner: string, repo: string, refFromUrl?: string): Promise<string> {
+  const candidates = [refFromUrl, "HEAD", "main", "master"].filter(Boolean) as string[];
+  for (const c of candidates) {
+    const tree = await ghTree(owner, repo, c);
+    if (tree && tree.length > 0) return c;
+  }
+  try {
+    const res = await installFetch(`https://api.github.com/repos/${owner}/${repo}`, {
+      headers: { Accept: "application/vnd.github+json", "User-Agent": "MALG-web-ai" },
+    });
+    if (res.ok) {
+      const j = (await res.json()) as { default_branch?: string };
+      if (j?.default_branch) return j.default_branch;
+    }
+  } catch {}
+  return refFromUrl || "main";
+}
+
+interface InstallCollected {
+  entries: { path: string; text: string }[];
+  skippedBinary: number;
+}
+
+/** بيضيف مدخل نصي صالح — بيسكّط الثنائي/المسارات الغلطة/عن الحدود. */
+function addInstallEntry(c: InstallCollected, rawPath: string, text: string): void {
+  const p = sanitizeSkillPath(rawPath);
+  if (!p || INSTALL_SKIP_PATH_RE.test(p)) return;
+  if (!isTextSkillFile(p)) {
+    c.skippedBinary += 1;
+    return;
+  }
+  const t = text.slice(0, INSTALL_MAX_FILE_CHARS);
+  if (!t.trim()) return;
+  if (c.entries.some((e) => e.path === p)) return;
+  const total = c.entries.reduce((n, e) => n + e.text.length, 0);
+  if (total + t.length > INSTALL_MAX_TOTAL_CHARS) {
+    c.skippedBinary += 1;
+    return;
+  }
+  c.entries.push({ path: p, text: t });
+}
+
+/**
+ * بيلوك مجلد المهارة من شجرة GitHub: بيختر SKILL.md داخل المجلد، وبنجيب
+ * الملفات الإضافية الموجودة في نفس المجلد بس (استخدامه العملي للمهارات).
+ */
+async function collectGhFolder(owner: string, repo: string, ref: string, baseDir: string): Promise<InstallCollected> {
+  const c: InstallCollected = { entries: [], skippedBinary: 0 };
+  const tree = await ghTree(owner, repo, ref);
+  if (!tree) return c;
+  const base = baseDir ? `${baseDir.replace(/\/+$/, "")}/` : "";
+  const candidates = tree
+    .map((t) => t.path)
+    .filter((p) => /(^|\/)SKILL\.md$/i.test(p) && (!base || p.startsWith(base)) && !INSTALL_SKIP_PATH_RE.test(p))
+    .sort((a, b) => a.split("/").length - b.split("/").length);
+  const skillMd = candidates[0];
+  if (!skillMd) return c;
+  const skillBase = skillMd.includes("/") ? skillMd.slice(0, skillMd.lastIndexOf("/") + 1) : "";
+  let mainText: string | null = null;
+  try {
+    const res = await installFetch(`https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${skillMd.split("/").map(encodeURI).join("/")}`, { headers: { "User-Agent": "MALG-web-ai" } });
+    mainText = await fetchTextFile(res);
+  } catch {}
+  if (!mainText) return c;
+  addInstallEntry(c, skillBase ? skillMd.slice(skillBase.length) : skillMd, mainText);
+  const wanted = tree
+    .map((t) => t.path)
+    .filter((p) => p !== skillMd && p.startsWith(skillBase) && !p.endsWith("/") && p.length <= 200 && p === encodeURI(p))
+    .sort((a, b) => a.localeCompare(b));
+  for (const p of wanted.slice(0, INSTALL_MAX_FILES)) {
+    try {
+      const res = await installFetch(`https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${p}`, { headers: { "User-Agent": "MALG-web-ai" } });
+      const text = await fetchTextFile(res);
+      if (text) addInstallEntry(c, p.slice(skillBase.length), text);
+    } catch {}
+  }
+  return c;
+}
+
+/** بيلوك أرشيف ZIP من اللينك — نفس قواعد الاستيراد المحلي (كبسولوجيا ملفات نصية). */
+async function collectZipUrl(url: URL): Promise<InstallCollected> {
+  const c: InstallCollected = { entries: [], skippedBinary: 0 };
+  let bytes: ArrayBuffer;
+  try {
+    const res = await installFetch(url.toString(), { headers: { "User-Agent": "MALG-web-ai" } });
+    if (!res.ok) return c;
+    const buf = await res.arrayBuffer();
+    if (buf.byteLength > 12 * 1024 * 1024) return c;
+    bytes = buf;
+  } catch {
+    return c;
+  }
+  const JSZip = (await import("jszip")).default;
+  const zip = await JSZip.loadAsync(bytes);
+  const listed = Object.values(zip.files).filter((e) => !e.dir);
+  const names = listed.map((e) => e.name);
+  // wrapper واحد أعلى المستوى (skill-name/SKILL.md) بنكشفه ونستبعد prefix بس — زي مجلد الاستيراد.
+  const tops = new Set(names.map((n) => n.split("/")[0] || ""));
+  const skillRoots = [...tops].filter((t) => t && names.some((n) => n.startsWith(`${t}/`) && /(^|\/)SKILL\.md$/i.test(n)));
+  const strip = skillRoots.length === 1 && listed.length > 1 ? `${skillRoots[0]}/` : "";
+  for (const e of listed) {
+    const name = strip && e.name.startsWith(strip) ? e.name.slice(strip.length) : e.name;
+    try {
+      const text = await e.async("string");
+      addInstallEntry(c, name, text);
+    } catch {
+      c.skippedBinary += 1;
+    }
+  }
+  return c;
+}
+
+/** اللينك ملف مفرد (raw أو gist أو أي نصي) — بيتقبل لو فيه محتوى الخ. */
+async function collectSingleFile(url: URL): Promise<InstallCollected> {
+  const c: InstallCollected = { entries: [], skippedBinary: 0 };
+  const fname = url.pathname.split("/").filter(Boolean).pop() || "SKILL.md";
+  try {
+    const res = await installFetch(url.toString(), { headers: { "User-Agent": "MALG-web-ai" } });
+    const text = await fetchTextFile(res);
+    if (text) addInstallEntry(c, fname, text);
+  } catch {}
+  return c;
+}
+
+/** بيفكك لينك GitHub: مستودع (root) أو مجلد (tree) أو ملف (blob). */
+interface GhRef {
+  owner: string;
+  repo: string;
+  ref?: string;
+  /** المسار بعد المرجع: المجلد في tree أو الملف في blob، والغايب في root */
+  path: string;
+  mode: "root" | "tree" | "blob";
+}
+
+function parseGithubUrl(u: URL): GhRef | null {
+  if (u.hostname.toLowerCase() !== "github.com") return null;
+  const segs = u.pathname.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
+  if (segs.length < 2) return null;
+  const [owner, repoRaw, kind, ...rest] = segs;
+  const repo = repoRaw.replace(/\.git$/i, "");
+  if (kind && /^(pull|issues|watch|stargazers|network|forks|releases|wiki)$/i.test(kind)) return null;
+  if (!kind) return { owner, repo, path: "", mode: "root" };
+  if (rest.length === 0) return { owner, repo, path: "", mode: "root" };
+  const [ref, ...tail] = rest;
+  const path = tail.join("/");
+  if (kind === "tree") return { owner, repo, ref, path, mode: "tree" };
+  if (kind === "blob") return { owner, repo, ref, path, mode: "blob" };
+  return null;
+}
+
+/** raw.githubusercontent.com/o/r/REF/path — بنفس فكّة blob (المرجع معلوم دايمًا). */
+function parseRawUrl(u: URL): GhRef | null {
+  if (u.hostname.toLowerCase() !== "raw.githubusercontent.com") return null;
+  const segs = u.pathname.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
+  if (segs.length < 4) return null;
+  const [owner, repo, ref, ...file] = segs;
+  return { owner, repo, ref, path: file.join("/"), mode: "blob" };
+}
+
+interface InstallOutcome {
+  ok: boolean;
+  path?: string;
+  message?: string;
+  detail?: { lines?: number; preview?: string };
+  payload: Record<string, unknown>;
+  /** المهارة الناجحة — السيرفر بيدفعها للعميل (skill_saved) وبحفظها في ذاكرة الريكوست. */
+  skill?: { name: string; description: string; body: string; files: { path: string; content: string }[] };
+}
+
+/** install_skill: بجيب ملفات المهارة دلوقتي وبترجعها للسيرفر والموديل مع بعض. */
+export async function runInstallSkillTool(args: Record<string, unknown>): Promise<InstallOutcome> {
+  const rawUrl = typeof args.url === "string" ? args.url.trim() : "";
+  if (!rawUrl) {
+    return { ok: false, payload: { ok: false, error: "لازم تحدد url — لينك المهارة (GitHub/zip/raw)." }, message: "url فاضي" };
+  }
+  const url = safeHttpsUrl(rawUrl);
+  if (!url) {
+    return {
+      ok: false,
+      path: rawUrl,
+      payload: {
+        ok: false,
+        error: "اللينك مش متاح: لازم يكون https عام (مش شبكة داخلية ولا IP محلي).",
+        hint: "استخدم لينك مستودع/مجلد GitHub أو raw.githubusercontent.com أو لينك .zip جاهز.",
+      },
+      message: "لينك مش مسموح",
+    };
+  }
+
+  const gh = parseGithubUrl(url) ?? parseRawUrl(url);
+  let collected: InstallCollected;
+  let originLabel: string;
+  let shownPath: string;
+
+  if (gh) {
+    originLabel = `github.com/${gh.owner}/${gh.repo}`;
+    shownPath = gh.path || "";
+    const ref = await resolveGhRef(gh.owner, gh.repo, gh.ref);
+    let baseDir = "";
+    if (gh.mode === "tree") baseDir = gh.path.replace(/\/+$/, "");
+    else if (gh.mode === "blob") baseDir = /SKILL\.md$/i.test(gh.path) && gh.path.includes("/") ? gh.path.slice(0, gh.path.lastIndexOf("/")) : gh.path.split("/").slice(0, -1).join("/");
+    collected = await collectGhFolder(gh.owner, gh.repo, ref, baseDir);
+  } else if (INSTALL_SKILL_ARCHIVE_RE.test(url.pathname)) {
+    originLabel = url.hostname;
+    shownPath = url.pathname.split("/").filter(Boolean).pop() || url.hostname;
+    collected = await collectZipUrl(url);
+  } else {
+    originLabel = url.hostname;
+    shownPath = url.pathname.split("/").filter(Boolean).pop() || url.hostname;
+    collected = await collectSingleFile(url);
+  }
+
+  if (collected.entries.length === 0) {
+    return {
+      ok: false,
+      path: rawUrl,
+      payload: {
+        ok: false,
+        error: "ما لقيتش مهارة (SKILL.md) عند اللينك ده أو اللينك مش شغال.",
+        ...(collected.skippedBinary > 0 ? { note: `اتسقّط ${collected.skippedBinary} ملف ثنائي/كبير.` } : {}),
+        hint: "اتأكد إن اللينك عام وفيه SKILL.md — أو المستخدم يعمل تثبيت يدوي من تاب «المهارات» في الإعدادات.",
+      },
+      message: "مفيش مهارة هنا",
+    };
+  }
+
+  const { skill } = skillFromEntries(collected.entries);
+  if (!skill) {
+    return {
+      ok: false,
+      path: rawUrl,
+      payload: { ok: false, error: "محتوى المهارة فاضي أو مش صالح للقراءة كنص مهارة." },
+      message: "مهارة فاضية",
+    };
+  }
+
+  return {
+    ok: true,
+    path: skill.name,
+    message: `${skill.name} — ${collected.entries.length} ملف${shownPath ? ` (${shownPath})` : ""}`,
+    detail: { lines: skill.body.split("\n").length, preview: skill.body.slice(0, 500) },
+    skill,
+    payload: {
+      ok: true,
+      name: skill.name,
+      description: skill.description,
+      origin: originLabel,
+      saved_files: skill.files.length,
+      content: skill.body.slice(0, INSTALL_RAW_PREVIEW_CHARS),
+      ...(skill.body.length > INSTALL_RAW_PREVIEW_CHARS ? { note: "النص شامل محفوظ عند المستخدم — ده مقتطف للقراءة." } : {}),
+      ...(skill.files.length > 0 ? { extra_files: skill.files.map((f) => f.path) } : {}),
+      result: `تم تثبيت "${skill.name}" في مكتبة المستخدم المحلية (على جهازه فقط). اتبع تعليمات المهارة في الرد ده فورًا، واقرا أي ملف إضافي بـ read_skill_file لو لزم. ما تكرّرش التثبيت لنفس اللينك.`,
     },
   };
 }

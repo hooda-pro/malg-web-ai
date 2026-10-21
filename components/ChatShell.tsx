@@ -28,7 +28,8 @@ import { useSettings, type ModelId } from "./SettingsContext";
 import { buildAttachmentsMetaBlock, buildAttachmentsPromptBlock, extractAttachmentsMeta, extractAttachmentsPromptSection, MAX_CHAT_PAYLOAD_CHARS } from "@/lib/attachments";
 import type { AgentEvent } from "@/lib/agentEvents";
 import { extractAgentStepsMeta } from "@/lib/agentEvents";
-import { buildSkillsPayload, listSkills, onSkillsChanged } from "@/lib/skillsClient";
+import { buildSkillsPayload, listSkills, onSkillsChanged, saveSkillsFromRemote } from "@/lib/skillsClient";
+import { parseSlashCommand, type IncomingSkill, type SkillRecord } from "@/lib/skills";
 import { Timer } from "lucide-react";
 import ShareDialog from "./ShareDialog";
 
@@ -145,6 +146,9 @@ export default function ChatShell() {
   // عداد المهارات المحلية الفعّالة (بتقرا من جهاز المستخدم فقط) — بيتحدث لو المستخدم
   // عدّل مهاراته من الإعدادات، وبتعرض شيب صغير جنب اختيار الموديل.
   const [skillsActive, setSkillsActive] = useState(0);
+  // قايمة المهارات الكاملة (لأوامر السلاش /اسم) — من جهاز المستخدم بس
+  const skillsListRef = useRef<SkillRecord[]>([]);
+  const [skillsMenu, setSkillsMenu] = useState<SkillRecord[]>([]);
   const [showRecharge, setShowRecharge] = useState(false);
   const [showPlans, setShowPlans] = useState(false);
   /** عرض استوديو الصوت كصفحة كاملة بدل الشات */
@@ -684,6 +688,25 @@ export default function ChatShell() {
         return false;
       }
 
+      // أوامر المهارات (/اسم-المهارة رسالة): لو فيه مهارة محلية بالاسم ده، بنفعّلها
+      // إجباريًا للرسالة دي (حتى لو مفعّلة لأ) وبنعيد صياغة الطلب للموديل. لو مش
+      // مهارة معروفة نمنع الإرسال برسالة إرشادية — زي سلوك أوامر منصات الشات الكبيرة.
+      const slash = parseSlashCommand(trimmed);
+      let invokedSkill: SkillRecord | null = null;
+      if (slash) {
+        const list = skillsListRef.current;
+        const want = slash.slug.toLowerCase();
+        invokedSkill =
+          list.find((s) => s.name.toLowerCase() === want) ??
+          (list.filter((s) => s.name.toLowerCase().includes(want)).length === 1
+            ? list.find((s) => s.name.toLowerCase().includes(want))!
+            : null);
+        if (!invokedSkill) {
+          showToast(t("toastNoSkillCommand", { cmd: slash.slug }));
+          return false; // الكومبوزر بيرجّع النص زي ما هو
+        }
+      }
+
       const sessionId = await ensureSessionId();
       if (!sessionId) {
         showToast(t("toastSessionFail"));
@@ -712,7 +735,11 @@ export default function ChatShell() {
           loading: false,
         }))
       );
-      const storedContent = trimmed + attachmentsMeta + attachmentsPromptBlock;
+      // أوامر المهارات: بنشيل الـ"/الاسم" من نص الرسالة ونكتب مكانها توجيه صريح
+      // للموديل، والمهارة نفسها بتتوصل إجباريًا مع الحمولة (forced في buildSkillsPayload).
+      const userText = invokedSkill && slash ? slash.rest || t("skillInvokeDefault", { name: invokedSkill.name }) : trimmed;
+      const skillNote = invokedSkill ? `\n\n> ${t("skillInvokeNote", { name: invokedSkill.name })}` : "";
+      const storedContent = userText + skillNote + attachmentsMeta + attachmentsPromptBlock;
 
       // طلبات المرفقات الضخمة (صور base64...) بتترفض من طبقة الاستضافة قبل ما
       // توصل للتطبيق (403 من غير JSON) — نمنعها هنا برسالة واضحة بدل الفشل الغامض.
@@ -765,8 +792,9 @@ export default function ChatShell() {
             uiLanguage: lang,
             model: effectiveModel,
             ...personalizationBody,
-            // مهارات المستخدم المحلية — من جهازه بس، بتنقل هنا وقت الإرسال مش أكتر
-            skills: await buildSkillsPayload(),
+            // مهارات المستخدم المحلية — من جهازه بس، بتنقل هنا وقت الإرسال مش أكتر.
+            // أوامر السلاش بتفعّل مهارة معينة إجباريًا لرسالة الشاع حتى لو مفعّلة لأ.
+            skills: await buildSkillsPayload(invokedSkill?.name),
           }),
           signal: controller.signal,
         });
@@ -806,6 +834,13 @@ export default function ChatShell() {
             onAgentEvent: (event) => {
               accAgentEvents = [...accAgentEvents, event];
               setStreamingAgentEvents(accAgentEvents);
+            },
+            onSkillSaved: async (skills: IncomingSkill[]) => {
+              // الموديل ثبّت مهارة من لينك (install_skill) — المتصفح هو اللي بيحفظ
+              // في مكتبته المحلية (IndexedDB) من غير أي نسخة عندنا.
+              const r = await saveSkillsFromRemote(skills, "github");
+              if (r.ok) showToast(t("toastSkillSaved", { name: r.name || "" }));
+              else showToast(r.error || t("toastSkillSaveFail"));
             },
             onQuotaExhausted: () => void refreshQuota(),
             onSessionEnded: (info) => markSessionEnded(sessionId, info.reason, info.by),
@@ -1197,14 +1232,18 @@ export default function ChatShell() {
     setSettingsTab(tab);
   }, []);
 
-  // عدد المهارات الفعّالة: قراءة أول حد + تحديث لحظي لأي تغيير من إدارة المهارات
-  // عبر حدث "mlag:skills-changed" (IndexedDB على جهاز المستخدم فقط).
+  // قايمة المهارات + عدد الفعّالة: قراءة أول تحميل + تحديث لحظي لأي تغيير من إدارة
+  // المهارات عبر حدث "mlag:skills-changed" (IndexedDB على جهاز المستخدم فقط).
   useEffect(() => {
     const refreshSkillsCount = async () => {
       try {
         const all = await listSkills();
+        skillsListRef.current = all;
+        setSkillsMenu(all);
         setSkillsActive(all.filter((s) => s.enabled).length);
       } catch {
+        skillsListRef.current = [];
+        setSkillsMenu([]);
         setSkillsActive(0);
       }
     };
@@ -1390,6 +1429,7 @@ export default function ChatShell() {
                     setShowPlans(true);
                   }}
                   skillsActive={skillsActive}
+                  skillsMenu={skillsMenu}
                   onOpenSkills={() => openSettings("skills")}
                 />
               }
@@ -1428,6 +1468,7 @@ export default function ChatShell() {
                 setShowPlans(true);
               }}
               skillsActive={skillsActive}
+              skillsMenu={skillsMenu}
               onOpenSkills={() => openSettings("skills")}
             />
           </>
