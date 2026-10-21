@@ -99,6 +99,15 @@
 - على الإنتاج الحالي (كود قديم قبل الرفع): `/api/malg/v1/models` → 200
   بـ**7 موديلات**، و`/v1/v1/models` → 404 (هيتصلح بعد الـdeploy الجديد).
 
+## تحديث تاني — رسالة "Gateway returned no usable models"
+- المعنى: السحب بقى 200 — الـrewrite شغال ✅ — لكن الفلتر التاني شال كل
+  القائمة، لأن موديلاتنا `malg-*` ولا واحدة منهم فيها كلمة `claude` أو
+  `anthropic` (وده الفلتر الموثق في دليل Claude Code الرسمي).
+- الحل المطبق: رد `/models` بقى فيه عنصر ثابت في الآخر اسمه `claude-malg`
+  بـdisplay_name "MALG (Claude-compatible)".
+- مش موديل مزيف: أي طلب بيه بيمشي عادي — نقطة `/chat/completions` بتحسم
+  الموديل الفعلي من المفتاح نفسه (الموديل بيتثبت على المفتاح وقت الإنشاء).
+
 ## المصادر
 - كودكس — مرجع الكونفيج الرسمي: https://developers.openai.com/codex/config-reference/
 - إعلان استغناء عن Chat Completions: https://github.com/openai/codex/discussions/7782

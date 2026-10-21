@@ -45,6 +45,22 @@ export async function GET() {
       is_default: r.is_default === true,
     }));
 
+    // مفتاح توافق واحد (claude-malg): الاسم فيه كلمة claude عشان يعدي فلتر
+    // اكتشاف Claude Code (بياخد بس id فيه claude أو anthropic) — والطلب
+    // بيه بيشتغل عادي لأن نقطة الشات بتحسم الموديل الفعلي من المفتاح نفسه.
+    data.push({
+      id: "claude-malg",
+      object: "model" as const,
+      type: "model" as const,
+      created: 0,
+      owned_by: "malg",
+      display_name: "MALG (Claude-compatible)",
+      description: "Compat alias — works with any API key; the real model is the one pinned to your key.",
+      tier: "free",
+      cost_multiplier: 1,
+      is_default: false,
+    });
+
     return NextResponse.json({
       object: "list",
       data,
