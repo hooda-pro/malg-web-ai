@@ -154,8 +154,19 @@ export async function POST(req: NextRequest) {
 
   const apiMessages: ApiMessage[] = [];
   for (const m of rawMessages) {
-    const role = typeof m?.role === "string" ? m.role : "";
-    const content = typeof m?.content === "string" ? m.content : "";
+    const rawRole = typeof m?.role === "string" ? m.role : "";
+    // الـSDKات الحديثة بتاع OpenAI بتبعت دور "developer" بدل "system" — بنعامله
+    // كـsystem عشان العملاء الجديدة ما تترفضش بـ"شكل الرسائل غير صحيح".
+    const role = rawRole === "developer" ? "system" : rawRole;
+    // بعض العملاء بيبعت content كمصفوفة أجزاء (الـSDKات متعددة الوسائط) —
+    // بنضم أجزاء النص في نص واحد بدل ما نرفض الطلب.
+    let content = typeof m?.content === "string" ? m.content : "";
+    if (!content && Array.isArray(m?.content)) {
+      content = (m.content as Array<{ type?: string; text?: string }>)
+        .map((p) => (typeof p?.text === "string" ? p.text : ""))
+        .filter(Boolean)
+        .join("\n");
+    }
     if (!["system", "user", "assistant", "tool"].includes(role)) {
       return NextResponse.json({ error: "شكل الرسائل غير صحيح" }, { status: 400 });
     }

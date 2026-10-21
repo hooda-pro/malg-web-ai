@@ -142,25 +142,38 @@ Model ID       malg-ai`,
       };
     case "codex":
       return {
-        code: `# ~/.codex/config.toml
+        code: `# ~/.codex/config.toml — على نفس جسر LiteLLM من تاب Claude Code
 model = "malg-ai"
 model_provider = "MALG"
+web_search = "disabled"
 
 [model_providers.MALG]
 name = "MALG AI"
-base_url = "${url}"
-env_key = "MALG_API_KEY"
-wire_api = "chat"`,
+base_url = "http://localhost:4000/v1"
+env_key = "LITELLM_MASTER_KEY"
+wire_api = "responses"
+
+[features]
+multi_agent = false`,
         note: t("akNoteCodex"),
         warn: true,
       };
     case "claude":
       return {
-        code: `# ${t("akClaudeCode1")}
-# ${t("akClaudeCode2")}
+        code: `# 1) config.yaml — جسر LiteLLM (Anthropic <-> Chat Completions)
+model_list:
+  - model_name: malg-ai
+    litellm_params:
+      model: openai/malg-ai
+      api_base: ${url}
+      api_key: os.environ/MALG_API_KEY
+
+# 2) pip install "litellm[proxy]" && litellm --config config.yaml
+
+# 3) متغيرات البيئة بتاعتها لكلود كود
 export ANTHROPIC_BASE_URL="http://localhost:4000"
-# ${t("akClaudeRedirect")}
-#   ${url}`,
+export ANTHROPIC_AUTH_TOKEN="sk-..."   # نفس قيمة LITELLM_MASTER_KEY
+export ANTHROPIC_MODEL="malg-ai"`,
         note: t("akNoteClaude"),
         warn: true,
       };

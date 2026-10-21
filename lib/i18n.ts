@@ -452,11 +452,8 @@ const ar: Dict = {
   akNotePython: "أي SDK متوافق مع OpenAI بيشتغل — غيّر base_url بس.",
   akNoteCline: "من إعدادات Cline في VS Code أو JetBrains. اسم الـ Model ID شكلي بس — الموديل محدد من المفتاح.",
   akNoteOpencode: "حطه في opencode.json، وبعدين opencode auth login ← Other ← اكتب MALG ← الصق مفتاحك، واختار MALG/malg-ai من /models.",
-  akNoteCodex: "بعض إصدارات Codex الحديثة بتدعم wire_api = \"responses\" بس. لو ظهرلك خطأ برفض \"chat\" جرّب Cline أو OpenCode.",
-  akNoteClaude: "لا يوجد ربط مباشر — Cline أو OpenCode أسهل بكثير مع MALG.",
-  akClaudeCode1: "Claude Code بيتكلم بروتوكول Anthropic (Messages API) بس",
-  akClaudeCode2: "محتاج جسر ترجمة محلي زي LiteLLM:",
-  akClaudeRedirect: "وLiteLLM نفسه يوجّه على:",
+  akNoteCodex: "كودكس الحديث (من فبراير 2026) بيتكلم OpenAI Responses API بس — wire_api = \"chat\" اتشال نهائيًا. MALG بيقدم Chat Completions، فبوصّل كودكس على جسر LiteLLM (نفس اللي في تاب Claude Code) بيترجم تلقائيًا، ومتفتكرش multi_agent = false. من غير جسر: Cline أو OpenCode.",
+  akNoteClaude: "من غير جسر مش هيشتغل — Claude Code بيتكلم بروتوكول Anthropic (Messages API) بس. LiteLLM بيترجم /v1/messages ↔ Chat Completions تلقائيًا، وأسهل من كده كتير: Cline أو OpenCode.",
 
   // --- لاندينغ: البطل والأمثلة ---
   hcpField: "اكتب طلبك لـ MALG",
@@ -972,11 +969,8 @@ const en: Dict = {
   akNotePython: "Any OpenAI-compatible SDK works — just change base_url.",
   akNoteCline: "From Cline settings in VS Code or JetBrains. The Model ID name is cosmetic — the model comes from the key.",
   akNoteOpencode: "Put it in opencode.json, then opencode auth login ← Other ← type MALG ← paste your key, and pick MALG/malg-ai from /models.",
-  akNoteCodex: "Some newer Codex builds support wire_api = \"responses\" only. If you get an error rejecting \"chat\", try Cline or OpenCode.",
-  akNoteClaude: "No direct hookup — Cline or OpenCode are much easier with MALG.",
-  akClaudeCode1: "Claude Code only speaks the Anthropic protocol (Messages API)",
-  akClaudeCode2: "You need a local translation bridge like LiteLLM:",
-  akClaudeRedirect: "and LiteLLM points at:",
+  akNoteCodex: "Modern Codex (since Feb 2026) speaks the OpenAI Responses API only — wire_api = \"chat\" was removed entirely. MALG serves Chat Completions, so point Codex at a LiteLLM bridge (same as the Claude Code tab) which translates automatically, and don't forget multi_agent = false. Without a bridge: Cline or OpenCode.",
+  akNoteClaude: "It won't connect without a bridge — Claude Code speaks the Anthropic protocol (Messages API) only. LiteLLM translates /v1/messages ↔ Chat Completions automatically. A much simpler alternative: Cline or OpenCode.",
 
   // --- Landing: hero composer & examples ---
   hcpField: "Write your request to MALG",
@@ -1469,11 +1463,8 @@ const fr: Dict = {
   akNotePython: "Tout SDK compatible OpenAI fonctionne — changez simplement base_url.",
   akNoteCline: "Depuis les paramètres de Cline dans VS Code ou JetBrains. Le nom du Model ID est purement décoratif — le modèle vient de la clé.",
   akNoteOpencode: "Placez-le dans opencode.json, puis opencode auth login ← Other ← tapez MALG ← collez votre clé, et choisissez MALG/malg-ai dans /models.",
-  akNoteCodex: "Certaines versions récentes de Codex ne prennent en charge que wire_api = \"responses\". En cas d'erreur refusant \"chat\", essayez Cline ou OpenCode.",
-  akNoteClaude: "Pas de branchement direct — Cline ou OpenCode sont bien plus simples avec MALG.",
-  akClaudeCode1: "Claude Code ne parle que le protocole Anthropic (API Messages)",
-  akClaudeCode2: "Vous avez besoin d'un pont de traduction local comme LiteLLM :",
-  akClaudeRedirect: "et LiteLLM pointe vers :",
+  akNoteCodex: "Le Codex moderne (depuis février 2026) ne parle que l'API OpenAI Responses — wire_api = \"chat\" a été supprimé définitivement. MALG sert des Chat Completions, donc pointez Codex vers un pont LiteLLM (comme l'onglet Claude Code) qui traduit automatiquement, et n'oubliez pas multi_agent = false. Sans pont : Cline ou OpenCode.",
+  akNoteClaude: "Sans pont, ça ne marchera pas — Claude Code ne parle que le protocole Anthropic (API Messages). LiteLLM traduit /v1/messages ↔ Chat Completions automatiquement. Beaucoup plus simple : Cline ou OpenCode.",
 
   // --- Landing : héros et exemples ---
   hcpField: "Écrivez votre demande à MALG",
@@ -1966,11 +1957,8 @@ const es: Dict = {
   akNotePython: "Cualquier SDK compatible con OpenAI funciona — solo cambia base_url.",
   akNoteCline: "Desde los ajustes de Cline en VS Code o JetBrains. El nombre del Model ID es decorativo — el modelo viene de la clave.",
   akNoteOpencode: "Ponlo en opencode.json, luego opencode auth login ← Other ← escribe MALG ← pega tu clave, y elige MALG/malg-ai en /models.",
-  akNoteCodex: "Algunas versiones recientes de Codex solo admiten wire_api = \"responses\". Si aparece un error que rechaza \"chat\", prueba Cline u OpenCode.",
-  akNoteClaude: "No hay conexión directa — Cline u OpenCode son mucho más fáciles con MALG.",
-  akClaudeCode1: "Claude Code solo habla el protocolo Anthropic (API Messages)",
-  akClaudeCode2: "Necesitas un puente de traducción local como LiteLLM:",
-  akClaudeRedirect: "y LiteLLM apunta a:",
+  akNoteCodex: "El Codex moderno (desde febrero de 2026) solo habla la API OpenAI Responses — wire_api = \"chat\" se eliminó por completo. MALG sirve Chat Completions, así que apunta Codex a un puente LiteLLM (como la pestaña Claude Code) que traduce automáticamente, y no olvides multi_agent = false. Sin puente: Cline u OpenCode.",
+  akNoteClaude: "Sin puente no funcionará — Claude Code solo habla el protocolo Anthropic (API Messages). LiteLLM traduce /v1/messages ↔ Chat Completions automáticamente. Una alternativa mucho más simple: Cline u OpenCode.",
 
   // --- Landing: héroe y ejemplos ---
   hcpField: "Escribe tu petición a MALG",
