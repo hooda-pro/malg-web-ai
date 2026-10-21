@@ -1,33 +1,36 @@
 import Logo from "../Logo";
+import { useSettings } from "../SettingsContext";
 
+// أعمدة اللينكس بمفاتيح ترجمة — تتبدل حيًا مع لغة الموقع.
 const COLUMNS = [
   {
-    title: "المنتج",
+    titleKey: "footProd",
     links: [
-      { href: "#features", label: "المميزات" },
-      { href: "#how", label: "كيف يعمل" },
-      { href: "/pricing", label: "الأسعار" },
-      { href: "/#/chat", label: "ابدأ المحادثة" },
+      { href: "#features", labelKey: "footFeatures" },
+      { href: "#how", labelKey: "footHow" },
+      { href: "/pricing", labelKey: "footPricing" },
+      { href: "/#/chat", labelKey: "footStart" },
     ],
   },
   {
-    title: "للمطورين",
+    titleKey: "footDev",
     links: [
-      { href: "#developers", label: "الواجهة البرمجية" },
-      { href: "/#/api", label: "مفاتيح API" },
+      { href: "#developers", labelKey: "footDevApi" },
+      { href: "/#/api", labelKey: "footApiKeys" },
     ],
   },
   {
-    title: "قانوني",
+    titleKey: "footLegal",
     links: [
-      { href: "/privacy", label: "سياسة الخصوصية" },
-      { href: "/terms", label: "شروط الاستخدام" },
-      { href: "#faq", label: "الأسئلة الشائعة" },
+      { href: "/privacy", labelKey: "footPrivacy" },
+      { href: "/terms", labelKey: "footTerms" },
+      { href: "#faq", labelKey: "footFaq" },
     ],
   },
 ];
 
 export default function LandingFooter() {
+  const { t } = useSettings();
   return (
     <footer className="border-t border-hair pb-[max(2rem,env(safe-area-inset-bottom))] pt-14">
       <div className="mx-auto grid max-w-6xl gap-10 px-5 md:grid-cols-[1.4fr_repeat(3,1fr)]">
@@ -39,17 +42,17 @@ export default function LandingFooter() {
             <span className="text-[17px] font-semibold tracking-display">MALG</span>
           </span>
           <p className="mt-4 max-w-[34ch] text-[14px] leading-7 text-ink-2">
-            مساعدك الذكي للكتابة والبحث والبرمجة — مصمّم للمستخدم العربي أولًا.
+            {t("footTagline")}
           </p>
         </div>
         {COLUMNS.map((col) => (
-          <nav key={col.title} aria-label={col.title}>
-            <p className="text-[13px] font-semibold text-ink">{col.title}</p>
+          <nav key={col.titleKey} aria-label={t(col.titleKey)}>
+            <p className="text-[13px] font-semibold text-ink">{t(col.titleKey)}</p>
             <ul className="mt-4 space-y-3">
               {col.links.map((l) => (
-                <li key={l.href + l.label}>
+                <li key={l.href + l.labelKey}>
                   <a href={l.href} className="text-[14px] text-ink-2 transition-colors duration-1 hover:text-ink">
-                    {l.label}
+                    {t(l.labelKey)}
                   </a>
                 </li>
               ))}
@@ -58,8 +61,8 @@ export default function LandingFooter() {
         ))}
       </div>
       <div className="mx-auto mt-12 flex max-w-6xl flex-wrap items-center justify-between gap-3 border-t border-hair px-5 pt-6 text-[13px] text-ink-3">
-        <span>© {new Date().getFullYear()} MALG. جميع الحقوق محفوظة.</span>
-        <span>صُنع بعناية للمستخدم العربي</span>
+        <span>© {new Date().getFullYear()} MALG. {t("footRights")}</span>
+        <span>{t("footMade")}</span>
       </div>
     </footer>
   );

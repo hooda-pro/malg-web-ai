@@ -138,6 +138,34 @@ export function isVideoFile(file: File): boolean {
   return VIDEO_EXTENSIONS.has(extOf(file.name));
 }
 
+// الأرشيفات المضغوطة ممنوعة في الشات: الشات بيتعامل مع نصوص وصور بس، والـzip
+// مكانها الأنسب أدوات الـCLI على جهازك عبر مفتاح الـAPI (شوف صفحة API للمطورين)
+// أو تاب «المهارات» لاستيراد حزم Skills كنصوص. بنمنعها من بوابة الرفع نفسها.
+const ARCHIVE_EXTENSIONS = new Set([
+  "zip", "rar", "7z", "tar", "gz", "tgz", "bz2", "xz", "zst", "iso", "cab", "pkg",
+]);
+const ARCHIVE_MIMES = [
+  "application/zip",
+  "application/x-zip-compressed",
+  "application/x-zip",
+  "multipart/x-zip",
+  "application/x-rar-compressed",
+  "application/vnd.rar",
+  "application/x-7z-compressed",
+  "application/x-tar",
+  "application/gzip",
+  "application/x-gzip",
+  "application/x-gtar",
+  "application/x-bzip2",
+  "application/x-xz",
+];
+
+export function isArchiveFile(file: File): boolean {
+  const name = (file.name || "").toLowerCase();
+  if (file.type && ARCHIVE_MIMES.includes(file.type.toLowerCase())) return true;
+  return ARCHIVE_EXTENSIONS.has(extOf(name));
+}
+
 // سقف اللقطات وحجمها: 6 لقطات × ~640px بجودة متوسطة ≈ نص ميجا إجمالي،
 // رقم معقول يتحفظ في الرسالة ويتبعت للموديل من غير ما ياكل التوكنز.
 const MAX_VIDEO_FRAMES = 24;

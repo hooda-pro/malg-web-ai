@@ -6,6 +6,7 @@ import {
   ATTACHMENTS_ENABLED,
   detectAttachmentKind,
   formatBytes,
+  isArchiveFile,
   isVideoFile,
   makeAttachmentId,
   MAX_UPLOAD_BYTES,
@@ -96,6 +97,8 @@ export default function BottomInputBar({
 }) {
   const { t, lang, enterToSend } = useSettings();
   const [text, setText] = useState("");
+  // إشعار حظر الأرشيفات المضغوطة — كارت أنيق فوق الخانة (مش شفاف) ويقفل بإيد المشترك
+  const [zipBlocked, setZipBlocked] = useState(false);
 
   // --- منيو أوامر المهارات (/): يبان أول ما النص يبدأ بـ / والمستخدم لسه بيكتب الاسم ---
   const [slashIdx, setSlashIdx] = useState(0);
@@ -218,7 +221,12 @@ export default function BottomInputBar({
     if (!ATTACHMENTS_ENABLED) return;
     const list = Array.from(files);
     if (list.length === 0) return;
-    list.forEach(async (file) => {
+    // حظر فوري للأرشيفات المضغوطة — مفيش chip ولا بيتثبت حاجة؛ إشعار أنيق منفصل
+    const archives = list.filter(isArchiveFile).length;
+    const rest = list.filter((f) => !isArchiveFile(f));
+    if (archives > 0) setZipBlocked(true);
+    if (rest.length === 0) return;
+    rest.forEach(async (file) => {
       // ملف أضخم من الحد — بنرفضه فورًا من غير ما نقراه في الذاكرة.
       if (file.size > MAX_UPLOAD_BYTES) {
         setAttachments((prev) => [
@@ -228,7 +236,7 @@ export default function BottomInputBar({
             file,
             kind: "text",
             loading: false,
-            error: `الملف كبير جدًا — الحد الأقصى ${formatBytes(MAX_UPLOAD_BYTES)}`,
+            error: t("attachTooBig", { size: formatBytes(MAX_UPLOAD_BYTES) }),
           },
         ]);
         return;
@@ -243,7 +251,7 @@ export default function BottomInputBar({
           file,
           kind: "text",
           loading: false,
-          error: "رفع الفيديو متوقف حاليا",
+          error: t("attachVideoPaused"),
         };
         setAttachments((prev) => [...prev, denied]);
         return;
@@ -284,7 +292,7 @@ export default function BottomInputBar({
                   error:
                     e instanceof Error && e.message
                       ? e.message
-                      : "تعذّر رفع الملف — حاول مجددًا",
+                      : t("attachUploadFail"),
                 }
               : a
           )
@@ -480,6 +488,34 @@ export default function BottomInputBar({
           <div className="pointer-events-none flex items-center justify-center gap-2 rounded-t-xl border-b border-dashed border-accent-line bg-accent-soft px-4 py-3 text-[13px] font-medium text-accent">
             <Paperclip size={14} />
             {t("dropFilesHint")}
+          </div>
+        )}
+
+        {/* كارت حظر الأرشيفات المضغوطة — تصميم أنيق عنوانه fixedة ومن غير شفافية */}
+        {zipBlocked && (
+          <div
+            role="alert"
+            className="relative overflow-hidden rounded-t-xl border-b border-accent-line bg-accent-soft px-4 py-3"
+          >
+            <div className="pointer-events-none absolute -top-12 -start-12 h-28 w-28 rounded-full bg-accent/10 blur-2xl" aria-hidden="true" />
+            <div className="relative flex items-start gap-3">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-accent text-accent-ink shadow-sm">
+                <FileArchive size={16} strokeWidth={2.2} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-semibold text-ink">{t("zipBlockedTitle")}</p>
+                <p className="mt-1 text-[12.5px] leading-5 text-ink-2">{t("zipBlockedBody")}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setZipBlocked(false)}
+                aria-label={t("closeNotice")}
+                title={t("closeNotice")}
+                className="shrink-0 rounded-lg p-1.5 text-ink-3 transition-colors duration-1 hover:bg-surface-3 hover:text-ink"
+              >
+                <X size={14} />
+              </button>
+            </div>
           </div>
         )}
 

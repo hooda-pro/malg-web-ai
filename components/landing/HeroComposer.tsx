@@ -1,48 +1,34 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUp, Code2, Globe, Paperclip, PenLine, Sparkles } from "lucide-react";
+import { useSettings } from "../SettingsContext";
 
+// المفاتيح resolve وقت الرندر بترجمة المكوّن — عشان اللغة تتبدل بشكل حي.
 const MODES = [
   {
     id: "build",
-    label: "ابنِ موقعًا",
+    labelKey: "hcpModeBuild",
     icon: Code2,
-    examples: [
-      "ابنِ صفحة هبوط لمطعم مع قائمة طعام وزر حجز",
-      "اعمل لعبة ثعبان تعمل في المتصفح",
-      "صمّم لوحة تحكم لمتابعة المبيعات الشهرية",
-    ],
+    examples: ["hcpExBuild1", "hcpExBuild2", "hcpExBuild3"],
   },
   {
     id: "write",
-    label: "اكتب",
+    labelKey: "hcpModeWrite",
     icon: PenLine,
-    examples: [
-      "اكتب رسالة تقديم احترافية لوظيفة مصمم واجهات",
-      "لخّص لي هذا المقال في خمس نقاط واضحة",
-      "اكتب منشورًا تسويقيًا لإطلاق تطبيق جديد",
-    ],
+    examples: ["hcpExWrite1", "hcpExWrite2", "hcpExWrite3"],
   },
   {
     id: "search",
-    label: "ابحث",
+    labelKey: "hcpModeSearch",
     icon: Globe,
-    examples: [
-      "ما آخر التطورات في مجال السيارات الكهربائية؟",
-      "قارن بين أفضل ثلاث لغات برمجة للمبتدئين",
-      "ابحث عن أفضل الممارسات لتحسين سرعة المواقع",
-    ],
+    examples: ["hcpExSearch1", "hcpExSearch2", "hcpExSearch3"],
   },
   {
     id: "learn",
-    label: "تعلّم",
+    labelKey: "hcpModeLearn",
     icon: Sparkles,
-    examples: [
-      "اشرح لي الذكاء الاصطناعي كأني في الصف الأول الثانوي",
-      "ساعدني أذاكر الفيزياء بأسئلة وأجوبة",
-      "علّمني أساسيات بايثون خطوة بخطوة",
-    ],
+    examples: ["hcpExLearn1", "hcpExLearn2", "hcpExLearn3"],
   },
 ] as const;
 
@@ -98,14 +84,17 @@ function useTypewriter(lines: readonly string[], paused: boolean) {
 }
 
 export default function HeroComposer() {
+  const { t } = useSettings();
   const [mode, setMode] = useState<(typeof MODES)[number]["id"]>("build");
   const [value, setValue] = useState("");
   const [focused, setFocused] = useState(false);
   const active = MODES.find((m) => m.id === mode) ?? MODES[0];
-  const typed = useTypewriter(active.examples, focused || value.length > 0);
+  // أمثلة مترجمة — useMemo عشان مرجع القايمة يفضل ثابت (الترايتايبر مش يتدخل)
+  const examples = useMemo(() => active.examples.map((k) => t(k)), [active, t]);
+  const typed = useTypewriter(examples, focused || value.length > 0);
 
   const submit = (prompt?: string) => {
-    const text = (prompt ?? value).trim() || active.examples[0];
+    const text = (prompt ?? value).trim() || t(active.examples[0]);
     try {
       sessionStorage.setItem("malg-pending-prompt", text);
     } catch {
@@ -124,7 +113,7 @@ export default function HeroComposer() {
         className="lp-ring rounded-[26px] bg-surface p-2 text-start shadow-3"
       >
         <label htmlFor="lp-prompt" className="sr-only">
-          اكتب طلبك لـ MALG
+          {t("hcpField")}
         </label>
         <div className="relative">
           <textarea
@@ -142,7 +131,7 @@ export default function HeroComposer() {
               }
             }}
             className="block w-full resize-none bg-transparent px-4 pb-2 pt-3.5 text-[16px] leading-7 text-ink outline-none placeholder:text-ink-3"
-            placeholder={focused ? "صِف ما تريد…" : ""}
+            placeholder={focused ? t("hcpFocus") : ""}
           />
           {!value && !focused && (
             <span aria-hidden="true" className="lp-caret pointer-events-none absolute inset-x-4 top-3.5 text-[16px] leading-7 text-ink-3">
@@ -171,14 +160,14 @@ export default function HeroComposer() {
                   }`}
                 >
                   <Icon size={14} />
-                  {m.label}
+                  {t(m.labelKey)}
                 </button>
               );
             })}
           </div>
           <button
             type="submit"
-            aria-label="إرسال"
+            aria-label={t("hcpSend")}
             className="btn-send grid h-10 w-10 shrink-0 place-items-center rounded-full text-accent-ink transition-transform duration-1 active:scale-95"
           >
             <ArrowUp size={18} />
@@ -186,15 +175,15 @@ export default function HeroComposer() {
         </div>
       </form>
 
-      <ul className="mt-4 flex flex-wrap items-center justify-center gap-2" aria-label="أمثلة سريعة">
+      <ul className="mt-4 flex flex-wrap items-center justify-center gap-2" aria-label={t("hcpExamples")}>
         {active.examples.map((ex) => (
           <li key={ex}>
             <button
               type="button"
-              onClick={() => submit(ex)}
+              onClick={() => submit(t(ex))}
               className="rounded-full border border-hair bg-surface px-3.5 py-1.5 text-[13px] text-ink-2 transition-colors duration-1 hover:border-hair-2 hover:text-ink"
             >
-              {ex}
+              {t(ex)}
             </button>
           </li>
         ))}

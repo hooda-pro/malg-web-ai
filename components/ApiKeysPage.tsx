@@ -40,7 +40,7 @@ interface ApiModelOption {
 }
 
 const FALLBACK_API_MODELS: ApiModelOption[] = [
-  { id: "malg-ai", name: "MALG AI", hint: "الموديل الأساسي — أداء قوي وثابت في الفهم والبرمجة", recommended: true },
+  { id: "malg-ai", name: "MALG AI", hint: "", recommended: true },
 ];
 
 interface ApiKeyRow {
@@ -71,7 +71,9 @@ function priceFor(tokens: number): number {
   return Math.round((tokens / 1_000_000) * API_TOKEN_PRICE_PER_MILLION);
 }
 
-function buildSnippet(id: SnippetId, base: string): { code: string; note?: ReactNode; warn?: boolean } {
+type TFn = (key: string, params?: Record<string, string | number>) => string;
+
+function buildSnippet(id: SnippetId, base: string, t: TFn): { code: string; note?: ReactNode; warn?: boolean } {
   const url = `${base}/api/malg/v1`;
   switch (id) {
     case "curl":
@@ -80,10 +82,10 @@ function buildSnippet(id: SnippetId, base: string): { code: string; note?: React
   -H "Authorization: Bearer $MALG_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "messages": [{ "role": "user", "content": "أهلاً" }],
+    "messages": [{ "role": "user", "content": "${t("akSampleGreeting")}" }],
     "stream": false
   }'`,
-        note: "الموديل بيتحدد تلقائيًا من المفتاح — مش لازم تبعته. ضيف \"stream\": true عشان تستقبل الرد كـ SSE بصيغة OpenAI.",
+        note: t("akNoteCurl"),
       };
     case "python":
       return {
@@ -96,10 +98,10 @@ client = OpenAI(
 
 res = client.chat.completions.create(
     model="malg-ai",
-    messages=[{"role": "user", "content": "أهلاً"}],
+    messages=[{"role": "user", "content": "${t("akSampleGreeting")}"}],
 )
 print(res.choices[0].message.content)`,
-        note: "أي SDK متوافق مع OpenAI بيشتغل — غيّر base_url بس.",
+        note: t("akNotePython"),
       };
     case "js":
       return {
@@ -112,7 +114,7 @@ const client = new OpenAI({
 
 const res = await client.chat.completions.create({
   model: "malg-ai",
-  messages: [{ role: "user", content: "أهلاً" }],
+  messages: [{ role: "user", content: "${t("akSampleGreeting")}" }],
 });
 console.log(res.choices[0].message.content);`,
       };
@@ -120,9 +122,9 @@ console.log(res.choices[0].message.content);`,
       return {
         code: `API Provider   OpenAI Compatible
 Base URL       ${url}
-API Key        <مفتاحك>
+API Key        ${t("akClineKeyPlaceholder")}
 Model ID       malg-ai`,
-        note: "من إعدادات Cline في VS Code أو JetBrains. اسم الـ Model ID شكلي بس — الموديل محدد من المفتاح.",
+        note: t("akNoteCline"),
       };
     case "opencode":
       return {
@@ -136,7 +138,7 @@ Model ID       malg-ai`,
     }
   }
 }`,
-        note: "حطه في opencode.json، وبعدين opencode auth login ← Other ← اكتب MALG ← الصق مفتاحك، واختار MALG/malg-ai من /models.",
+        note: t("akNoteOpencode"),
       };
     case "codex":
       return {
@@ -149,17 +151,17 @@ name = "MALG AI"
 base_url = "${url}"
 env_key = "MALG_API_KEY"
 wire_api = "chat"`,
-        note: "بعض إصدارات Codex الحديثة بتدعم wire_api = \"responses\" بس. لو ظهرلك خطأ برفض \"chat\" جرّب Cline أو OpenCode.",
+        note: t("akNoteCodex"),
         warn: true,
       };
     case "claude":
       return {
-        code: `# Claude Code بيتكلم بروتوكول Anthropic (Messages API) بس
-# محتاج جسر ترجمة محلي زي LiteLLM:
+        code: `# ${t("akClaudeCode1")}
+# ${t("akClaudeCode2")}
 export ANTHROPIC_BASE_URL="http://localhost:4000"
-# وLiteLLM نفسه يوجّه على:
+# ${t("akClaudeRedirect")}
 #   ${url}`,
-        note: "لا يوجد ربط مباشر — Cline أو OpenCode أسهل بكثير مع MALG.",
+        note: t("akNoteClaude"),
         warn: true,
       };
   }
@@ -167,6 +169,8 @@ export ANTHROPIC_BASE_URL="http://localhost:4000"
 
 /** لوحة الـ API للمطورين: رصيد منفصل، مفاتيح، أمثلة ربط، وشحن. */
 export default function ApiKeysPage() {
+  const { t, lang } = useSettings();
+  const dirAttr = lang === "ar" ? "rtl" : "ltr";
   const [authChecked, setAuthChecked] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
 
@@ -241,15 +245,15 @@ export default function ApiKeysPage() {
     try {
       const res = await fetch("/api/api-keys");
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "فشل تحميل بيانات صفحة API");
+      if (!res.ok) throw new Error(data.error || t("akLoadError"));
       setKeys(data.keys || []);
       if (data.quota) setQuota({ total: data.quota.totalAllocatedTokens, used: data.quota.usedTokens });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "فشل تحميل بيانات صفحة API");
+      setError(e instanceof Error ? e.message : t("akLoadError"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!authChecked) return;
@@ -261,7 +265,7 @@ export default function ApiKeysPage() {
   }, [authChecked, user, loadKeys]);
 
   const base = origin || "https://your-domain";
-  const snip = useMemo(() => buildSnippet(snippet, base), [snippet, base]);
+  const snip = useMemo(() => buildSnippet(snippet, base, t), [snippet, base, t]);
 
   const openWhatsApp = (tokens: number | null) => {
     const url = buildWhatsAppLink(buildApiRechargeMessage(tokens, user));
@@ -289,15 +293,15 @@ export default function ApiKeysPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setCreateError(data.error || "فشل إنشاء المفتاح");
+        setCreateError(data.error || t("akCreateFail"));
         return;
       }
       setShowCreate(false);
       setNewLabel("");
-      setJustCreated({ fullKey: data.fullKey, label: data.key?.label || "مفتاح API" });
+      setJustCreated({ fullKey: data.fullKey, label: data.key?.label || t("akDefaultLabel") });
       await loadKeys();
     } catch {
-      setCreateError("مشكلة في الاتصال — حاول تاني");
+      setCreateError(t("akConnError"));
     } finally {
       setCreating(false);
     }
@@ -310,14 +314,14 @@ export default function ApiKeysPage() {
       const res = await fetch(`/api/api-keys/${revokeTarget.id}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        notify(data.error || "فشل إلغاء المفتاح");
+        notify(data.error || t("akRevokeFail"));
         return;
       }
-      notify("تم إلغاء المفتاح");
+      notify(t("akRevokedNotice"));
       setRevokeTarget(null);
       await loadKeys();
     } catch {
-      notify("مشكلة في الاتصال — حاول تاني");
+      notify(t("akConnError"));
     } finally {
       setRevoking(false);
     }
@@ -333,7 +337,7 @@ export default function ApiKeysPage() {
 
   if (!authChecked) {
     return (
-      <div dir="rtl" lang="ar" className="bg-ground" role="status" aria-live="polite" aria-label="جاري التحميل">
+      <div dir={dirAttr} lang={lang} className="bg-ground" role="status" aria-live="polite" aria-label={t("akLoadingAria")}>
         <div className="mx-auto w-full max-w-2xl space-y-3 px-5 py-8" aria-hidden="true">
           <div className="skel h-8 w-48 rounded-lg" />
           <div className="skel h-4 w-72 rounded-full" />
@@ -346,20 +350,20 @@ export default function ApiKeysPage() {
 
   if (!user) {
     return (
-      <div dir="rtl" lang="ar" className="flex min-h-[100dvh] items-center justify-center bg-ground px-4">
+      <div dir={dirAttr} lang={lang} className="flex min-h-[100dvh] items-center justify-center bg-ground px-4">
         <div className="animate-materialize w-full max-w-sm rounded-2xl border border-hair bg-surface p-8 text-center shadow-2">
           <span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-accent text-accent-ink shadow-accent">
             <KeyRound size={20} />
           </span>
-          <h1 className="mt-5 text-balance text-[20px] font-semibold tracking-title text-ink">API للمطورين</h1>
+          <h1 className="mt-5 text-balance text-[20px] font-semibold tracking-title text-ink">{t("akTitle")}</h1>
           <p className="mt-2 text-pretty text-[13.5px] leading-6 text-ink-2">
-            سجّل دخول بحسابك الأول عشان تعمل مفاتيح API وتستخدم رصيدك في تطبيقاتك.
+            {t("akSignInBody")}
           </p>
           <a
             href="/#"
             className="mt-6 inline-flex h-10 w-full items-center justify-center rounded-full bg-accent text-[14px] font-medium text-accent-ink shadow-accent transition-colors hover:bg-accent-hover"
           >
-            تسجيل الدخول
+            {t("akSignInBtn")}
           </a>
         </div>
       </div>
@@ -371,7 +375,7 @@ export default function ApiKeysPage() {
   const activeKeys = keys.filter((k) => k.isActive).length;
 
   return (
-    <div dir="rtl" lang="ar" className="h-[100dvh] overflow-y-auto bg-ground">
+    <div dir={dirAttr} lang={lang} className="h-[100dvh] overflow-y-auto bg-ground">
       <header className="glass sticky top-0 z-nav border-b border-hair">
         <div className="mx-auto flex h-14 max-w-5xl items-center gap-3 px-4 sm:px-6">
           <a
@@ -379,7 +383,7 @@ export default function ApiKeysPage() {
             className="inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
           >
             <ArrowLeft size={15} className="rotate-180" />
-            الشات
+            {t("akBackChat")}
           </a>
           <span className="h-4 w-px bg-hair-2" aria-hidden="true" />
           <span className="flex items-center gap-2">
@@ -401,33 +405,31 @@ export default function ApiKeysPage() {
         <section className="stagger flex flex-wrap items-end justify-between gap-4">
           <div className="max-w-xl">
             <h1 className="text-balance text-[clamp(26px,4.4vw,34px)] font-semibold leading-tight tracking-display text-ink">
-              API للمطورين
+              {t("akTitle")}
             </h1>
             <p className="mt-2 text-pretty text-[15px] leading-7 text-ink-2">
-              استخدم MALG جوه تطبيقاتك وأدواتك بواجهة متوافقة مع OpenAI. رصيد الـ API منفصل تمامًا عن رصيد الشات.
+              {t("akSubtitle")}
             </p>
           </div>
           <Button variant="primary" onClick={openCreate}>
             <Plus size={16} />
-            مفتاح جديد
+            {t("akNewKey")}
           </Button>
         </section>
 
         <div className="animate-rise -mt-5 flex items-start gap-3 rounded-lg border border-accent-line bg-accent-soft px-4 py-3.5">
           <Info size={16} className="mt-1 shrink-0 text-accent" />
           <div className="text-pretty text-[13.5px] leading-6 text-ink">
-            <p className="font-semibold">ملاحظة: للاستخدام الكامل، استخدم الـ API</p>
+            <p className="font-semibold">{t("akNoticeTitle")}</p>
             <p className="mt-1 text-ink-2">
-              للحصول على كامل قدرات MALG، استخدمه عبر الـ API داخل Cline أو OpenCode أو أي أداة على جهازك. على الموقع يعمل
-              الكود في بيئة معزولة بموارد محدودة، لذلك قد تفشل بعض الأوامر، وقد لا يعمل مشروعك كما يعمل في بيئتك. أما مع
-              الـ API فأنت تتحكم في بيئة التنفيذ وتجرّب مشروعك بنفسك. ستجد أمثلة الربط في «البدء السريع» أدناه.
+              {t("akNoticeBody")}
             </p>
           </div>
         </div>
 
         <Panel className="grid grid-cols-1 sm:grid-cols-3">
           <div className="border-b border-hair p-5 sm:border-b-0 sm:border-e">
-            <p className="text-[12.5px] text-ink-3">الرصيد المتبقي</p>
+            <p className="text-[12.5px] text-ink-3">{t("akBalanceRemaining")}</p>
             <p className="tnum mt-1.5 text-[28px] font-semibold leading-none tracking-display text-ink">
               {loading && !quota ? "—" : formatTokens(remaining)}
             </p>
@@ -439,18 +441,18 @@ export default function ApiKeysPage() {
             </div>
           </div>
           <div className="border-b border-hair p-5 sm:border-b-0 sm:border-e">
-            <p className="text-[12.5px] text-ink-3">المستهلك</p>
+            <p className="text-[12.5px] text-ink-3">{t("akUsed")}</p>
             <p className="tnum mt-1.5 text-[28px] font-semibold leading-none tracking-display text-ink">
               {formatTokens(quota?.used ?? 0)}
             </p>
-            <p className="tnum mt-3 text-[12.5px] text-ink-3">من إجمالي {formatTokens(quota?.total ?? 0)}</p>
+            <p className="tnum mt-3 text-[12.5px] text-ink-3">{t("akOfTotal", { total: formatTokens(quota?.total ?? 0) })}</p>
           </div>
           <div className="p-5">
-            <p className="text-[12.5px] text-ink-3">المفاتيح النشطة</p>
+            <p className="text-[12.5px] text-ink-3">{t("akActiveKeys")}</p>
             <p className="tnum mt-1.5 text-[28px] font-semibold leading-none tracking-display text-ink">
               {activeKeys}
             </p>
-            <p className="mt-3 text-[12.5px] text-ink-3">الحد الأقصى 20 مفتاح</p>
+            <p className="mt-3 text-[12.5px] text-ink-3">{t("akKeysMax")}</p>
           </div>
         </Panel>
 
@@ -458,24 +460,24 @@ export default function ApiKeysPage() {
           <div className="-mt-6 flex items-start gap-3 rounded-lg border border-hair bg-surface px-4 py-3.5 shadow-1">
             <Info size={16} className="mt-1 shrink-0 text-warn" />
             <p className="text-pretty text-[13.5px] leading-6 text-ink-2">
-              رصيد الـ API بتاعك صفر حاليًا — اشحن من قسم الشحن تحت عشان مفاتيحك تشتغل.
+              {t("akZeroBalance")}
             </p>
           </div>
         )}
 
         <section aria-labelledby="keys-title">
-          <SectionHead id="keys-title" title="المفاتيح" hint="المفتاح الكامل بيظهر مرة واحدة بس وقت الإنشاء." />
+          <SectionHead id="keys-title" title={t("akKeysTitle")} hint={t("akKeysHint")} />
           <Panel>
             {loading ? (
               <div className="flex items-center justify-center gap-2 py-12 text-[13px] text-ink-3">
                 <Loader2 size={15} className="animate-spin-slow" />
-                جاري التحميل…
+                {t("akLoading")}
               </div>
             ) : error ? (
               <div className="py-12 text-center">
                 <p className="text-[13.5px] text-danger">{error}</p>
                 <Button size="sm" className="mt-3" onClick={loadKeys}>
-                  إعادة المحاولة
+                  {t("akRetry")}
                 </Button>
               </div>
             ) : keys.length === 0 ? (
@@ -483,11 +485,11 @@ export default function ApiKeysPage() {
                 <span className="grid h-11 w-11 place-items-center rounded-full bg-surface-3 text-ink-3">
                   <KeyRound size={18} />
                 </span>
-                <p className="mt-4 text-[15px] font-medium text-ink">لسه معندكش مفاتيح</p>
-                <p className="mt-1 text-[13px] text-ink-3">اعمل أول مفتاح وابدأ تكلّم MALG من كودك.</p>
+                <p className="mt-4 text-[15px] font-medium text-ink">{t("akNoKeys")}</p>
+                <p className="mt-1 text-[13px] text-ink-3">{t("akNoKeysHint")}</p>
                 <Button variant="primary" size="sm" className="mt-5" onClick={openCreate}>
                   <Plus size={14} />
-                  إنشاء مفتاح
+                  {t("akCreateKey")}
                 </Button>
               </div>
             ) : (
@@ -521,7 +523,7 @@ export default function ApiKeysPage() {
                           )}
                         >
                           <span className={cn("h-1.5 w-1.5 rounded-full", k.isActive ? "bg-live" : "bg-ink-3")} />
-                          {k.isActive ? "نشط" : "ملغى"}
+                          {k.isActive ? t("akActive") : t("akRevoked")}
                         </span>
                       </div>
                       <p className="mt-1 font-mono text-[12px] text-ink-3" dir="ltr">
@@ -529,12 +531,12 @@ export default function ApiKeysPage() {
                       </p>
                     </div>
                     <div className="text-[12px] leading-5 text-ink-3 sm:text-end">
-                      <p>اتعمل {formatDateTime(k.createdAt)}</p>
-                      <p>آخر استخدام: {k.lastUsedAt ? timeAgo(k.lastUsedAt) : "لسه"}</p>
+                      <p>{t("akCreatedAt", { date: formatDateTime(k.createdAt, lang) })}</p>
+                      <p>{t("akLastUsed", { value: k.lastUsedAt ? timeAgo(k.lastUsedAt, lang) : t("akNeverUsed") })}</p>
                     </div>
                     {k.isActive && (
                       <IconButton
-                        label={`إلغاء ${k.label}`}
+                        label={t("akRevokeLabel", { label: k.label })}
                         onClick={() => setRevokeTarget(k)}
                         size="sm"
                         className="hover:!bg-danger-soft hover:!text-danger"
@@ -550,7 +552,7 @@ export default function ApiKeysPage() {
         </section>
 
         <section aria-labelledby="quick-title">
-          <SectionHead id="quick-title" title="البدء السريع" hint="بيانات الربط بتاعتك جاهزة في الأمثلة." />
+          <SectionHead id="quick-title" title={t("akQuickTitle")} hint={t("akQuickHint")} />
           <Panel>
             <div className="flex gap-1 overflow-x-auto border-b border-hair p-2" role="tablist" dir="ltr">
               {SNIPPET_TABS.map((tab) => (
@@ -593,17 +595,17 @@ export default function ApiKeysPage() {
             )}
           </Panel>
           <p className="mt-3 px-1 text-pretty text-[12.5px] leading-6 text-ink-3">
-            حتى جوه أدوات زي Cline، الموديل بيعرّف نفسه كـ MALG — الهوية دي مفروضة على مستوى الـ API ومش بتأثر على أداء المهمة.
+            {t("akEvenInTools")}
           </p>
         </section>
 
         <section aria-labelledby="topup-title">
           <SectionHead
             id="topup-title"
-            title="شحن رصيد الـ API"
-            hint={`${API_TOKEN_PRICE_PER_MILLION} جنيه لكل مليون توكن — بيتضاف يدويًا بعد تأكيد الدفع.`}
+            title={t("akTopupTitle")}
+            hint={t("akTopupHint", { price: API_TOKEN_PRICE_PER_MILLION })}
           />
-          <div role="radiogroup" aria-label="كمية الشحن" className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+          <div role="radiogroup" aria-label={t("akAmountAria")} className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
             {QUICK_AMOUNTS.map((tokens) => {
               const active = amount === tokens;
               return (
@@ -624,7 +626,7 @@ export default function ApiKeysPage() {
                         {formatTokens(tokens)}
                       </span>
                     </span>
-                    <span className="tnum mt-1 block text-[13px] text-ink-2">{formatTokens(priceFor(tokens))} جنيه</span>
+                    <span className="tnum mt-1 block text-[13px] text-ink-2">{formatTokens(priceFor(tokens))} {t("akCurrency")}</span>
                   </span>
                   <span
                     className={cn(
@@ -644,11 +646,11 @@ export default function ApiKeysPage() {
               onClick={() => openWhatsApp(null)}
               className="text-[13px] font-medium text-accent underline decoration-accent-line underline-offset-[3px] hover:decoration-accent"
             >
-              محتاج كمية مخصصة؟ كلّمنا
+              {t("akCustomQty")}
             </button>
             <Button variant="primary" onClick={() => openWhatsApp(amount)}>
               <MessageCircle size={15} />
-              {`اشحن ${formatTokens(amount)} عبر واتساب`}
+              {t("akRechargeWatsapp", { amount: formatTokens(amount) })}
             </Button>
           </div>
         </section>
@@ -658,30 +660,30 @@ export default function ApiKeysPage() {
         open={showCreate}
         onClose={() => setShowCreate(false)}
         labelledBy="create-key-title"
-        title="مفتاح API جديد"
-        subtitle="الموديل بيتثبت على المفتاح ومش هينفع يتغير بعد الإنشاء."
+        title={t("akCreateTitle")}
+        subtitle={t("akCreateSubtitle")}
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setShowCreate(false)}>
-              إلغاء
+              {t("akCancel")}
             </Button>
             <Button variant="primary" onClick={createKey} disabled={creating}>
               {creating && <Loader2 size={14} className="animate-spin-slow" />}
-              إنشاء المفتاح
+              {t("akCreateBtn")}
             </Button>
           </div>
         }
       >
         <div className="flex flex-col gap-4 pb-4">
           <Field
-            label="اسم المفتاح (اختياري)"
+            label={t("akLabelField")}
             value={newLabel}
             maxLength={60}
             onChange={(e) => setNewLabel(e.target.value)}
-            placeholder="مثلاً: تطبيقي الأول"
+            placeholder={t("akLabelPlaceholder")}
           />
           <fieldset>
-            <legend className="mb-1.5 block text-[12.5px] font-medium tracking-label text-ink-2">الموديل</legend>
+            <legend className="mb-1.5 block text-[12.5px] font-medium tracking-label text-ink-2">{t("akModelLegend")}</legend>
             <Panel>
               {apiModels.map((m) => (
                 <label
@@ -703,13 +705,13 @@ export default function ApiKeysPage() {
                       </span>
                       {m.recommended && (
                         <span className="shrink-0 rounded-full bg-accent-soft px-2 py-px text-[10.5px] font-medium text-accent">
-                          موصى به
+                          {t("akRecommended")}
                         </span>
                       )}
                     </span>
                     <span className="mt-0.5 block truncate text-[12px] text-ink-3">
                       <span className="font-mono" dir="ltr">{m.id}</span>
-                      {m.hint ? ` · ${m.hint}` : ""}
+                      {m.hint ? ` · ${m.hint}` : m.id === "malg-ai" ? ` · ${t("akFallbackModelHint")}` : ""}
                     </span>
                   </span>
                 </label>
@@ -728,10 +730,10 @@ export default function ApiKeysPage() {
         open={!!justCreated}
         onClose={() => setJustCreated(null)}
         labelledBy="created-key-title"
-        title="احفظ مفتاحك الآن"
+        title={t("akCreatedTitle")}
         footer={
           <Button variant="primary" className="w-full" onClick={() => setJustCreated(null)}>
-            حفظته
+            {t("akCreatedBtn")}
           </Button>
         }
       >
@@ -739,7 +741,7 @@ export default function ApiKeysPage() {
           <div className="flex flex-col gap-4 pb-4">
             <p className="flex items-start gap-2.5 rounded-md border border-hair bg-surface-2 px-3.5 py-3 text-pretty text-[13px] leading-6 text-ink-2">
               <ShieldAlert size={16} className="mt-1 shrink-0 text-warn" />
-              {`ده المفتاح الكامل لـ «${justCreated.label}» — مش هيظهر تاني بعد ما تقفل. احفظه في مكان آمن ومتشاركوش.`}
+              {t("akCreatedBody", { label: justCreated.label })}
             </p>
             <div className="flex items-center gap-2 rounded-md border border-hair bg-surface-inset p-1.5 ps-3.5">
               <code className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-ink" dir="ltr">
@@ -747,7 +749,7 @@ export default function ApiKeysPage() {
               </code>
               <Button size="sm" onClick={() => copy(justCreated.fullKey, setCopiedKey)}>
                 {copiedKey ? <Check size={13} className="text-live" /> : <Copy size={13} />}
-                {copiedKey ? "تم النسخ" : "نسخ"}
+                {copiedKey ? t("akCopied") : t("akCopy")}
               </Button>
             </div>
           </div>
@@ -758,20 +760,20 @@ export default function ApiKeysPage() {
         open={!!revokeTarget}
         onClose={() => setRevokeTarget(null)}
         labelledBy="revoke-key-title"
-        title="إلغاء المفتاح؟"
+        title={t("akRevokeTitle")}
         subtitle={
           revokeTarget
-            ? `أي كود بيستخدم «${revokeTarget.label}» هيبطل يشتغل فورًا. سجل الاستخدام القديم هيفضل موجود.`
+            ? t("akRevokeSubtitle", { label: revokeTarget.label })
             : undefined
         }
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setRevokeTarget(null)} disabled={revoking}>
-              رجوع
+              {t("akBack")}
             </Button>
             <Button variant="danger" onClick={confirmRevoke} disabled={revoking}>
               {revoking && <Loader2 size={14} className="animate-spin-slow" />}
-              إلغاء المفتاح
+              {t("akRevokeBtn")}
             </Button>
           </div>
         }
