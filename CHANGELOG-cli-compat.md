@@ -108,6 +108,23 @@
 - مش موديل مزيف: أي طلب بيه بيمشي عادي — نقطة `/chat/completions` بتحسم
   الموديل الفعلي من المفتاح نفسه (الموديل بيتثبت على المفتاح وقت الإنشاء).
 
+## التحديث الثالث — نقطة Anthropic الأصيلة `/v1/messages` (الردود مباشرة)
+- بعد ما الاكتشاف نجح ("found 1 model")، بقي الردود: البرنامج بيبعت
+  `POST …/v1/messages` (وبعد الـrewrite الداخلي يوصل للنقطة دي) — لكنها
+  كانت مش موجودة، فكان بيرجع 404 HTML.
+- بنيت `app/api/malg/v1/messages/route.ts`: بتترجم الطلب من صيغة
+  Anthropic لصيغة OpenAI (system نص أو blocks، `tool_use` ↔ `tool_calls`،
+  `tool_result` ↔ رسايل `tool`، `tools`/`input_schema` ↔
+  `tools`/`parameters`، و`tool_choice` بكل صيغه)، وبنادي نقطة
+  `/chat/completions` الداخلية على نفس السيرفر (فالمصادقة والرصيد
+  والـrate limit والأدوات والـstreaming — نفس المنطق المجرّب)، وبترجّع
+  الرد أو الـSSE بصيغة Anthropic: `message_start` /
+  `content_block_start` / `content_block_delta` / `input_json_delta` /
+  `message_delta` / `message_stop`.
+- المصادقة: `Authorization: Bearer` أو `x-api-key`.
+- الصفحة: تاب Claude Code بقى وصلة مباشرة من غير جسر — والجسر باقي
+  كخطة بديلة.
+
 ## المصادر
 - كودكس — مرجع الكونفيج الرسمي: https://developers.openai.com/codex/config-reference/
 - إعلان استغناء عن Chat Completions: https://github.com/openai/codex/discussions/7782

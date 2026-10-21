@@ -160,21 +160,20 @@ multi_agent = false`,
       };
     case "claude":
       return {
-        code: `# 1) config.yaml — جسر LiteLLM (Anthropic <-> Chat Completions)
-model_list:
-  - model_name: claude-malg
-    litellm_params:
-      model: openai/malg-ai
-      api_base: ${url}
-      api_key: os.environ/MALG_API_KEY
+        code: `# Claude Code بيتكلم بروتوكول Anthropic (Messages) — وده مدعوم أصيل عندنا من غير أي جسر
 
-# 2) pip install "litellm[proxy]" && litellm --config config.yaml
+# برامج الواجهة (تدخل مفتاح + رابط وبتسحب الموديلات):
+#   Base URL: ${url}   ← بالـ/v1 أو من غيره، الاتنين شغالين
+#   API Key: مفتاحك من الصفحة دي
+#   الموديل اللي هيظهر في القائمة: claude-malg
 
-# 3) متغيرات Claude Code
-export ANTHROPIC_BASE_URL="http://localhost:4000"
-export ANTHROPIC_AUTH_TOKEN="sk-..."   # نفس قيمة LITELLM_MASTER_KEY
+# تيرمينال Claude Code:
+export ANTHROPIC_BASE_URL="${url}"
+export ANTHROPIC_AUTH_TOKEN="sk-..."   # مفتاحك من الصفحة دي
 export ANTHROPIC_MODEL="claude-malg"
-export CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1`,
+export CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1
+
+# لو ظرفت مشكلة وحبيت جسر LiteLLM، اتبع صيغة تاب Codex زي ما هي`,
         note: t("akNoteClaude"),
         warn: true,
       };
