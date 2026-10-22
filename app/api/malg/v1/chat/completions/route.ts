@@ -207,18 +207,19 @@ export async function POST(req: NextRequest) {
   // مع بعض)، فاستخدام برمجي مكثف من غير حد يقدر يضرب السقف المشترك ويأثر
   // على كل المستخدمين التانيين.
   const rate = await checkRateLimitShared(`api-key:${keyRow.id}`, {
-    // 120/دقيقة: أدوات الوكيل بتاع البرمجة (كلود كود وأمثالها) بتبعت رشقات
-    // متوازية (تحدد أمان أمر + الرد الأساسي + مهام خلفية) — 30 كانت بتضرب
-    // 429 بسرعة وأداة بتعرض "temporarily unavailable". 120 بتفضل تحمي
-    // المزوّدين المجانيين من الضغط الزائد ومفيش انقطاع في الشغل الطبيعي.
-    maxAttempts: 120,
+    // 240/دقيقة: أدوات الوكيل بتبعت رشقات كثيرة متوازية (تصنيف أمان لكل أمر
+    // + الرد الأساسي + مهام خلفية MCP). 120 كانت بتتعدي في الجلسات التقيلة
+    // وبعدها قفل 60 ثانية كاملة بوقف نداءات تصنيف الأمان مع الرئيسية —
+    // البرنامج يعرض "temporarily unavailable" لحد ما الشاط مدمن. رأس
+    // Retry-After بيرشد الأداة للمهلة بدل التخمين.
+    maxAttempts: 240,
     windowMs: 60_000,
     blockMs: 60_000,
   });
   if (!rate.allowed) {
     return NextResponse.json(
       { error: "تجاوزت الحد المسموح من الطلبات لهذا المفتاح — استنى شوية وجرب تاني." },
-      { status: 429 }
+      { status: 429, headers: { "Retry-After": String(Math.max(1, rate.retryAfterSeconds ?? 60)) } }
     );
   }
 
@@ -341,6 +342,25 @@ export async function POST(req: NextRequest) {
     negotiated = await negotiateUpstream(messagesForUpstream, controller.signal, modelId, negotiateOptions);
   } catch {
     return NextResponse.json({ error: "تم إلغاء الطلب" }, { status: 499 });
+  }
+
+  if (!negotiated.ok) {
+    // عطل مزوّد عابر (429/5xx/شبكة على كل المفاتيح) — انتظار قصير ثم
+    // محاولة واحدة إضافية قبل إرجاع 502 للعميل (مفيش بايت اتبعتت للعميل
+    // لحد دلوقتي فالمحاولة آمنة).
+    if (controller.signal.aborted) {
+      return NextResponse.json({ error: "تم إلغاء الطلب" }, { status: 499 });
+    }
+    await new Promise((r) => setTimeout(r, 700));
+    if (controller.signal.aborted) {
+      return NextResponse.json({ error: "تم إلغاء الطلب" }, { status: 499 });
+    }
+    try {
+      const retryNegotiated = await negotiateUpstream(messagesForUpstream, controller.signal, modelId, negotiateOptions);
+      if (retryNegotiated.ok) negotiated = retryNegotiated;
+    } catch {
+      return NextResponse.json({ error: "تم إلغاء الطلب" }, { status: 499 });
+    }
   }
 
   if (!negotiated.ok) {
