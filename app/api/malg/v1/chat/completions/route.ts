@@ -170,6 +170,7 @@ function toolCallsBillableText(toolCalls: UpstreamToolCall[] | undefined): strin
  *   أو تشغل أوامر، لأنها معتمدة كليًا على tool_calls عشان تنفذ أي حاجة.
  */
 export async function POST(req: NextRequest) {
+  const t0 = Date.now();
   await ensureSchema();
 
   // 1) مفيش هيدر / تنسيق غلط
@@ -217,6 +218,9 @@ export async function POST(req: NextRequest) {
     blockMs: 60_000,
   });
   if (!rate.allowed) {
+    console.error(
+      `[MALG chat] 429 rate limited key=${keyRow.id} retryAfter=${rate.retryAfterSeconds ?? 60}s`
+    );
     return NextResponse.json(
       { error: "تجاوزت الحد المسموح من الطلبات لهذا المفتاح — استنى شوية وجرب تاني." },
       { status: 429, headers: { "Retry-After": String(Math.max(1, rate.retryAfterSeconds ?? 60)) } }
@@ -564,6 +568,12 @@ export async function POST(req: NextRequest) {
   const completionTokens = Math.max(totalTokens - promptTokens, 0);
 
   await recordUsage({ keyId: keyRow.id, userId: keyRow.user_id, modelId, totalTokens });
+
+  // تشخيص: زمن الاستجابة الكلي للوضع غير البثي — لو تصنيف الأمان بينتهي
+  // مهلته عند العميل، الرقم ده هو الدليل (متوقع يكون كبير لو الموديل بطيء).
+  console.error(
+    `[MALG chat] done non-stream ${Date.now() - t0}ms model=${modelId} contentLen=${finalContent.length} tools=${hasToolCalls ? toolCalls.length : 0}`
+  );
 
   const message: { role: "assistant"; content: string | null; tool_calls?: UpstreamToolCall[] } = {
     role: "assistant",

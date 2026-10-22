@@ -200,18 +200,28 @@ function translateResponse(data: Record<string, unknown>, requestedModel: unknow
 }
 
 export async function POST(req: NextRequest) {
+  const t0 = Date.now();
   try {
     // 1) المصادقة — Bearer أو x-api-key
     const authHeader = req.headers.get("authorization") || "";
     const hasBearer = /^Bearer\s+\S+/i.test(authHeader);
     const apiKey = hasBearer ? authHeader : req.headers.get("x-api-key") ? `Bearer ${req.headers.get("x-api-key")}` : "";
     if (!apiKey) {
+      console.error(`[MALG messages] hit 401 auth (no key)`);
       return errorResponse(401, "authentication_error", "مفتاح API مفقود — بعت Authorization: Bearer أو x-api-key");
     }
 
     // 2) الطلب
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
-    if (!body) return errorResponse(400, "invalid_request_error", "body مش JSON صالح");
+    if (!body) {
+      console.error("[MALG messages] hit 400 body-not-json");
+      return errorResponse(400, "invalid_request_error", "body مش JSON صالح");
+    }
+    // تشخيص: أول سطر لكل نداء — بيحصل قبل أي رفض، فلو وصلنا بيظهر دومًا.
+    // لو البرنامج بيقول unavailable ومفيش سطر hit في اللوج → النداء مبيوصلش أصلًا.
+    console.error(
+      `[MALG messages] hit keylen=${apiKey.length} model=${String(body?.model ?? "-")}`
+    );
     const translated = translateRequest(body);
     if (!translated.ok) {
       console.error(
@@ -286,9 +296,12 @@ export async function POST(req: NextRequest) {
     if (!translated.wantStream) {
       const data = (await upstream.json().catch(() => null)) as Record<string, unknown> | null;
       if (!data || !Array.isArray(data.choices)) {
-        console.error("messages non-stream response malformed", data);
+        console.error(`[MALG messages] non-stream malformed ${Date.now() - t0}ms`, data);
         return errorResponse(502, "api_error", "رد داخلي مش متوقع — جرب تاني");
       }
+      // تشخيص: المسار ده هو اللي بيمشي عليه تصنيف الأمان (غير البثي) —
+      // الزمن هنا يفسر بسرعة لو المهلة عند العميل هتخلص.
+      console.error(`[MALG messages] done non-stream ${Date.now() - t0}ms`);
       return NextResponse.json(translateResponse(data, body.model), {
         headers: { "x-request-id": `req_${randomUUID().replace(/-/g, "").slice(0, 24)}` },
       });
