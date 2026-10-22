@@ -1,3 +1,5 @@
+"use client";
+
 import { Plus } from "lucide-react";
 import SectionHeading from "./SectionHeading";
 import { useSettings } from "../SettingsContext";

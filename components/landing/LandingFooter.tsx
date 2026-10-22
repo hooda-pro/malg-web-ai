@@ -1,3 +1,5 @@
+"use client";
+
 import Logo from "../Logo";
 import { useSettings } from "../SettingsContext";
 

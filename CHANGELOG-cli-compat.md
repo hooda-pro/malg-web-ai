@@ -210,6 +210,14 @@
   - `/messages`: `[MALG messages] req …` (ملخص شكل الطلب) + `[MALG messages] translate failed …` + `[MALG messages] chat failed {status, body, request}` — الحالة الداخلية الحقيقية + سببها بتظهر بالمليم.
   - `/chat/completions`: 400s (رسايل ناقصة/دور غلط/محتوى فاضي) بالتفاصيل + `[MALG api] 502 empty content {model, finishReason, reasoningLen, retried, promptHead}` (stream وnon-stream).
 
+## مصدر إضافي — إصلاح خطأ في الموقع (SSR/useSettings)
+- لوجات Render طلّعت `Attempted to call useSettings() from the server…`
+  متكرر في تحميل الصفحات — مكونين في الـlanding (`FaqSection`
+  و`LandingFooter`) بيستعملوا هوك الترجمة من غير `"use client"` فبيكسروا
+  رندر السيرفر.
+- **الإصلاح**: تزويد التوجيه `"use client"` للملفين + `AdminMcp` وقائيًا.
+  فحص شامل بسكريبت للتأكد إن مفيش ملفات تانية بنفس النمط.
+
 ## المصادر
 - كودكس — مرجع الكونفيج الرسمي: https://developers.openai.com/codex/config-reference/
 - إعلان استغناء عن Chat Completions: https://github.com/openai/codex/discussions/7782

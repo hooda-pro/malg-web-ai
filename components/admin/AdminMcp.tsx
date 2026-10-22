@@ -1,3 +1,5 @@
+"use client";
+
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Plug, Plus, Trash2, FlaskConical } from "lucide-react";
 import type { McpServerConfig } from "@/lib/mcp";
