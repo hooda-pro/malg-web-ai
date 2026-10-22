@@ -31,6 +31,10 @@ const MAX_MESSAGE_LENGTH = 100_000;
 const GENERIC_MISSING_KEY_MESSAGE = "مفتاح API مفقود أو غير صالح";
 const GENERIC_UPSTREAM_ERROR = "حصل خطأ غير متوقع أثناء توليد الرد — جرب تاني.";
 
+// الموديل المخصص لنداءات الخلفية الصغيرة (تصنيف أمان الأوامر وأمثالها).
+// لازم يبقى موديل مجاني وسريع — لو التوجيه لاسم مش موجود بيتجاهل بهدوء.
+const FAST_BG_MODEL_ID = "malgflash";
+
 /** معرّف الموديل القادم من الطلب — نفس تحويل أسماء قائمة /models حرفيًا:
  * lowercase + المسافات بشرطات + الإبقاء على [a-z0-9._/-] زي معرّفات المزوّد
  * الحقيقية (claude-sonnet-5.5 و zai-org/glm-5.3-flash وغيرها). الفاضي
@@ -247,8 +251,33 @@ export async function POST(req: NextRequest) {
   // الموديل من الطلب نفسه (بنمط المنصات الكبيرة) — المفتاح مجرد هوية للخصم
   // والحماية، مش رابط لموديل محدد.
   const requestedModel = sanitizeApiModel(body?.model);
-  const resolved = await resolveApiModel(requestedModel, keyRow.model_id);
-  const modelId = resolved.id;
+  let resolved = await resolveApiModel(requestedModel, keyRow.model_id);
+  let modelId = resolved.id;
+
+  // مسار الخلفية السريع: نداءات الخلفية الصغيرة من أدوات الوكيل (تصنيف أمان
+  // أوامر Bash وتوليد أسماء وما شابه) بتبعت: غير بثي + بدون أدوات + رسايل
+  // قليلة + ميزانية توكنز صغيرة. الموديلات اللي بتفكر (reasoning) ممكن
+  // تأخدها 15-30 ثانية → الأداة بتقطع النداء عند مهلتها القصيرة وتعرض
+  // "temporarily unavailable" مع إن الرد لو خلاص نجح من عندنا (اتأكدنا من
+  // لوج حقيقي: done non-stream 16027ms على موديل reasoning). فبنحوّل نداءات
+  // دي للموديل السريع المخصص (مجاني) والفواتير على المسار الجديد.
+  // ملاحظة: نطاق التوجيه ضيق عن قصد عشان ما يلمس الشغل الحقيقي أصلًا:
+  // البثي/الأدوات/
+  // الميزانية الكبيرة كلهم خارج المسار ده.
+  const numericMaxTokens = Number(body?.max_tokens);
+  const isSmallBgCall =
+    body?.stream !== true &&
+    Number.isFinite(numericMaxTokens) && numericMaxTokens > 0 && numericMaxTokens <= 1000 &&
+    rawMessages.length <= 3 &&
+    (!Array.isArray(body?.tools) || body.tools.length === 0);
+  if (isSmallBgCall && modelId !== FAST_BG_MODEL_ID) {
+    const fastResolved = await resolveApiModel(FAST_BG_MODEL_ID, keyRow.model_id).catch(() => null);
+    if (fastResolved && fastResolved.tier === "free" && fastResolved.id !== modelId) {
+      console.error(`[MALG chat] small-bg fast path: ${modelId} -> ${fastResolved.id}`);
+      modelId = fastResolved.id;
+      resolved = fastResolved;
+    }
+  }
 
   // موديل مدفوع + مالك مش مشترك → 403 — نفس قاعدة إنشاء المفاتيح والشات،
   // بس الفحص بقى وقت الاستخدام لأن المفاتيح بقت عامة بلا ربط موديل.
@@ -313,6 +342,21 @@ export async function POST(req: NextRequest) {
     }
     if (hasAssistantToolCalls) entry.tool_calls = assistantToolCalls;
     apiMessages.push(entry);
+  }
+
+  // طلبات الخلفية الصغيرة (تصنيف أمان الأوامر وأمثالها): نطلب أقصر إجابة
+  // ممكنة — يقلل التفكير الممتد عند الموديل ويقرّب جواب التصنيف من الشكل
+  // اللي الأداة متوقعه (كلمة/حكم قصير) بدل شرح مطوّل بيتضيع مهلتها.
+  if (isSmallBgCall && apiMessages.length > 0) {
+    for (let i = apiMessages.length - 1; i >= 0; i--) {
+      if (apiMessages[i].role === "system") {
+        apiMessages[i] = {
+          ...apiMessages[i],
+          content: `${apiMessages[i].content}\nRespond with the shortest possible answer only — no explanations, no preamble, no reasoning.`,
+        };
+        break;
+      }
+    }
   }
 
   const wantsStream = body?.stream === true;
