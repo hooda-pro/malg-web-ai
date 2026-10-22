@@ -21,6 +21,8 @@ export interface ModelOption {
   tier?: "free" | "paid";
   /** التسجيل الصوتي (مايك → نص) متاح مع هذا الموديل */
   supportsMic?: boolean;
+  /** واجهة جايّة قريبًا — ظاهر في القايمة بس مش قابل للاختيار (الصوت مثلًا) */
+  comingSoon?: boolean;
 }
 
 export const FALLBACK_MODELS: ModelOption[] = [
@@ -123,7 +125,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       .then((data) => {
         const list = Array.isArray(data?.models) ? data.models : [];
         if (list.length === 0) throw new Error("empty");
-        const mapped: ModelOption[] = list.map((m: { id: string; name: string; description?: string; isDefault?: boolean; tier?: unknown; locked?: unknown; supportsMic?: unknown }) => ({
+        const mapped: ModelOption[] = list.map((m: { id: string; name: string; description?: string; isDefault?: boolean; tier?: unknown; locked?: unknown; supportsMic?: unknown; comingSoon?: unknown }) => ({
           id: String(m.id),
           label: String(m.name || m.id),
           hint: typeof m.description === "string" ? m.description : "",
@@ -131,12 +133,15 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           locked: (m as { locked?: unknown }).locked === true,
           tier: (m as { tier?: unknown }).tier === "paid" ? "paid" : "free",
           supportsMic: (m as { supportsMic?: unknown }).supportsMic === true,
+          comingSoon: (m as { comingSoon?: unknown }).comingSoon === true,
         }));
         setModels(mapped);
-        const def = (typeof data?.defaultId === "string" && data.defaultId) || mapped.find((m) => m.recommended)?.id || mapped[0].id;
+        // الافتراضي لازم يبقى موديل قابل للاختيار (مش من قسم "قريبًا")
+        const preferred = (typeof data?.defaultId === "string" && data.defaultId) || mapped.find((m) => m.recommended)?.id || mapped[0].id;
+        const def = mapped.find((m) => m.id === preferred && !m.comingSoon)?.id ?? mapped.find((m) => !m.comingSoon)?.id ?? preferred;
         setDefaultModelId(def);
-        // لو الإعداد المحفوظ يشير لموديل اتمسح → ارجع للافتراضي
-        setSettings((prev) => (mapped.some((m) => m.id === prev.model) ? prev : { ...prev, model: def }));
+        // لو الإعداد المحفوظ يشير لموديل اتمسح أو بقى "قريبًا" → ارجع للافتراضي
+        setSettings((prev) => (mapped.some((m) => m.id === prev.model && !m.comingSoon) ? prev : { ...prev, model: def }));
       })
       .catch(() => {
         setModels(FALLBACK_MODELS);

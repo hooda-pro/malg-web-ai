@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql, ensureSchema } from "@/lib/db";
+import { isVoiceModelRow } from "@/lib/provider";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ interface ModelRow {
   is_active: boolean;
   is_default: boolean | null;
   created_at?: string | null;
+  modality?: string | null;
 }
 
 /**
@@ -35,7 +37,7 @@ export async function GET() {
   try {
     await ensureSchema();
     const rows = (await sql`
-      SELECT id, name, model, description, tier, cost_multiplier, is_default, created_at
+      SELECT id, name, model, description, tier, cost_multiplier, is_default, created_at, modality
       FROM ai_models
       WHERE is_active = TRUE
       ORDER BY sort_order ASC, created_at ASC
@@ -57,6 +59,8 @@ export async function GET() {
     const seen = new Set<string>();
     const data: ListedModel[] = [];
     for (const r of rows) {
+      // موديلات الصوت: واجهة منفصلة "قريبًا" — متتعرضش أصلًا في قايمة شات الـAPI
+      if (isVoiceModelRow(r.id, r.modality)) continue;
       // المعرّف الأصلي اللي الأدمن ضبطه
       if (!seen.has(r.id)) {
         seen.add(r.id);

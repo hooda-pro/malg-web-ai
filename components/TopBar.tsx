@@ -267,6 +267,9 @@ export function ModelPicker({
 
   const displayId = lockedModel ?? model;
   const currentLabel = models.find((m) => m.id === displayId)?.label ?? models[0]?.label ?? displayId;
+  // الشات النصي قابل للاختيار — وصفوف الصوت قسم منفصل "قريبًا" (مش قابل للاختيار)
+  const pickable = models.filter((m) => !m.comingSoon);
+  const soon = models.filter((m) => m.comingSoon);
 
   return (
     <div className="relative" ref={ref}>
@@ -306,7 +309,7 @@ export function ModelPicker({
           <p className="px-2.5 pb-1.5 pt-1 text-[11.5px] font-medium text-ink-3">
             {t("modelSwitcherTitle")}
           </p>
-          {models.map((m) => {
+          {pickable.map((m) => {
             const selected = m.id === displayId;
             return (
               <button
@@ -360,6 +363,36 @@ export function ModelPicker({
               </button>
             );
           })}
+          {soon.length > 0 && (
+            <>
+              <div className="mx-2.5 my-1 border-t border-hair" aria-hidden="true" />
+              <p className="px-2.5 pb-1 pt-1 text-[11.5px] font-medium text-ink-3">{t("voiceSectionLabel")}</p>
+              {soon.map((m) => (
+                <div
+                  key={m.id}
+                  aria-disabled="true"
+                  className="flex w-full select-none items-center gap-3 rounded-md px-2.5 py-2 text-start opacity-55"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5">
+                      <span dir="ltr" className="text-[13.5px] font-medium text-ink-3">
+                        {m.label}
+                      </span>
+                      <span className="rounded-full bg-surface-3 px-1.5 py-px text-[10.5px] font-medium text-ink-3">
+                        {t("voiceComingSoon")}
+                      </span>
+                    </span>
+                    {m.hint ? (
+                      <span className="mt-0.5 block text-[12px] leading-5 text-ink-3">{m.hint}</span>
+                    ) : null}
+                  </span>
+                  <span className="grid h-5 w-5 shrink-0 place-items-center">
+                    <Lock size={13} className="text-ink-3" />
+                  </span>
+                </div>
+              ))}
+            </>
+          )}
           {lockedModel && (
             <p className="mt-1 flex gap-2 border-t border-hair px-2.5 pb-1 pt-2.5 text-[11.5px] leading-5 text-ink-3">
               <Lock size={12} className="mt-1 shrink-0" />

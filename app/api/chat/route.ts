@@ -14,7 +14,7 @@ import { checkAndMaybeRenewQuota, deductTokens } from "@/lib/quota";
 import { getCostMultiplier, hasPaidSubscription, isModelPaid } from "@/lib/subscription";
 import { getMemory, maybeRefreshMemory } from "@/lib/memory";
 import { callMcpTool, getMcpTools } from "@/lib/mcp";
-import { getModelProvider } from "@/lib/provider";
+import { getModelProvider, isVoiceModelRow } from "@/lib/provider";
 import {
   negotiateUpstream,
   estimateTokens,
@@ -236,6 +236,15 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   }
   // التوكنز المتبقية للمستخدم قبل الرد ده (null = أدمن، مفيش حد) — بنقطع الرد في نصه لو خلصت.
   const quotaRemaining = quotaCheck.remaining;
+
+  // نموذج الصوت: مقفول لغير الأدمن — واجهة الصوت منفصلة "قريبًا"
+  if (!isAdmin && isVoiceModelRow(model)) {
+    console.warn("[chat-reject] voice-model user=", user.id, "model=", model);
+    return NextResponse.json(
+      { error: "نموذج الصوت جاي قريبًا — لسه مش متاح في شات الموقع." },
+      { status: 403 }
+    );
+  }
 
   // موديلات الباقات المدفوعة: محجوبة عن الخطة المجانية (الأدمن والمشتركون فقط)
   if (!isAdmin && (await isModelPaid(model).catch(() => false)) && !(await hasPaidSubscription(user.id).catch(() => false))) {

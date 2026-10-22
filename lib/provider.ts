@@ -231,6 +231,13 @@ async function selectModelRows(whereActive: boolean): Promise<ModelRow[]> {
 
 /** كل الموديلات (للأدمن: الكل، للواجهة: النشطة فقط) — فارغ لو الجدول لسه متعملش.
  *  modality اختياري لتصفية النوع (موديلات الشات لا ترى موديلات الصوت والعكس). */
+/** صف موديل صوت: modality='tts' أو المعرّف نفسه فيه voice — مكانه واجهة صوت
+ * منفصلة "قريبًا"، فمش بيظهر كاختيار شات عادي ولا يقبل نداءات الشات. */
+export function isVoiceModelRow(id: string, modality?: string | null): boolean {
+  if (modality === "tts") return true;
+  return /voice/i.test(String(id ?? ""));
+}
+
 export async function listModels(activeOnly = false, modality?: "chat" | "tts"): Promise<ModelSummary[]> {
   try {
     const rows = await selectModelRows(activeOnly);

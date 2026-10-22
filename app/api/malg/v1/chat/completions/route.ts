@@ -15,6 +15,7 @@ import {
 import { API_IDENTITY_SYSTEM_PROMPT } from "@/lib/systemPrompt";
 import { getCostMultiplier, hasPaidSubscription } from "@/lib/subscription";
 import { getUserFlags } from "@/lib/usageGuard";
+import { isVoiceModelRow } from "@/lib/provider";
 
 export const dynamic = "force-dynamic";
 // سقف Hobby = 300 (قيمة أكبر بتكسر الـ Deploy على Hobby). على Pro ارفعها لـ 800.
@@ -253,6 +254,19 @@ export async function POST(req: NextRequest) {
   const requestedModel = sanitizeApiModel(body?.model);
   let resolved = await resolveApiModel(requestedModel, keyRow.model_id);
   let modelId = resolved.id;
+
+  // نموذج الصوت: مقفول لغير الأدمن — مكانه واجهة صوت منفصلة "جاي قريبًا"
+  // (الطلب ببساطة مبيتنفذش، عشان الشات النصي والصوت يفضلوا فصل تام).
+  if (isVoiceModelRow(modelId)) {
+    const voiceFlags = await getUserFlags(keyRow.user_id).catch(() => null);
+    if (!voiceFlags?.isAdmin) {
+      console.error(`[MALG api] 403 voice model blocked key=${keyRow.id} model=${modelId}`);
+      return NextResponse.json(
+        { error: "نموذج الصوت جاي قريبًا — مفيش استخدامه في الشات النصي حاليًا." },
+        { status: 403 }
+      );
+    }
+  }
 
   // مسار الخلفية السريع: نداءات الخلفية الصغيرة من أدوات الوكيل (تصنيف أمان
   // أوامر Bash وتوليد أسماء وما شابه) بتبعت: غير بثي + بدون أدوات + رسايل
