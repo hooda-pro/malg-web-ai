@@ -32,6 +32,31 @@ function errorResponse(status: number, type: string, message: string): NextRespo
   );
 }
 
+/** ملخص سطر واحد لشكل الطلب (من غير أي محتوى) — للتشخيص في لوجات Render. */
+function summariseMessagesRequest(body: Record<string, unknown>): string {
+  const rb = body?.messages;
+  const rawMsgs = Array.isArray(rb) ? (rb as unknown[]) : [];
+  const roles = rawMsgs
+    .map((m) => {
+      const role = (m as Record<string, unknown>)?.role;
+      const c = (m as Record<string, unknown>)?.content;
+      const cKind = Array.isArray(c) ? `arr(${(c as unknown[]).length})` : typeof c;
+      return `${String(role ?? "?")}/${cKind}`;
+    })
+    .slice(0, 10)
+    .join(",");
+  const toolCount = Array.isArray(body?.tools) ? (body.tools as unknown[]).length : 0;
+  return [
+    `model=${String(body?.model ?? "-")}`,
+    `msgs=${rawMsgs.length}`,
+    `roles=[${roles}]`,
+    `system=${body?.system == null ? "no" : Array.isArray(body.system) ? `arr(${(body.system as unknown[]).length})` : typeof body.system}`,
+    `tools=${toolCount}`,
+    `stream=${String(Boolean(body?.stream))}`,
+    `max_tokens=${String(body?.max_tokens ?? "-")}`,
+  ].join(" ");
+}
+
 /** نص blocks من نوع [{type:"text",text}] — مفيد للـsystem والمحتوى. */
 function blocksToText(content: unknown): string {
   if (typeof content === "string") return content;
@@ -188,7 +213,18 @@ export async function POST(req: NextRequest) {
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body) return errorResponse(400, "invalid_request_error", "body مش JSON صالح");
     const translated = translateRequest(body);
-    if (!translated.ok) return errorResponse(400, "invalid_request_error", translated.error);
+    if (!translated.ok) {
+      console.error(
+        "[MALG messages] translate failed",
+        JSON.stringify({ reason: translated.error, request: summariseMessagesRequest(body) })
+      );
+      return errorResponse(400, "invalid_request_error", translated.error);
+    }
+
+    // تشخيص: ملخص شكل الطلب في سطر واحد — لو النداء فشل في لوجات Render يبان
+    // فورًا شكل الطلب اللي فشل (من غير أي محتوى نصي).
+    const reqSummary = summariseMessagesRequest(body);
+    console.error("[MALG messages] req", reqSummary);
 
     // 3) نداء داخلي لنقطة الشات — بنفس المفتاح. الأول 127.0.0.1:PORT
     // (الطريق الداخلي الأضمن على Render)، وفشل يجرب الرابط العام.
@@ -226,6 +262,11 @@ export async function POST(req: NextRequest) {
 
     if (!upstream.ok) {
       const text = await upstream.text().catch(() => "");
+      // تشخيص: حالة الفشل الداخلي + مقتطف الرد + ملخص الطلب
+      console.error(
+        "[MALG messages] chat failed",
+        JSON.stringify({ status: upstream.status, body: text.slice(0, 300), request: reqSummary })
+      );
       const meta = ERROR_BY_STATUS[upstream.status] ?? { type: "api_error", fallback: "حصل خطأ غير متوقع — جرب تاني" };
       let message = meta.fallback;
       try {

@@ -232,6 +232,8 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const rawMessages = Array.isArray(body?.messages) ? body.messages : null;
   if (!rawMessages || rawMessages.length === 0) {
+    const bodyKeys = body && typeof body === "object" ? Object.keys(body).slice(0, 12).join(",") : typeof body;
+    console.error("[MALG api] 400 no messages", `keys=[${bodyKeys}]`);
     return NextResponse.json(
       { error: "لازم تبعت messages فيها رسالة واحدة على الأقل" },
       { status: 400 }
@@ -281,6 +283,7 @@ export async function POST(req: NextRequest) {
         .join("\n");
     }
     if (!["system", "user", "assistant", "tool"].includes(role)) {
+      console.error("[MALG api] 400 bad role", JSON.stringify({ index: apiMessages.length, role: rawRole }));
       return NextResponse.json({ error: "شكل الرسائل غير صحيح" }, { status: 400 });
     }
     // رسايل "tool" (نتيجة تنفيذ أداة من الأداة المستدعية زي Cline) ممكن يكون
@@ -290,6 +293,7 @@ export async function POST(req: NextRequest) {
       role === "assistant" && Array.isArray(m?.tool_calls) ? (m.tool_calls as UpstreamToolCall[]) : undefined;
     const hasAssistantToolCalls = !!assistantToolCalls && assistantToolCalls.length > 0;
     if (role !== "tool" && !hasAssistantToolCalls && !content.trim()) {
+      console.error("[MALG api] 400 empty content", JSON.stringify({ index: apiMessages.length, role: rawRole }));
       return NextResponse.json({ error: "شكل الرسائل غير صحيح" }, { status: 400 });
     }
     if (content.length > MAX_MESSAGE_LENGTH) {
@@ -438,6 +442,16 @@ export async function POST(req: NextRequest) {
 
         if (!finalContent && !hasToolCalls) {
           // من غير خصم أي توكنز على رد ماتكتبش أصلاً
+          const promptHead = messagesForUpstream.map((m) => m.content).join(" ").slice(0, 160);
+          console.error(
+            "[MALG api] stream 502 empty content",
+            JSON.stringify({
+              model: modelId,
+              finishReason: result.finishReason,
+              reasoningLen: result.reasoning?.length ?? 0,
+              promptHead,
+            })
+          );
           send({ error: { message: GENERIC_UPSTREAM_ERROR, type: "upstream_error" } });
           try {
             streamController.close();
@@ -503,6 +517,7 @@ export async function POST(req: NextRequest) {
   // ————————————————————————————————————————————————————————————
   let result = await readUpstreamStream(upstreamResponse, controller.signal, () => {}, undefined, negotiated.protocol);
 
+  let retriedEmpty = false;
   if (!result.content.trim() && !result.stoppedByUser && (result.toolCalls?.length ?? 0) === 0) {
     const retryNegotiated = await negotiateUpstream(
       messagesForUpstream,
@@ -511,6 +526,7 @@ export async function POST(req: NextRequest) {
       negotiateOptions
     ).catch(() => null);
     if (retryNegotiated?.ok) {
+      retriedEmpty = true;
       const retryResult = await readUpstreamStream(retryNegotiated.response, controller.signal, () => {}, undefined, retryNegotiated.protocol);
       result = {
         content: result.content + retryResult.content,
@@ -527,6 +543,17 @@ export async function POST(req: NextRequest) {
   const hasToolCalls = toolCalls.length > 0;
 
   if (!finalContent && !hasToolCalls) {
+    const promptHead = messagesForUpstream.map((m) => m.content).join(" ").slice(0, 160);
+    console.error(
+      "[MALG api] 502 empty content",
+      JSON.stringify({
+        model: modelId,
+        finishReason: result.finishReason,
+        reasoningLen: result.reasoning?.length ?? 0,
+        retriedEmpty,
+        promptHead,
+      })
+    );
     return NextResponse.json({ error: GENERIC_UPSTREAM_ERROR }, { status: 502 });
   }
 

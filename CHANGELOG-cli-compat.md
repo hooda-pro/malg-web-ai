@@ -200,6 +200,16 @@
   إضافية (بعد انتظار 700ms) لو كل مفاتيح المزوّد فشلت قبل الـ502 (تعويض
   عطل عابر مؤقت في نقل السقف).
 
+## تحديث عاشر — تسجيل تشخيصي لفشل تصنيف الأمان (جمع التشخيص قبل العلاج)
+- التجربة الجديدة: الرد الرئيسي شغال لكن **تصنيف أمان أوامر Bash فاشل بشلل
+  منتظم** (كل محاولة بتفشل) على موديل مختلف (`claude-malg-a3`) — يعني القفل
+  الراتميت اتعادله أكيد، والمشكلة متعلقة **بشكل نداء معين** أو عطل مستمر في
+  مفتاح المزوّد.
+- **الإضافة**: لوجات تشخيصية في نقاط الفشل كلها بتصفّح في لوجات Render
+  فورًا (من غير أي محتوى، بس الأشكال والحالات):
+  - `/messages`: `[MALG messages] req …` (ملخص شكل الطلب) + `[MALG messages] translate failed …` + `[MALG messages] chat failed {status, body, request}` — الحالة الداخلية الحقيقية + سببها بتظهر بالمليم.
+  - `/chat/completions`: 400s (رسايل ناقصة/دور غلط/محتوى فاضي) بالتفاصيل + `[MALG api] 502 empty content {model, finishReason, reasoningLen, retried, promptHead}` (stream وnon-stream).
+
 ## المصادر
 - كودكس — مرجع الكونفيج الرسمي: https://developers.openai.com/codex/config-reference/
 - إعلان استغناء عن Chat Completions: https://github.com/openai/codex/discussions/7782
