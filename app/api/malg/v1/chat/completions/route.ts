@@ -32,14 +32,15 @@ const GENERIC_MISSING_KEY_MESSAGE = "مفتاح API مفقود أو غير صا�
 const GENERIC_UPSTREAM_ERROR = "حصل خطأ غير متوقع أثناء توليد الرد — جرب تاني.";
 
 /** معرّف الموديل القادم من الطلب — نفس تحويل أسماء قائمة /models حرفيًا:
- * lowercase + المسافات بشرطات + الإبقاء على [a-z0-9._-] زي معرّفات المزوّد
- * الحقيقية (claude-sonnet-5.5 وغيرها). الفاضي يعني "مش مبعت موديل". */
+ * lowercase + المسافات بشرطات + الإبقاء على [a-z0-9._/-] زي معرّفات المزوّد
+ * الحقيقية (claude-sonnet-5.5 و zai-org/glm-5.3-flash وغيرها). الفاضي
+ * يعني "مش مبعت موديل". */
 function sanitizeApiModel(raw: unknown): string {
   return String(raw ?? "")
     .trim()
     .toLowerCase()
     .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9._-]/g, "")
+    .replace(/[^a-z0-9._\/-]/g, "")
     .slice(0, 80);
 }
 
@@ -62,7 +63,13 @@ async function resolveApiModel(
   keyModelId: string
 ): Promise<ResolvedApiModel> {
   if (requestedRaw && requestedRaw !== "claude-malg") {
-    const candidate = normalizeModelId(requestedRaw);
+    // أسماء المزوّد الحقيقية فيها شرطة مائلة ونقط (zai-org/glm-5.3-flash) —
+    // مش بنمررها على normalizeModelId (ريجكسه بيرفضها ويرجّع الافتراضي) —
+    // وبنطبق بس خريطة الأسماء القديمة واضحة.
+    const candidate =
+      requestedRaw === "malg-2" || requestedRaw === "malg-2.1" || requestedRaw === "malg-2.2" || requestedRaw === "malg-a3"
+        ? DEFAULT_MODEL
+        : requestedRaw;
     const rows = (await sql`
       SELECT id, tier FROM ai_models
       WHERE is_active = TRUE AND (id = ${candidate} OR lower(model) = ${requestedRaw})

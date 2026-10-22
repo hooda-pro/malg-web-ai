@@ -24,7 +24,7 @@ function realModelId(raw: string): string {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9._-]/g, "")
+    .replace(/[^a-z0-9._\/-]/g, "")
     .slice(0, 80);
 }
 
