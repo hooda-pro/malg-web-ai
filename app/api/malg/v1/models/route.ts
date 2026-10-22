@@ -7,6 +7,8 @@ interface ModelRow {
   id: string;
   name: string;
   description: string | null;
+  /** اسم المزوّد الحقيقي — زي claude-sonnet-5.5 مثلاً */
+  model: string;
   tier: string | null;
   cost_multiplier: number | null;
   is_active: boolean;
@@ -14,52 +16,89 @@ interface ModelRow {
   created_at?: string | null;
 }
 
+/** المعرّف الظاهر للعملاء من اسم المزوّد الحقيقي — نفس دالة sanitizeApiModel
+ * في مسار الشات حرفيًا (lowercase + مسافات بشرطات + [a-z0-9._-]) عشان المعمية
+ * بترجع المعرّف اللي شافه هنا والمزامنة تحصل بالبايت. فاضي → نسقط على id الصف. */
+function realModelId(raw: string): string {
+  return String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9._-]/g, "")
+    .slice(0, 80);
+}
+
 /**
- * GET /api/malg/v1/models — OpenAI-compatible model list.
- * No auth required (mirrors OpenAI /v1/models). Light rate-limiting
- * is handled upstream by the platform; this endpoint is read-only.
+ * GET /api/malg/v1/models — قائمة الموديلات بنمط المنصات الكبيرة (OpenAI
+ * /v1/models). مفيش مصادقة (زي OpenAI بالظبط) ونقطة قراءة بس.
+ *
+ * كل موديل بيتعرض بمعرّفه الحقيقي (اسم المزوّد) مش الـ slug الداخلي — والموتوره
+ * في بلاغ الشات بيحسم الطلب بالاسم ده مباشرة (مفتاح واحد يغطي كل الموديلات).
+ * مفتاح توافق واحد اسمه claude-malg بيتضاف بس لو مفيش أي معرّف حقيقي يعدّي
+ * فلتر اكتشاف Claude Code (بياخد بس معرّف فيه claude أو anthropic).
  */
 export async function GET() {
   try {
     await ensureSchema();
     const rows = (await sql`
-      SELECT id, name, description, tier, cost_multiplier, is_active, is_default, created_at
+      SELECT id, name, model, description, tier, cost_multiplier, is_default, created_at
       FROM ai_models
       WHERE is_active = TRUE
       ORDER BY sort_order ASC, created_at ASC
     `) as ModelRow[];
 
-    const data = rows.map((r) => ({
-      id: r.id,
-      object: "model" as const,
-      // حقل صنارة Anthropic إضافي — Claude Code بيعمل model discovery على
-      // /v1/models بصيغة Anthropic (متوقع type:"model")، وأي عميل OpenAI
-      // بيتجاهل الحقل زيادة بلا أثر.
-      type: "model" as const,
-      created: r.created_at ? Math.floor(new Date(r.created_at).getTime() / 1000) : 0,
-      owned_by: "malg",
-      display_name: r.name,
-      description: r.description ?? "",
-      tier: r.tier === "paid" ? "paid" : "free",
-      cost_multiplier: Number(r.cost_multiplier ?? 1) || 1,
-      is_default: r.is_default === true,
-    }));
+    interface ListedModel {
+      id: string;
+      object: "model";
+      type: "model";
+      created: number;
+      owned_by: string;
+      display_name: string;
+      description: string;
+      tier: string;
+      cost_multiplier: number;
+      is_default: boolean;
+    }
 
-    // مفتاح توافق واحد (claude-malg): الاسم فيه كلمة claude عشان يعدي فلتر
-    // اكتشاف Claude Code (بياخد بس id فيه claude أو anthropic) — والطلب
-    // بيه بيشتغل عادي لأن نقطة الشات بتحسم الموديل الفعلي من المفتاح نفسه.
-    data.push({
-      id: "claude-malg",
-      object: "model" as const,
-      type: "model" as const,
-      created: 0,
-      owned_by: "malg",
-      display_name: "MALG (Claude-compatible)",
-      description: "Compat alias — works with any API key; the real model is the one pinned to your key.",
-      tier: "free",
-      cost_multiplier: 1,
-      is_default: false,
-    });
+    const seen = new Set<string>();
+    const data: ListedModel[] = [];
+    for (const r of rows) {
+      const listedId = realModelId(r.model) || r.id;
+      // نفس المزوّد مايضيفش لإحصج مرتين — الترتيب بيحسم الأول
+      if (seen.has(listedId)) continue;
+      seen.add(listedId);
+      data.push({
+        id: listedId,
+        object: "model",
+        // حقل صنارة Anthropic إضافي — Claude Code بيعمل model discovery على
+        // /v1/models بصيغة Anthropic (متوقع type:"model")، وأي عميل OpenAI
+        // بيتجاهل الحقل زيادة بلا أثر.
+        type: "model",
+        created: r.created_at ? Math.floor(new Date(r.created_at).getTime() / 1000) : 0,
+        owned_by: "malg",
+        display_name: r.name,
+        description: r.description ?? "",
+        tier: r.tier === "paid" ? "paid" : "free",
+        cost_multiplier: Number(r.cost_multiplier ?? 1) || 1,
+        is_default: r.is_default === true,
+      });
+    }
+
+    if (!data.some((m) => /claude|anthropic/.test(m.id))) {
+      data.push({
+        id: "claude-malg",
+        object: "model",
+        type: "model",
+        created: 0,
+        owned_by: "malg",
+        display_name: "MALG (Claude-compatible)",
+        description:
+          "Compat alias — the real model is picked from your request or is the platform default.",
+        tier: "free",
+        cost_multiplier: 1,
+        is_default: false,
+      });
+    }
 
     return NextResponse.json({
       object: "list",

@@ -8,11 +8,13 @@ import {
   estimateTokensPrecise,
   readUpstreamStream,
   normalizeModelId,
+  DEFAULT_MODEL,
   type ApiMessage,
   type UpstreamToolCall,
 } from "@/lib/ai";
 import { API_IDENTITY_SYSTEM_PROMPT } from "@/lib/systemPrompt";
-import { getCostMultiplier } from "@/lib/subscription";
+import { getCostMultiplier, hasPaidSubscription } from "@/lib/subscription";
+import { getUserFlags } from "@/lib/usageGuard";
 
 export const dynamic = "force-dynamic";
 // سقف Hobby = 300 (قيمة أكبر بتكسر الـ Deploy على Hobby). على Pro ارفعها لـ 800.
@@ -28,6 +30,79 @@ const MAX_MESSAGE_LENGTH = 100_000;
 
 const GENERIC_MISSING_KEY_MESSAGE = "مفتاح API مفقود أو غير صالح";
 const GENERIC_UPSTREAM_ERROR = "حصل خطأ غير متوقع أثناء توليد الرد — جرب تاني.";
+
+/** معرّف الموديل القادم من الطلب — نفس تحويل أسماء قائمة /models حرفيًا:
+ * lowercase + المسافات بشرطات + الإبقاء على [a-z0-9._-] زي معرّفات المزوّد
+ * الحقيقية (claude-sonnet-5.5 وغيرها). الفاضي يعني "مش مبعت موديل". */
+function sanitizeApiModel(raw: unknown): string {
+  return String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9._-]/g, "")
+    .slice(0, 80);
+}
+
+interface ResolvedApiModel {
+  id: string;
+  tier: string | null;
+}
+
+/**
+ * حسم الموديل اللي هيخدم الطلب فعليًا — بنمط المنصات الكبيرة (مفتاح واحد
+ * يشتغل مع كل الموديلات):
+ * 1) الموديل اللي في الطلب نفسه (body.model) — إما بـ id الصف أو باسم
+ *    المزوّد الحقيقي (ai_models.model). "claude-malg" اسم توافق مش موديل
+ *    حقيقي — بيتخطى للخطوة اللي بعدها.
+ * 2) مفتاح قديم مربوط بموديل معيّن (مش "all") → نفس سلوك المفاتيح القديمة.
+ * 3) الموديل الافتراضي النشط (chat) من قاعدة البيانات، وبعد كده malg-ai.
+ */
+async function resolveApiModel(
+  requestedRaw: string,
+  keyModelId: string
+): Promise<ResolvedApiModel> {
+  if (requestedRaw && requestedRaw !== "claude-malg") {
+    const candidate = normalizeModelId(requestedRaw);
+    const rows = (await sql`
+      SELECT id, tier FROM ai_models
+      WHERE is_active = TRUE AND (id = ${candidate} OR lower(model) = ${requestedRaw})
+      ORDER BY sort_order ASC, created_at ASC
+      LIMIT 1
+    `) as { id: string; tier: string | null }[];
+    if (rows[0]) return { id: rows[0].id, tier: rows[0].tier };
+  }
+  const boundKey = keyModelId ? normalizeModelId(keyModelId) : "";
+  if (boundKey && boundKey !== "all") {
+    const rows = (await sql`
+      SELECT id, tier FROM ai_models
+      WHERE is_active = TRUE AND id = ${boundKey}
+      LIMIT 1
+    `) as { id: string; tier: string | null }[];
+    if (rows[0]) return { id: rows[0].id, tier: rows[0].tier };
+  }
+  try {
+    const rows = (await sql`
+      SELECT id, tier FROM ai_models
+      WHERE is_active = TRUE AND modality = 'chat'
+      ORDER BY is_default DESC, sort_order ASC, created_at ASC
+      LIMIT 1
+    `) as { id: string; tier: string | null }[];
+    if (rows[0]) return { id: rows[0].id, tier: rows[0].tier };
+  } catch {
+    // الجدول لسه متعملش — نكمل للأساس الآمن
+  }
+  try {
+    const rows = (await sql`
+      SELECT id, tier FROM ai_models
+      WHERE is_active = TRUE AND id = ${DEFAULT_MODEL}
+      LIMIT 1
+    `) as { id: string; tier: string | null }[];
+    if (rows[0]) return { id: rows[0].id, tier: rows[0].tier };
+  } catch {
+    // تجاهل
+  }
+  return { id: DEFAULT_MODEL, tier: null };
+}
 
 interface ApiKeyLookupRow {
   id: string;
@@ -138,9 +213,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: balanceCheck.message }, { status: 402 });
   }
 
-  const modelId = normalizeModelId(keyRow.model_id);
-  const costMult = await getCostMultiplier(modelId).catch(() => 1);
-
   const body = await req.json().catch(() => null);
   const rawMessages = Array.isArray(body?.messages) ? body.messages : null;
   if (!rawMessages || rawMessages.length === 0) {
@@ -149,6 +221,27 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+
+  // الموديل من الطلب نفسه (بنمط المنصات الكبيرة) — المفتاح مجرد هوية للخصم
+  // والحماية، مش رابط لموديل محدد.
+  const requestedModel = sanitizeApiModel(body?.model);
+  const resolved = await resolveApiModel(requestedModel, keyRow.model_id);
+  const modelId = resolved.id;
+
+  // موديل مدفوع + مالك مش مشترك → 403 — نفس قاعدة إنشاء المفاتيح والشات،
+  // بس الفحص بقى وقت الاستخدام لأن المفاتيح بقت عامة بلا ربط موديل.
+  if (resolved.tier === "paid") {
+    const flags = await getUserFlags(keyRow.user_id).catch(() => null);
+    if (!flags?.isAdmin && !(await hasPaidSubscription(keyRow.user_id).catch(() => false))) {
+      return NextResponse.json(
+        { error: "الموديل ده متاح لمشتركي باقة Pro فقط — اشترك من حسابك عشان تستخدمه.", subscriptionRequired: true },
+        { status: 403 }
+      );
+    }
+  }
+
+  const costMult = await getCostMultiplier(modelId).catch(() => 1);
+
   if (rawMessages.length > MAX_MESSAGES) {
     return NextResponse.json(
       { error: `أقصى عدد رسائل مسموح في الطلب الواحد: ${MAX_MESSAGES}` },

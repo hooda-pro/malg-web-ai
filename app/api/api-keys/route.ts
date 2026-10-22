@@ -71,9 +71,11 @@ export async function GET() {
 }
 
 /**
- * POST: إنشاء مفتاح API جديد مربوط بموديل محدد وقت الإنشاء.
- * المفتاح الكامل بيترجع في الرد مرة واحدة بس — بعد كده بيتخزن كـ hash فقط
- * ومفيش أي راوت هيرجعه تاني كامل.
+ * POST: إنشاء مفتاح API. الموديل بقى اختياري — المفاتيح الجديدة عامة
+ * (تكلم أي موديل) زي المنصات الكبيرة، والموديل بيتحدد من الطلب نفسه وقت
+ * الاستخدام (body.model). لو مبعت model_id بصريًا بنقبل على شرط الجودة
+ * (موجود في ai_models + مدفوع للمشتركين بس). المفتاح الكامل بيرجع في
+ * الرد مرة واحدة بس — بعد كده بيتخزن hash فقط ومفيش راوت هيرجعه تاني.
  */
 export async function POST(req: NextRequest) {
   const user = await getSessionUser();
@@ -84,26 +86,29 @@ export async function POST(req: NextRequest) {
   await ensureSchema();
 
   const body = await req.json().catch(() => null);
-  const modelId = sanitizeModelId(body?.model_id) || "malg-ai";
   const rawLabel = typeof body?.label === "string" ? body.label.trim() : "";
+  // "all" = مفتاح عام بدون ربط موديل — عمود model_id NOT NULL فبنخزن شرط.
+  const modelId = sanitizeModelId(body?.model_id) || "all";
 
-  const knownIds = new Set<string>(LEGACY_MODEL_IDS);
-  try {
-    for (const m of await listModels(false, "chat")) knownIds.add(m.id);
-  } catch {
-    // تجاهل — القيم القديمة كافية كـ fallback
-  }
-  if (!knownIds.has(modelId)) {
-    return NextResponse.json({ error: "الموديل غير معروف" }, { status: 400 });
-  }
+  if (modelId !== "all") {
+    const knownIds = new Set<string>(LEGACY_MODEL_IDS);
+    try {
+      for (const m of await listModels(false, "chat")) knownIds.add(m.id);
+    } catch {
+      // تجاهل — القيم القديمة كافية كـ fallback
+    }
+    if (!knownIds.has(modelId)) {
+      return NextResponse.json({ error: "الموديل غير معروف" }, { status: 400 });
+    }
 
-  // مفاتيح API على موديلات مدفوعة: للمشتركين والأدمن فقط (نفس قاعدة الشات)
-  const flags = await getUserFlags(user.id).catch(() => null);
-  if (!flags?.isAdmin && (await isModelPaid(modelId).catch(() => false)) && !(await hasPaidSubscription(user.id).catch(() => false))) {
-    return NextResponse.json(
-      { error: "الموديل ده متاح لمشتركي باقة Pro فقط — اشترك من حسابك عشان تستخدمه.", subscriptionRequired: true },
-      { status: 403 }
-    );
+    // مفاتيح API على موديلات مدفوعة: للمشتركين والأدمن فقط (نفس قاعدة الشات)
+    const flags = await getUserFlags(user.id).catch(() => null);
+    if (!flags?.isAdmin && (await isModelPaid(modelId).catch(() => false)) && !(await hasPaidSubscription(user.id).catch(() => false))) {
+      return NextResponse.json(
+        { error: "الموديل ده متاح لمشتركي باقة Pro فقط — اشترك من حسابك عشان تستخدمه.", subscriptionRequired: true },
+        { status: 403 }
+      );
+    }
   }
 
   const label = rawLabel ? rawLabel.slice(0, MAX_LABEL_LENGTH) : "مفتاح API";

@@ -22,15 +22,12 @@ import {
   buildApiRechargeMessage,
   buildWhatsAppLink,
 } from "@/lib/recharge";
-import { Button, Dialog, Field, IconButton, Panel } from "./ui/Controls";
-import { ThemeSwitch } from "./AccountMenu";
+import { Button, Dialog, Field, IconButton, Panel } from "./ui/Controls";import { ThemeSwitch } from "./AccountMenu";
 import Toast from "./Toast";
 import Logo from "./Logo";
 import { useSettings } from "./SettingsContext";
 import { formatDateTime, timeAgo } from "./admin/helpers";
 import { cn } from "@/lib/utils";
-
-type ModelId = string;
 
 interface ApiModelOption {
   id: string;
@@ -200,7 +197,6 @@ export default function ApiKeysPage() {
   const [apiModels, setApiModels] = useState<ApiModelOption[]>(FALLBACK_API_MODELS);
   const [showCreate, setShowCreate] = useState(false);
   const [newLabel, setNewLabel] = useState("");
-  const [newModelId, setNewModelId] = useState<ModelId>("malg-ai");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -233,7 +229,6 @@ export default function ApiKeysPage() {
           })
         );
         setApiModels(mapped);
-        setNewModelId((prev) => (mapped.some((m) => m.id === prev) ? prev : (mapped.find((m) => m.recommended)?.id ?? mapped[0].id)));
       })
       .catch(() => {});
   }, []);
@@ -302,7 +297,9 @@ export default function ApiKeysPage() {
       const res = await fetch("/api/api-keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label: newLabel.trim(), model_id: newModelId }),
+        // من غير model_id — المفاتيح عامة وتكلم كل الموديلات، والموديل
+        // بيتحدد من الطلب وقت الاستخدام (بنمط المنصات الكبيرة).
+        body: JSON.stringify({ label: newLabel.trim() }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -343,8 +340,6 @@ export default function ApiKeysPage() {
   const openCreate = () => {
     setCreateError(null);
     setNewLabel("");
-    const def = apiModels.find((m) => m.recommended) ?? apiModels[0];
-    if (def && !apiModels.some((m) => m.id === newModelId)) setNewModelId(def.id);
     setShowCreate(true);
   };
 
@@ -527,7 +522,9 @@ export default function ApiKeysPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="truncate text-[14px] font-medium text-ink">{k.label}</span>
                         <span className="rounded-full border border-hair px-2 py-px text-[11px] text-ink-2" title={k.modelId}>
-                          {apiModels.find((m) => m.id === k.modelId)?.name ?? k.modelId}
+                          {k.modelId === "all"
+                            ? t("akAllModels")
+                            : (apiModels.find((m) => m.id === k.modelId)?.name ?? k.modelId)}
                         </span>
                         <span
                           className={cn(
@@ -698,42 +695,7 @@ export default function ApiKeysPage() {
             onChange={(e) => setNewLabel(e.target.value)}
             placeholder={t("akLabelPlaceholder")}
           />
-          <fieldset>
-            <legend className="mb-1.5 block text-[12.5px] font-medium tracking-label text-ink-2">{t("akModelLegend")}</legend>
-            <Panel>
-              {apiModels.map((m) => (
-                <label
-                  key={m.id}
-                  className="flex cursor-pointer items-center gap-3 border-t border-hair px-4 py-3 transition-colors first:border-t-0 hover:bg-surface-3"
-                >
-                  <input
-                    type="radio"
-                    name="api-model"
-                    value={m.id}
-                    checked={newModelId === m.id}
-                    onChange={() => setNewModelId(m.id)}
-                    className="h-4 w-4 accent-[var(--accent)]"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-2">
-                      <span className="truncate text-[13.5px] font-medium text-ink">
-                        {m.name}
-                      </span>
-                      {m.recommended && (
-                        <span className="shrink-0 rounded-full bg-accent-soft px-2 py-px text-[10.5px] font-medium text-accent">
-                          {t("akRecommended")}
-                        </span>
-                      )}
-                    </span>
-                    <span className="mt-0.5 block truncate text-[12px] text-ink-3">
-                      <span className="font-mono" dir="ltr">{m.id}</span>
-                      {m.hint ? ` · ${m.hint}` : m.id === "malg-ai" ? ` · ${t("akFallbackModelHint")}` : ""}
-                    </span>
-                  </span>
-                </label>
-              ))}
-            </Panel>
-          </fieldset>
+          <p className="text-[12.5px] leading-5 text-ink-3">{t("akCreateAllModelsNote")}</p>
           {createError && (
             <p role="alert" className="text-[13px] text-danger">
               {createError}
