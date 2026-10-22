@@ -455,7 +455,7 @@ const ar: Dict = {
   akNoteCline: "من إعدادات Cline في VS Code أو JetBrains. اسم الـ Model ID شكلي بس — الموديل محدد من المفتاح.",
   akNoteOpencode: "حطه في opencode.json، وبعدين opencode auth login ← Other ← اكتب MALG ← الصق مفتاحك، واختار MALG/malg-ai من /models.",
   akNoteCodex: "كودكس الحديث (من فبراير 2026) بيتكلم OpenAI Responses API بس — wire_api = \"chat\" اتشال نهائيًا. MALG بيقدم Chat Completions، فبوصّل كودكس على جسر LiteLLM (نفس اللي في تاب Claude Code) بيترجم تلقائيًا، ومتفتكرش multi_agent = false. من غير جسر: Cline أو OpenCode.",
-  akNoteClaude: "بيتكلم بروتوكول Anthropic (Messages) — مدعوم عندنا مباشرة من غير جسر. قائمة الموديلات بتظهر بأسمائها الحقيقية، ولو أداة اكتشافها بتفلتر أسماء فيها claude/anthropic ومفيش حاجة كده، هيظهر مفتاح توافق واحد اسمه claude-malg يشتغل زي أي موديل. لو ظرفت مشكلة في الردود، وصّل جسر LiteLLM زي تاب Codex.",
+  akNoteClaude: "بيتكلم بروتوكول Anthropic (Messages) — مدعوم عندنا مباشرة من غير جسر. عشان فلتر اكتشاف البرنامج بيقبول بس معرفات فيها claude/anthropic، كل موديل معاه نسخة توافق باسم claude-{المعرف} بتخدم نفس الموديل بالظبط — اختر أي واحدة من القايمة. لو ظرفت مشكلة في الردود، وصّل جسر LiteLLM زي تاب Codex.",
 
   // --- لاندينغ: البطل والأمثلة ---
   hcpField: "اكتب طلبك لـ MALG",
@@ -973,7 +973,7 @@ const en: Dict = {
   akNoteCline: "From Cline settings in VS Code or JetBrains. The Model ID name is cosmetic — the model comes from the key.",
   akNoteOpencode: "Put it in opencode.json, then opencode auth login ← Other ← type MALG ← paste your key, and pick MALG/malg-ai from /models.",
   akNoteCodex: "Modern Codex (since Feb 2026) speaks the OpenAI Responses API only — wire_api = \"chat\" was removed entirely. MALG serves Chat Completions, so point Codex at a LiteLLM bridge (same as the Claude Code tab) which translates automatically, and don't forget multi_agent = false. Without a bridge: Cline or OpenCode.",
-  akNoteClaude: "It speaks the Anthropic protocol (Messages) — which our server serves natively, no bridge needed. The model list shows real provider names; if the discovery filter only accepts claude/anthropic names and none exist, one compat alias named claude-malg appears and works like any model. If inference misbehaves, wire it via LiteLLM like the Codex tab.",
+  akNoteClaude: "It speaks the Anthropic protocol (Messages) — which our server serves natively, no bridge needed. Since the tool's discovery filter only accepts claude/anthropic ids, every model also has a compat copy named claude-{id} that serves the exact same model — pick any of them. If inference misbehaves, wire it via LiteLLM like the Codex tab.",
 
   // --- Landing: hero composer & examples ---
   hcpField: "Write your request to MALG",
@@ -1468,7 +1468,7 @@ const fr: Dict = {
   akNoteCline: "Depuis les paramètres de Cline dans VS Code ou JetBrains. Le nom du Model ID est purement décoratif — le modèle vient de la clé.",
   akNoteOpencode: "Placez-le dans opencode.json, puis opencode auth login ← Other ← tapez MALG ← collez votre clé, et choisissez MALG/malg-ai dans /models.",
   akNoteCodex: "Le Codex moderne (depuis février 2026) ne parle que l'API OpenAI Responses — wire_api = \"chat\" a été supprimé définitivement. MALG sert des Chat Completions, donc pointez Codex vers un pont LiteLLM (comme l'onglet Claude Code) qui traduit automatiquement, et n'oubliez pas multi_agent = false. Sans pont : Cline ou OpenCode.",
-  akNoteClaude: "Il parle le protocole Anthropic (Messages) — que notre serveur sert désormais nativement, sans pont. La liste des modèles montre les vrais noms des fournisseurs ; si le filtre de découverte n'accepte que les noms claude/anthropic et qu'il n'y en a pas, un alias de compatibilité nommé claude-malg apparaît et fonctionne comme n'importe quel modèle. Si l'inférence pose problème, passez par LiteLLM comme l'onglet Codex.",
+  akNoteClaude: "Il parle le protocole Anthropic (Messages) — que notre serveur sert désormais nativement, sans pont. Comme le filtre de découverte n'accepte que les identifiants claude/anthropic, chaque modèle a aussi une copie de compatibilité nommée claude-{id} qui sert exactement le même modèle — choisissez-en une. Si l'inférence pose problème, passez par LiteLLM comme l'onglet Codex.",
 
   // --- Landing : héros et exemples ---
   hcpField: "Écrivez votre demande à MALG",
@@ -1963,7 +1963,7 @@ const es: Dict = {
   akNoteCline: "Desde los ajustes de Cline en VS Code o JetBrains. El nombre del Model ID es decorativo — el modelo viene de la clave.",
   akNoteOpencode: "Ponlo en opencode.json, luego opencode auth login ← Other ← escribe MALG ← pega tu clave, y elige MALG/malg-ai en /models.",
   akNoteCodex: "El Codex moderno (desde febrero de 2026) solo habla la API OpenAI Responses — wire_api = \"chat\" se eliminó por completo. MALG sirve Chat Completions, así que apunta Codex a un puente LiteLLM (como la pestaña Claude Code) que traduce automáticamente, y no olvides multi_agent = false. Sin puente: Cline u OpenCode.",
-  akNoteClaude: "Habla el protocolo Anthropic (Messages) — que nuestro servidor ya sirve de forma nativa, sin puente. La lista de modelos muestra los nombres reales de los proveedores; si el filtro de descubrimiento solo acepta nombres claude/anthropic y no hay ninguno, aparece un alias de compatibilidad llamado claude-malg que funciona como cualquier modelo. Si la inferencia falla, conéctalo vía LiteLLM como en la pestaña Codex.",
+  akNoteClaude: "Habla el protocolo Anthropic (Messages) — que nuestro servidor sirve de forma nativa, sin puente. Como el filtro de descubrimiento solo acepta identificadores claude/anthropic, cada modelo también tiene una copia de compatibilidad llamada claude-{id} que sirve exactamente el mismo modelo — elige cualquiera. Si la inferencia falla, conéctalo vía LiteLLM como en la pestaña Codex.",
 
   // --- Landing: héroe y ejemplos ---
   hcpField: "Escribe tu petición a MALG",

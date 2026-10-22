@@ -52,9 +52,10 @@ interface ResolvedApiModel {
 /**
  * حسم الموديل اللي هيخدم الطلب فعليًا — بنمط المنصات الكبيرة (مفتاح واحد
  * يشتغل مع كل الموديلات):
- * 1) الموديل اللي في الطلب نفسه (body.model) — إما بـ id الصف أو باسم
- *    المزوّد الحقيقي (ai_models.model). "claude-malg" اسم توافق مش موديل
- *    حقيقي — بيتخطى للخطوة اللي بعدها.
+ * 1) الموديل اللي في الطلب نفسه (body.model) — بـ id الصف، أو باسم المزوّد
+ *    الحقيقي (ai_models.model)، أو بنسخة التوافق `claude-{id}` اللي بتظهر
+ *    في القايمة لفلاتر اكتشاف Claude Code (بتنقلب على الموديل الأصلي،
+ *    وclaude-malg بترجع للخطوات اللي بعدها).
  * 2) مفتاح قديم مربوط بموديل معيّن (مش "all") → نفس سلوك المفاتيح القديمة.
  * 3) الموديل الافتراضي النشط (chat) من قاعدة البيانات، وبعد كده malg-ai.
  */
@@ -62,20 +63,27 @@ async function resolveApiModel(
   requestedRaw: string,
   keyModelId: string
 ): Promise<ResolvedApiModel> {
-  if (requestedRaw && requestedRaw !== "claude-malg") {
+  const findByIdOrReal = async (name: string) => {
     // أسماء المزوّد الحقيقية فيها شرطة مائلة ونقط (zai-org/glm-5.3-flash) —
-    // مش بنمررها على normalizeModelId (ريجكسه بيرفضها ويرجّع الافتراضي) —
-    // وبنطبق بس خريطة الأسماء القديمة واضحة.
-    const candidate =
-      requestedRaw === "malg-2" || requestedRaw === "malg-2.1" || requestedRaw === "malg-2.2" || requestedRaw === "malg-a3"
-        ? DEFAULT_MODEL
-        : requestedRaw;
-    const rows = (await sql`
+    // مش بنمررها على normalizeModelId (ريجكسه بيرفضها ويرجّع الافتراضي)
+    return (await sql`
       SELECT id, tier FROM ai_models
-      WHERE is_active = TRUE AND (id = ${candidate} OR lower(model) = ${requestedRaw})
+      WHERE is_active = TRUE AND (id = ${name} OR lower(model) = ${name})
       ORDER BY sort_order ASC, created_at ASC
       LIMIT 1
     `) as { id: string; tier: string | null }[];
+  };
+
+  if (requestedRaw) {
+    // خريطة الأسماء القديمة القليلة (مفاتيح/تكوينات من نسخ أقدم)
+    const legacyRequested =
+      requestedRaw === "malg-2" || requestedRaw === "malg-2.1" || requestedRaw === "malg-2.2" || requestedRaw === "malg-a3";
+    let rows = await findByIdOrReal(legacyRequested ? DEFAULT_MODEL : requestedRaw);
+    if (!rows[0]) {
+      // نسخة التوافق claude-{id} — بنقلب على الموديل الأصلي اللي وراها
+      const stripped = requestedRaw.startsWith("claude-") ? requestedRaw.slice("claude-".length) : "";
+      if (stripped) rows = await findByIdOrReal(stripped);
+    }
     if (rows[0]) return { id: rows[0].id, tier: rows[0].tier };
   }
   const boundKey = keyModelId ? normalizeModelId(keyModelId) : "";

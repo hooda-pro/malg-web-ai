@@ -25,8 +25,11 @@ interface ModelRow {
  * بلاغ الشات بتقبل الـid ده، وبالأسماء القديمة القليلة، واختياريًا باسم
  * المزوّد الحقيقي (لو حد ضبطه يدوي في أدواته).
  *
- * مفتاح توافق واحد اسمه claude-malg بيتضاف بس لو مفيش أي معرّف يعدّي فلتر
- * اكتشاف Claude Code (بياخد بس معرّف فيه claude أو anthropic).
+ * ملاحظة اكتشاف: Claude Code وأدواته (وأمثالها GUI) بتفلتر القايمة وتاخد بس
+ * معرّف فيه claude أو anthropic — فكل موديل بيتبعت له نسخة توافق claude-{id}
+ * تخدم نفس الموديل بالظبط، عشان البرامج دي تشوف القايمة كاملة.
+ * كمان لو القايمة فاضية تمامًا، مفتاح توافق واحد claude-malg بيتضاف عشان
+ * الاكتشاف ميرجعش صفر نماذج.
  */
 export async function GET() {
   try {
@@ -38,27 +41,63 @@ export async function GET() {
       ORDER BY sort_order ASC, created_at ASC
     `) as ModelRow[];
 
-    const data = rows.map((r) => ({
-      id: r.id,
-      object: "model" as const,
-      // حقل صنارة Anthropic إضافي — Claude Code بيعمل model discovery على
-      // /v1/models بصيغة Anthropic (متوقع type:"model")، وأي عميل OpenAI
-      // بيتجاهل الحقل زيادة بلا أثر.
-      type: "model" as const,
-      created: r.created_at ? Math.floor(new Date(r.created_at).getTime() / 1000) : 0,
-      owned_by: "malg",
-      display_name: r.name,
-      description: r.description ?? "",
-      tier: r.tier === "paid" ? "paid" : "free",
-      cost_multiplier: Number(r.cost_multiplier ?? 1) || 1,
-      is_default: r.is_default === true,
-    }));
+    interface ListedModel {
+      id: string;
+      object: "model";
+      type: "model";
+      created: number;
+      owned_by: string;
+      display_name: string;
+      description: string;
+      tier: string;
+      cost_multiplier: number;
+      is_default: boolean;
+    }
 
+    const seen = new Set<string>();
+    const data: ListedModel[] = [];
+    for (const r of rows) {
+      // المعرّف الأصلي اللي الأدمن ضبطه
+      if (!seen.has(r.id)) {
+        seen.add(r.id);
+        data.push({
+          id: r.id,
+          object: "model",
+          type: "model",
+          created: r.created_at ? Math.floor(new Date(r.created_at).getTime() / 1000) : 0,
+          owned_by: "malg",
+          display_name: r.name,
+          description: r.description ?? "",
+          tier: r.tier === "paid" ? "paid" : "free",
+          cost_multiplier: Number(r.cost_multiplier ?? 1) || 1,
+          is_default: r.is_default === true,
+        });
+      }
+      // نسخة التوافق لفلاتر Claude Code — نفس الموديل بالظبط
+      const compatId = `claude-${r.id}`;
+      if (!seen.has(compatId)) {
+        seen.add(compatId);
+        data.push({
+          id: compatId,
+          object: "model",
+          type: "model",
+          created: 0,
+          owned_by: "malg",
+          display_name: r.name,
+          description: `Compat alias — serves model ${r.id} exactly.`,
+          tier: r.tier === "paid" ? "paid" : "free",
+          cost_multiplier: Number(r.cost_multiplier ?? 1) || 1,
+          is_default: r.is_default === true,
+        });
+      }
+    }
+
+    // شاملة الأمان: لو مفيش أي صف نشط خالص — الاكتشاف ميرجعش فارغ تمامًا
     if (!data.some((m) => /claude|anthropic/.test(m.id))) {
       data.push({
         id: "claude-malg",
-        object: "model" as const,
-        type: "model" as const,
+        object: "model",
+        type: "model",
         created: 0,
         owned_by: "malg",
         display_name: "MALG (Claude-compatible)",
