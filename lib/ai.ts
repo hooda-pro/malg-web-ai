@@ -737,6 +737,21 @@ export function estimateTokens(...texts: (string | null | undefined)[]): number 
   return sum + 10;
 }
 
+/** تقدير أدق للفواتير — إنجليزي/كود ~4 حروف لكل توكن وعربي ~2.4
+ * (أقرب لتقديرات المزوّدين الحقيقية بدل chars/3 المضخمة). */
+export function estimateTokensPrecise(...texts: (string | null | undefined)[]): number {
+  let ascii = 0;
+  let other = 0;
+  for (const text of texts) {
+    if (!text) continue;
+    for (const ch of text) {
+      if (ch.charCodeAt(0) < 128) ascii++;
+      else other++;
+    }
+  }
+  return Math.floor(ascii / 4 + other / 2.4) + 10;
+}
+
 export function formatTokens(n: number): string {
   return new Intl.NumberFormat("en-US").format(n);
 }

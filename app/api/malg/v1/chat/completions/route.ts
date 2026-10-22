@@ -5,7 +5,7 @@ import { checkApiBalance, deductApiTokens } from "@/lib/apiQuota";
 import { checkRateLimitShared } from "@/lib/rateLimit";
 import {
   negotiateUpstream,
-  estimateTokens,
+  estimateTokensPrecise,
   readUpstreamStream,
   normalizeModelId,
   type ApiMessage,
@@ -117,7 +117,11 @@ export async function POST(req: NextRequest) {
   // مع بعض)، فاستخدام برمجي مكثف من غير حد يقدر يضرب السقف المشترك ويأثر
   // على كل المستخدمين التانيين.
   const rate = await checkRateLimitShared(`api-key:${keyRow.id}`, {
-    maxAttempts: 30,
+    // 120/دقيقة: أدوات الوكيل بتاع البرمجة (كلود كود وأمثالها) بتبعت رشقات
+    // متوازية (تحدد أمان أمر + الرد الأساسي + مهام خلفية) — 30 كانت بتضرب
+    // 429 بسرعة وأداة بتعرض "temporarily unavailable". 120 بتفضل تحمي
+    // المزوّدين المجانيين من الضغط الزائد ومفيش انقطاع في الشغل الطبيعي.
+    maxAttempts: 120,
     windowMs: 60_000,
     blockMs: 60_000,
   });
@@ -340,7 +344,7 @@ export async function POST(req: NextRequest) {
 
         const billableCompletionText = finalContent + toolCallsBillableText(toolCalls);
         const promptText = messagesForUpstream.map((m) => m.content).join("\n");
-        const totalTokens = Math.max(1, Math.round(estimateTokens(promptText, billableCompletionText) * costMult));
+        const totalTokens = Math.max(1, Math.round(estimateTokensPrecise(promptText, billableCompletionText) * costMult));
         await recordUsage({ keyId: keyRow.id, userId: keyRow.user_id, modelId, totalTokens });
 
         send({
@@ -400,8 +404,8 @@ export async function POST(req: NextRequest) {
 
   const billableCompletionText = finalContent + toolCallsBillableText(toolCalls);
   const promptText = messagesForUpstream.map((m) => m.content).join("\n");
-  const promptTokens = estimateTokens(promptText);
-  const totalTokens = Math.max(1, Math.round(estimateTokens(promptText, billableCompletionText) * costMult));
+  const promptTokens = estimateTokensPrecise(promptText);
+  const totalTokens = Math.max(1, Math.round(estimateTokensPrecise(promptText, billableCompletionText) * costMult));
   const completionTokens = Math.max(totalTokens - promptTokens, 0);
 
   await recordUsage({ keyId: keyRow.id, userId: keyRow.user_id, modelId, totalTokens });
