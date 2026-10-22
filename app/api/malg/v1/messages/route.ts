@@ -46,21 +46,30 @@ function blocksToText(content: unknown): string {
 /** ترجمة طلب Anthropic → طلب OpenAI Chat Completions. */
 function translateRequest(body: Record<string, unknown>): { ok: true; openai: Record<string, unknown>; wantStream: boolean } | { ok: false; error: string } {
   const messages: unknown[] = [];
+  const sysParts: string[] = [];
   const sys = body.system;
   if (sys) {
     const s = blocksToText(sys);
-    if (s) messages.push({ role: "system", content: s });
+    if (s) sysParts.push(s);
   }
 
   const rawMessages = Array.isArray(body.messages) ? body.messages : [];
   for (const m of rawMessages) {
     const msg = m as { role?: unknown; content?: unknown };
-    if (!msg || (msg.role !== "user" && msg.role !== "assistant")) {
-      return { ok: false, error: "كل رسايل Anthropic لازم يكون دورها user أو assistant" };
+    if (!msg) continue;
+    // توافق مع البرامج الحقيقية: كتير بتبعت system جوه messages،
+    // وأدوار تانية كمان — system/developer بيتجمعوا كتعليمات،
+    // وأي دور تاني (حتى tool) بيتعامل كـuser من غير رفض.
+    const r = typeof msg.role === "string" ? msg.role : "";
+    if (r === "system" || r === "developer") {
+      const s = typeof msg.content === "string" ? msg.content : blocksToText(msg.content);
+      if (s) sysParts.push(s);
+      continue;
     }
+    const role = r === "assistant" ? "assistant" : "user";
     const c = msg.content;
     if (typeof c === "string" || c == null) {
-      messages.push({ role: msg.role, content: typeof c === "string" ? c : "" });
+      messages.push({ role, content: typeof c === "string" ? c : "" });
       continue;
     }
     if (!Array.isArray(c)) return { ok: false, error: "صيغة المحتوى مش مفهومة" };
@@ -89,11 +98,15 @@ function translateRequest(body: Record<string, unknown>): { ok: true; openai: Re
       // باقي الأنواع زي الصور بنتجاهلها لو مش مدعومة.
     }
     if (textParts.length > 0 || toolCalls.length > 0) {
-      const openaiMsg: Record<string, unknown> = { role: msg.role, content: textParts.join("") };
+      const openaiMsg: Record<string, unknown> = { role, content: textParts.join("") };
       if (toolCalls.length > 0) openaiMsg.tool_calls = toolCalls;
       messages.push(openaiMsg);
     }
     messages.push(...toolResults);
+  }
+  // التعليمات (system) دايمًا في أول الطلب
+  if (sysParts.length > 0) {
+    messages.unshift({ role: "system", content: sysParts.join("\n\n") });
   }
   if (messages.length === 0) return { ok: false, error: "لازم تبعت messages فيها رسالة واحدة على الأقل" };
 
