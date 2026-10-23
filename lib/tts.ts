@@ -9,7 +9,7 @@
 
 import { sql, ensureSchema } from "./db";
 import { cleanBaseUrl, getTtsModelConfig, parseCapabilities, resolveTtsEndpoint } from "./provider";
-import { checkAndMaybeRenewCredits, deductBalance } from "./quota";
+import { checkAndMaybeRenewCredits, costWithProfitMicro, deductBalance } from "./quota";
 import { hasPaidSubscription } from "./subscription";
 
 export const TTS_TEXT_MAX_CHARS = 2000;
@@ -292,8 +292,15 @@ export async function synthesizeSpeech(opts: SynthesizeOptions): Promise<Synthes
       }
       const buf = new Uint8Array(await res.arrayBuffer());
       if (buf.length === 0) throw new Error("المزوّد رجّع صوتًا فارغًا — حاول مجددًا");
-      // الخصم بعد النجاح فقط — حسب سعر الموديل لكل مليون حرف (موديل من غير سعر = بلا خصم)
-      const chargeMicro = Math.round((text.length * (resolved.config.priceInMicro ?? 0)) / 1_000_000);
+      // الخصم بعد النجاح فقط — حسب سعر الموديل لكل مليون حرف (× الهامش + الربح الثابت)
+      const chargeMicro = costWithProfitMicro(
+        text.length,
+        0,
+        resolved.config.priceInMicro ?? 0,
+        0,
+        resolved.config.costMultiplier ?? 1,
+        resolved.config.profitUsdMicro ?? 0
+      );
       if (chargeMicro > 0) await deductBalance(opts.userId, chargeMicro, opts.isAdmin).catch(() => {});
       return { audio: buf, contentType, modelName: resolved.config.displayName, chars: text.length };
     }

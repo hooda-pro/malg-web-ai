@@ -46,6 +46,7 @@ export async function POST(req: NextRequest) {
     modality?: unknown;
     price_in_usd?: unknown;
     price_out_usd?: unknown;
+    profit_usd?: unknown;
     context_note?: unknown;
   };
   const checked = validateModelInput(body ?? {});
@@ -82,11 +83,12 @@ export async function POST(req: NextRequest) {
   };
   const priceInMicro = priceUsdToMicro((body as { price_in_usd?: unknown }).price_in_usd);
   const priceOutMicro = priceUsdToMicro((body as { price_out_usd?: unknown }).price_out_usd);
+  const profitMicro = priceUsdToMicro((body as { profit_usd?: unknown }).profit_usd);
   const contextNoteRaw = (body as { context_note?: unknown }).context_note;
   const contextNote = typeof contextNoteRaw === "string" ? contextNoteRaw.trim().slice(0, 40) : "";
   await sql`
-    INSERT INTO ai_models (id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, sort_order, modality, capabilities, audio_formats, price_in_usd, price_out_usd, context_note)
-    VALUES (${v.id}, ${v.name}, ${v.description}, 'https://api.openai.com/v1', 'chat_completions', ${v.id}, '{}', 0.4, 128000, TRUE, ${isFirst}, ${nextOrder}, ${modality}, ${capabilitiesFinal}, ${audioFormatsCsv}, ${priceInMicro}, ${priceOutMicro}, ${contextNote})
+    INSERT INTO ai_models (id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, sort_order, modality, capabilities, audio_formats, price_in_usd, price_out_usd, profit_usd, context_note)
+    VALUES (${v.id}, ${v.name}, ${v.description}, 'https://api.openai.com/v1', 'chat_completions', ${v.id}, '{}', 0.4, 128000, TRUE, ${isFirst}, ${nextOrder}, ${modality}, ${capabilitiesFinal}, ${audioFormatsCsv}, ${priceInMicro}, ${priceOutMicro}, ${profitMicro}, ${contextNote})
   `;
   invalidateProviderCache();
 

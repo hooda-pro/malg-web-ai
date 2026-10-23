@@ -9,7 +9,7 @@ import {
   ACCOUNT_CHECK_UNAVAILABLE_MESSAGE,
   type GenerationLease,
 } from "@/lib/usageGuard";
-import { checkAndMaybeRenewCredits, costMicroFor, deductBalance } from "@/lib/quota";
+import { checkAndMaybeRenewCredits, costWithProfitMicro, deductBalance } from "@/lib/quota";
 import { getCostMultiplier, hasPaidSubscription, isModelPaid } from "@/lib/subscription";
 import { getMemory } from "@/lib/memory";
 import { getModelProvider } from "@/lib/provider";
@@ -172,6 +172,8 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
   // تسعيرة الموديل بالـmicro-dollar لكل مليون وحدة (تحديث ١٩) — الصفر يعني موديل مجاني بلا خصم.
   const priceInMicro = continueCfg?.priceInMicro ?? 0;
   const priceOutMicro = continueCfg?.priceOutMicro ?? 0;
+  // ربح الأدمن الثابت لكل مليون وحدة (يتضاف فوق التكلفة × الهامش)
+  const profitMicro = continueCfg?.profitUsdMicro ?? 0;
   const modelDisplayName = continueCfg?.displayName ?? "MALG AI";
   const videoNative = continueCfg?.supportsVideo === true;
   const audioNative = continueCfg?.supportsMic === true;
@@ -268,7 +270,7 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
       };
       const overBudget = () =>
         quotaRemaining !== null &&
-        costMicroFor(0, Math.floor(emittedChars / 3) + 10, priceInMicro, priceOutMicro) >= quotaRemaining;
+        costWithProfitMicro(0, Math.floor(emittedChars / 3) + 10, priceInMicro, priceOutMicro, costMult, profitMicro) >= quotaRemaining;
 
       let result = await readUpstreamStream(upstreamResponse, req.signal, emitCounted, overBudget, negotiated.protocol);
       let quotaCutOff = !!result.stoppedByLimit;
@@ -393,7 +395,7 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
         // الخصم بالدولار من تسعيرة الموديل (تكملة = إخراج خالص) — بعد الحفظ فورًا.
         const chargeMicro = usedFallback
           ? 0
-          : Math.round(costMicroFor(0, outEstimate, priceInMicro, priceOutMicro) * costMult);
+          : costWithProfitMicro(0, outEstimate, priceInMicro, priceOutMicro, costMult, profitMicro);
         if (chargeMicro > 0) {
           try {
             await deductBalance(user.id, chargeMicro, isAdmin);

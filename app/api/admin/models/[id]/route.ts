@@ -47,6 +47,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     cost_multiplier?: unknown;
     price_in_usd?: unknown;
     price_out_usd?: unknown;
+    profit_usd?: unknown;
     context_note?: unknown;
     supports_video?: unknown;
     supports_mic?: unknown;
@@ -101,6 +102,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const micro = Math.round(usd * 1_000_000);
     sets.push(usd > 0 ? `سعر الإخراج $${usd}/1M` : "بدون سعر إخراج (مجاني)");
     await sql`UPDATE ai_models SET price_out_usd = ${micro}, updated_at = now() WHERE id = ${id}`;
+  }
+  // الربح الثابت (تحديث ١٩): دولار لكل مليون وحدة بيتضاف فوق تكلفة الموديل — ومعاه الهامش بيضرب التكلفة
+  if (body.profit_usd !== undefined && Number.isFinite(Number(body.profit_usd)) && Number(body.profit_usd) >= 0) {
+    const usd = Math.min(Number(body.profit_usd), 1000);
+    const micro = Math.round(usd * 1_000_000);
+    sets.push(usd > 0 ? `ربح ثابت $${usd}/1M` : "بدون ربح ثابت");
+    await sql`UPDATE ai_models SET profit_usd = ${micro}, updated_at = now() WHERE id = ${id}`;
   }
   // ملاحظة السياق المعروضة (مثال: "1.0M") — تعريفية فقط
   if (typeof body.context_note === "string") {

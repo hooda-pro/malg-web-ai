@@ -256,6 +256,8 @@ export function ensureSchema(): Promise<void> {
       // الأصفار = موديل مجاني (الخصم عليه صفر). القيم محفوظة بالـmicro-dollar لكل مليون وحدة.
       await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS price_in_usd BIGINT NOT NULL DEFAULT 0`;
       await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS price_out_usd BIGINT NOT NULL DEFAULT 0`;
+      // الربح الثابت للأدمن: دولار لكل مليون وحدة بيتضاف فوق تكلفة الموديل (تحديث ١٩)
+      await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS profit_usd BIGINT NOT NULL DEFAULT 0`;
       // ملاحظة السياق المعروضة (مثال: "1.0M") — تعريفية فقط
       await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS context_note TEXT NOT NULL DEFAULT ''`;
 

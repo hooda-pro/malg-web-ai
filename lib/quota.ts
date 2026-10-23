@@ -139,6 +139,26 @@ export function costMicroFor(
   );
 }
 
+/**
+ * الربح الثابت للأدمن (تحديث ١٩): فوق تكلفة الموديل (× الهامش)، بيتضاف مبلغ
+ * ثابت بالدولار لكل مليون وحدة مستهلكة (إدخال + إخراج). مثال: ربح $5/1M
+ * (profitPerMillionMicro = 5,000,000) و10,000 وحدة → 50,000µ$ = $0.05 ربح إضافي.
+ * نفس سقف الأمان بتاع costMicroFor — وكل الأرقام محسوبة صحيحة بلا كسور.
+ */
+export function costWithProfitMicro(
+  inUnits: number,
+  outUnits: number,
+  priceInMicro: number,
+  priceOutMicro: number,
+  costMult: number,
+  profitPerMillionMicro: number
+): number {
+  const cost = costMicroFor(inUnits, outUnits, priceInMicro, priceOutMicro) * Math.max(Number(costMult) || 1, 1);
+  const totalUnits = Math.max(Number(inUnits) || 0, 0) + Math.max(Number(outUnits) || 0, 0);
+  const profit = Math.round((totalUnits * Math.max(Number(profitPerMillionMicro) || 0, 0)) / 1_000_000);
+  return Math.min(Math.max(Math.round(cost) + profit, 0), 999_999_999);
+}
+
 export interface CreditSnapshot {
   totalMicro: number;
   usedMicro: number;

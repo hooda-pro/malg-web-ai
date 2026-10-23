@@ -91,17 +91,19 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
-  // شريحة التسعير (تحديث ١٩): In/Out بالدولار لكل مليون وحدة + ملاحظة السياق للعرض
+  // شريحة التسعير (تحديث ١٩): In/Out بالدولار لكل مليون وحدة + ربح ثابت لكل مليون + ملاحظة السياق
   const [priceIn, setPriceIn] = useState("");
   const [priceOut, setPriceOut] = useState("");
+  const [flatProfit, setFlatProfit] = useState("");
   const [ctxNote, setCtxNote] = useState("");
   const [priceSaving, setPriceSaving] = useState(false);
   useEffect(() => {
     setPriceIn(selectedSummary?.priceInMicro ? String(selectedSummary.priceInMicro / 1_000_000) : "");
     setPriceOut(selectedSummary?.priceOutMicro ? String(selectedSummary.priceOutMicro / 1_000_000) : "");
+    setFlatProfit(selectedSummary?.profitUsdMicro ? String(selectedSummary.profitUsdMicro / 1_000_000) : "");
     setCtxNote(selectedSummary?.contextNote || "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId, selectedSummary?.priceInMicro, selectedSummary?.priceOutMicro, selectedSummary?.contextNote]);
+  }, [selectedId, selectedSummary?.priceInMicro, selectedSummary?.priceOutMicro, selectedSummary?.profitUsdMicro, selectedSummary?.contextNote]);
 
   const loadModels = async (keepId?: string | null): Promise<ModelSummary[]> => {
     const res = await fetch("/api/admin/models");
@@ -122,6 +124,7 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
         body: JSON.stringify({
           price_in_usd: Number(priceIn.replace(",", ".")) || 0,
           price_out_usd: Number(priceOut.replace(",", ".")) || 0,
+          profit_usd: Number(flatProfit.replace(",", ".")) || 0,
           context_note: ctxNote,
         }),
       });
@@ -656,6 +659,19 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
               </div>
             </div>
             <div>
+              <label className="mb-1 block text-[12px] font-medium text-warn">
+                ربحك الثابت ($ لكل مليون وحدة) — بيتضاف فوق التكلفة تلقائيًا
+              </label>
+              <input
+                value={flatProfit}
+                onChange={(e) => setFlatProfit(e.target.value.replace(/[^\d.]/g, ""))}
+                inputMode="decimal"
+                dir="ltr"
+                placeholder="مثال: 5"
+                className={inputCls}
+              />
+            </div>
+            <div>
               <label className="mb-1 block text-[12px] text-ink-2">
                 ملاحظة السياق (للعرض — مثال: 1.0M)
               </label>
@@ -668,8 +684,9 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
               />
             </div>
             <p className="text-[11.5px] leading-5 text-ink-3">
-              سيبهم فاضيين لو الموديل مجاني. زرار «سحب القدرات» بيكتب التسعير تلقائيًا من OpenRouter
-              لو الموديل عليه سعر معلن.
+              الخصم النهائي = (سعر In/Out لكل مليون — بتخليه من سحب OpenRouter أو يدوي) × هامش ×N
+              + الربح الثابت. سيب الأسعار فاضيين لو الموديل مجاني. زرار «سحب القدرات» بيكتب
+              التسعير تلقائيًا لو الموديل عليه سعر معلن.
             </p>
             <div className="flex items-center justify-end gap-2">
               <button
@@ -881,12 +898,13 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
                           ×{m.costMultiplier}
                         </span>
                       )}
-                      {(m.priceInMicro ?? 0) > 0 || (m.priceOutMicro ?? 0) > 0 ? (
+                      ${(m.priceInMicro ?? 0) > 0 || (m.priceOutMicro ?? 0) > 0 || (m.profitUsdMicro ?? 0) > 0 ? (
                         <span
                           className="shrink-0 truncate rounded-full bg-surface-3 px-1.5 py-px text-[10.5px] font-medium text-ink-2"
-                          title="التسعير بالدولار لكل مليون وحدة — In/Out"
+                          title="التسعير بالدولار لكل مليون وحدة — In/Out (+ربح ثابت)"
                         >
                           ${fmtPrice(m.priceInMicro)} / ${fmtPrice(m.priceOutMicro)}
+                          {(m.profitUsdMicro ?? 0) > 0 ? ` +${fmtPrice(m.profitUsdMicro)}` : ""}
                         </span>
                       ) : null}
                       {m.modality === "tts" ? (

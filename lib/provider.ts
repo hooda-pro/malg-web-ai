@@ -59,6 +59,8 @@ export interface ProviderConfig {
   priceInMicro: number;
   /** سعر الموديل بالدولار لكل مليون وحدة إخراج — بالـmicro-dollar (0 = مجاني بلا خصم) */
   priceOutMicro: number;
+  /** ربح الأدمن الثابت: دولار لكل مليون وحدة بيتضاف فوق تكلفة الموديل — بالـmicro-dollar (0 = مجاني) */
+  profitUsdMicro: number;
   supportsVideo: boolean;
   /** التسجيل الصوتي (مايك → نص) متاح مع هذا الموديل — يحدده الأدمن */
   supportsMic: boolean;
@@ -92,6 +94,8 @@ export interface ModelSummary {
   /** سعر الإدخال/الإخراج بالدولار لكل مليون وحدة — بالـmicro-dollar (0 = مجاني بلا خصم) */
   priceInMicro: number;
   priceOutMicro: number;
+  /** ربح الأدمن الثابت (دولار لكل مليون وحدة فوق التكلفة) — بالـmicro-dollar */
+  profitUsdMicro: number;
   /** ملاحظة السياق المعروضة (مثال: "1.0M") — تعريفية فقط */
   contextNote: string;
   supportsVideo: boolean;
@@ -132,6 +136,7 @@ export interface ModelRow {
   cost_multiplier: unknown;
   price_in_usd?: unknown;
   price_out_usd?: unknown;
+  profit_usd?: unknown;
   context_note?: unknown;
   supports_video: unknown;
   is_active: boolean;
@@ -193,6 +198,7 @@ function modelRowToConfig(r: ModelRow): ModelProviderConfig {
     cost_multiplier: r.cost_multiplier,
     price_in_usd: r.price_in_usd,
     price_out_usd: r.price_out_usd,
+    profit_usd: (r as { profit_usd?: unknown }).profit_usd,
     supports_video: r.supports_video,
   });
   return {
@@ -218,6 +224,7 @@ function modelRowToSummary(r: ModelRow): ModelSummary {
     costMultiplier: clampCostMultiplier((r as { cost_multiplier?: unknown }).cost_multiplier),
     priceInMicro: clampPriceMicro((r as { price_in_usd?: unknown }).price_in_usd),
     priceOutMicro: clampPriceMicro((r as { price_out_usd?: unknown }).price_out_usd),
+    profitUsdMicro: clampPriceMicro((r as { profit_usd?: unknown }).profit_usd),
     contextNote: typeof (r as { context_note?: unknown }).context_note === "string"
       ? String((r as { context_note?: unknown }).context_note).slice(0, 40)
       : "",
@@ -247,7 +254,7 @@ export function invalidateModelCache(modelId?: string) {
 async function selectModelRows(whereActive: boolean): Promise<ModelRow[]> {
   if (whereActive) {
     return (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, modality, tts_voice, capabilities, audio_formats, price_in_usd, price_out_usd, context_note
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, modality, tts_voice, capabilities, audio_formats, price_in_usd, price_out_usd, profit_usd, context_note
       FROM ai_models
       WHERE is_active = TRUE
       ORDER BY is_default DESC, sort_order ASC, created_at ASC
@@ -388,7 +395,7 @@ export async function getModelProvider(modelId: string): Promise<ModelProviderCo
 
   try {
     const rows = (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, price_in_usd, price_out_usd
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, price_in_usd, price_out_usd, profit_usd
       FROM ai_models
       WHERE id = ${id} AND is_active = TRUE
       LIMIT 1
@@ -400,7 +407,7 @@ export async function getModelProvider(modelId: string): Promise<ModelProviderCo
     }
     // fallback: الموديل الافتراضي النشط
     const defs = (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, price_in_usd, price_out_usd
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, price_in_usd, price_out_usd, profit_usd
       FROM ai_models
       WHERE is_active = TRUE
       ORDER BY is_default DESC, sort_order ASC, created_at ASC
@@ -455,7 +462,7 @@ export interface TtsModelConfig {
  * بيشمّل صفوف Modality='tts' + صفوف «النماذج الصوتية» (stt) اللي ليها قدرة tts. */
 export async function getTtsModelConfig(modelId?: string): Promise<TtsModelConfig> {
   const rows = (await sql`
-    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, modality, tts_voice, capabilities, audio_formats, price_in_usd, price_out_usd
+    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, modality, tts_voice, capabilities, audio_formats, price_in_usd, price_out_usd, profit_usd
     FROM ai_models
     WHERE is_active = TRUE AND (modality = 'tts' OR (modality = 'stt' AND capabilities LIKE '%tts%'))
     ORDER BY is_default DESC, sort_order ASC, created_at ASC
@@ -479,7 +486,7 @@ export async function getTtsModelConfig(modelId?: string): Promise<TtsModelConfi
 export async function getSavedModelProvider(modelId: string): Promise<ModelProviderConfig | null> {  const id = sanitizeModelId(modelId) || "malg-ai";
   try {
     const rows = (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, price_in_usd, price_out_usd
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, price_in_usd, price_out_usd, profit_usd
       FROM ai_models
       WHERE id = ${id}
       LIMIT 1
@@ -541,6 +548,7 @@ function envFallback(): ProviderConfig {
     costMultiplier: 1,
     priceInMicro: 0,
     priceOutMicro: 0,
+    profitUsdMicro: 0,
     supportsVideo: false,
     supportsMic: false,
     isActive: true,
@@ -583,6 +591,7 @@ export interface ProviderRow {
   cost_multiplier?: unknown;
   price_in_usd?: unknown;
   price_out_usd?: unknown;
+  profit_usd?: unknown;
   supports_video?: unknown;
   supports_mic?: unknown;
 }
@@ -614,6 +623,7 @@ export function rowToConfig(r: ProviderRow): ProviderConfig {
     costMultiplier: clampCostMultiplier(r.cost_multiplier),
     priceInMicro: clampPriceMicro((r as { price_in_usd?: unknown }).price_in_usd),
     priceOutMicro: clampPriceMicro((r as { price_out_usd?: unknown }).price_out_usd),
+    profitUsdMicro: clampPriceMicro((r as { profit_usd?: unknown }).profit_usd),
     supportsVideo: r.supports_video === true,
     supportsMic: (r as { supports_mic?: unknown }).supports_mic === true,
     model: r.model,

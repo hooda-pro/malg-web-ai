@@ -10,7 +10,7 @@ import {
   ACCOUNT_CHECK_UNAVAILABLE_MESSAGE,
   type GenerationLease,
 } from "@/lib/usageGuard";
-import { checkAndMaybeRenewCredits, costMicroFor, deductBalance } from "@/lib/quota";
+import { checkAndMaybeRenewCredits, costWithProfitMicro, deductBalance } from "@/lib/quota";
 import { getCostMultiplier, hasPaidSubscription, isModelPaid } from "@/lib/subscription";
 import { getMemory, maybeRefreshMemory } from "@/lib/memory";
 import { callMcpTool, getMcpTools } from "@/lib/mcp";
@@ -372,6 +372,8 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   // تسعيرة الموديل بالـmicro-dollar لكل مليون وحدة (تحديث ١٩) — الصفر يعني موديل مجاني بلا خصم.
   const priceInMicro = modelCfg?.priceInMicro ?? 0;
   const priceOutMicro = modelCfg?.priceOutMicro ?? 0;
+  // ربح الأدمن الثابت لكل مليون وحدة (يتضاف فوق التكلفة × الهامش)
+  const profitMicro = modelCfg?.profitUsdMicro ?? 0;
   const videoNative = modelCfg?.supportsVideo === true;
   // الصوت الحقيقي (input_audio) مربوط بنفس علم «المايك» اللي بيزوده الأدمن لموديل معين:
   // لو الموديل بيدعم المايك، يبقى بيدعم سماع التسجيلات الصوتية كذلك.
@@ -547,7 +549,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
       let quotaCutOff = false;
       let timeCutOff = false;
       const costSoFarMicro = () =>
-        costMicroFor(promptTokens + toolTokens, Math.floor(emittedChars / 3), priceInMicro, priceOutMicro);
+        costWithProfitMicro(promptTokens + toolTokens, Math.floor(emittedChars / 3), priceInMicro, priceOutMicro, costMult, profitMicro);
       const overBudget = () => quotaRemaining !== null && costSoFarMicro() >= quotaRemaining;
       const overTime = () => Date.now() - requestStart > HARD_STOP_MS;
       const pastRoundDeadline = () => Date.now() - requestStart > NO_NEW_ROUND_AFTER_MS;
@@ -1492,7 +1494,7 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
         const totalTokens = usedFallback ? 0 : Math.max(1, inEstimate + outEstimate);
         const chargeMicro = usedFallback
           ? 0
-          : Math.round(costMicroFor(inEstimate, outEstimate, priceInMicro, priceOutMicro) * costMult);
+          : costWithProfitMicro(inEstimate, outEstimate, priceInMicro, priceOutMicro, costMult, profitMicro);
         const assistantId = randomUUID();
 
         // بناء خطوات الـAgent الحقيقية اللي حصلت في الرد ده (بحث فعلي تم +

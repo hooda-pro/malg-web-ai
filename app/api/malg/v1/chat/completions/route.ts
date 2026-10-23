@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID, createHash } from "crypto";
 import { sql, ensureSchema } from "@/lib/db";
 import { checkApiBalance, deductApiBalance } from "@/lib/apiQuota";
-import { costMicroFor } from "@/lib/quota";
+import { costWithProfitMicro } from "@/lib/quota";
 import { checkRateLimitShared } from "@/lib/rateLimit";
 import {
   negotiateUpstream,
@@ -315,6 +315,8 @@ export async function POST(req: NextRequest) {
   const extModelCfg = await getModelProvider(modelId).catch(() => null);
   const extPriceInMicro = extModelCfg?.priceInMicro ?? 0;
   const extPriceOutMicro = extModelCfg?.priceOutMicro ?? 0;
+  // ربح الأدمن الثابت لكل مليون وحدة (يتضاف فوق التكلفة × الهامش)
+  const extProfitMicro = extModelCfg?.profitUsdMicro ?? 0;
 
   if (rawMessages.length > MAX_MESSAGES) {
     return NextResponse.json(
@@ -561,8 +563,13 @@ export async function POST(req: NextRequest) {
         const promptTokensEst = estimateTokensPrecise(promptText);
         const totalTokens = Math.max(1, estimateTokensPrecise(promptText, billableCompletionText));
         const completionTokens = Math.max(totalTokens - promptTokensEst, 0);
-        const chargeMicro = Math.round(
-          costMicroFor(promptTokensEst, completionTokens, extPriceInMicro, extPriceOutMicro) * costMult
+        const chargeMicro = costWithProfitMicro(
+          promptTokensEst,
+          completionTokens,
+          extPriceInMicro,
+          extPriceOutMicro,
+          costMult,
+          extProfitMicro
         );
         await recordUsage({ keyId: keyRow.id, userId: keyRow.user_id, modelId, totalTokens, chargeMicro });
 
@@ -640,8 +647,13 @@ export async function POST(req: NextRequest) {
   const promptTokens = estimateTokensPrecise(promptText);
   const totalTokens = Math.max(1, estimateTokensPrecise(promptText, billableCompletionText));
   const completionTokens = Math.max(totalTokens - promptTokens, 0);
-  const chargeMicro = Math.round(
-    costMicroFor(promptTokens, completionTokens, extPriceInMicro, extPriceOutMicro) * costMult
+  const chargeMicro = costWithProfitMicro(
+    promptTokens,
+    completionTokens,
+    extPriceInMicro,
+    extPriceOutMicro,
+    costMult,
+    extProfitMicro
   );
 
   await recordUsage({ keyId: keyRow.id, userId: keyRow.user_id, modelId, totalTokens, chargeMicro });

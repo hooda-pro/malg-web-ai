@@ -49,6 +49,15 @@ components/admin/{adminTypes,AdminProvider,UserDetail,UsersList,StatsOverview,To
 components/{ChatShell,TopBar,AccountMenu,RechargeModal,PlansModal,SettingsModal,ApiKeysPage,landing/PricingSection}.tsx ·
 app/{pricing,privacy,refund}/page.tsx
 
+## تحديث ١٩.١ — ربح ثابت بالدولار جنب هامش ×N
+- حقل جديد `ai_models.profit_usd` (µ$/مليون وحدة، افتراضي 0): **ربح الأدمن الثابت** — بتكتبه مثالًا 5
+  فيعني «اكسب $5 لكل مليون وحدة مستهلكة» فوق تكلفة الموديل.
+- معادلة الخصم النهائية (شات/استكمال/EXT/TTS): `الربح = تكلفة In/Out × هامش ×N + ربح ثابت × (وحدات إدخال + إخراج)/1M`.
+- قطع الرد لو الرصيد خلص (overBudget) بقى بيحسب بالمعادلة الكاملة (هامش + ربح ثابت) عشان التقدير يقرب للخصم الفعلي.
+- شريحة التسعير في الأدمن بقت ٤ خانات: In / Out / ربحك الثابت / ملاحظة السياق، وشارة الموديل على القايمة بتظاهر `+ربح` لو محدد.
+- السحب التلقائي من OpenRouter بيحفظ التسعير التكلفة بس — الربح الثابت بيفضل زي ما انت حددته محفوظ.
+- تخصيص: `costWithProfitMicro()` في `lib/quota.ts` هي نقطة الحساب الوحيدة (كل الشاحنات بتنده عليها).
+
 ## التحقق
 - `tsc --noEmit` صفر أخطاء.
 - بناء production كامل ناجح.
