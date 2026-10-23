@@ -95,6 +95,10 @@ export default function PricingSection() {
         <a href="/pricing" className="font-medium text-ink underline decoration-hair-3 underline-offset-4 hover:decoration-ink">
           اطّلع على كل الباقات
         </a>
+        {" "}·{" "}
+        <a href="/models" className="font-medium text-ink underline decoration-hair-3 underline-offset-4 hover:decoration-ink">
+          أسعار النماذج لكل مليون وحدة
+        </a>
       </p>
     </section>
   );

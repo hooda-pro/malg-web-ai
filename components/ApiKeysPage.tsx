@@ -411,7 +411,10 @@ export default function ApiKeysPage() {
               {t("akTitle")}
             </h1>
             <p className="mt-2 text-pretty text-[15px] leading-7 text-ink-2">
-              {t("akSubtitle")}
+              {t("akSubtitle")}{" "}
+              <a href="/models" className="font-medium text-accent hover:underline">
+                {t("footModels")}
+              </a>
             </p>
           </div>
           <Button variant="primary" onClick={openCreate}>

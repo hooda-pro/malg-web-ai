@@ -127,7 +127,11 @@ export default function PricingPage() {
 
       <section className="mt-10 rounded-2xl border border-hair bg-surface-2 p-5 text-[14px] leading-8 text-ink-2">
         ملحوظة: الدفع حاليًا يدوي عبر واتساب، وخدمة الدفع المباشر بالبطاقة عبر الموقع
-        ستُتاح لاحقًا.
+        ستُتاح لاحقًا. عايز تفاصيل أسعار كل نموذج بالدولار لكل مليون وحدة؟{" "}
+        <a href="/models" className="font-medium text-accent hover:underline">
+          صفحة النماذج والأسعار
+        </a>
+        .
       </section>
     </div>
   );

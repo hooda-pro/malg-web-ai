@@ -88,6 +88,13 @@ export default function DeveloperSection({ site }: { site: string }) {
             احصل على مفتاح API
             <ArrowLeft size={16} />
           </a>
+          <a
+            href="/models"
+            className="mt-8 inline-flex h-12 items-center gap-2 rounded-full border border-hair-2 px-6 text-[15px] font-medium text-ink transition-colors duration-1 hover:bg-surface-2 sm:ms-3"
+          >
+            النماذج والأسعار
+            <ArrowLeft size={16} />
+          </a>
         </div>
 
         <div dir="ltr" className="overflow-hidden rounded-3xl border border-hair bg-[#0c0c0e] text-[#e7e7ea] shadow-3">

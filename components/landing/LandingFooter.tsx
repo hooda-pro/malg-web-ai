@@ -19,6 +19,7 @@ const COLUMNS = [
     links: [
       { href: "#developers", labelKey: "footDevApi" },
       { href: "/#/api", labelKey: "footApiKeys" },
+      { href: "/models", labelKey: "footModels" },
     ],
   },
   {

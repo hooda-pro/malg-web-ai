@@ -244,19 +244,22 @@ export default function AdminModelDetail({
     }
   };
 
-  /** سحب التسعير + القدرات + الصيغ من OpenRouter آليًا (موديلات روابط openrouter.ai) */
+  /** سحب التسعير + القدرات + الصيغ من OpenRouter آليًا — بيجرب endpoints الأول
+   * ولو فاضية (زي موديلات :free) بيرجع للقايمة العامة اللي فيها أسعار الكل */
   const pullFromOpenRouter = async () => {
     setPulling(true);
     try {
       const res = await fetch(`/api/admin/models/${encodeURIComponent(modelId)}/pull`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "فشل السحب");
-      const pricing = data.pricing as { known: boolean; priceInUsd: number; priceOutUsd: number; contextNote: string } | undefined;
+      const pricing = data.pricing as { known: boolean; free?: boolean; priceInUsd: number; priceOutUsd: number; contextNote: string } | undefined;
       notify(
         "ok",
         pricing?.known
-          ? `اتسحبت التسعيرة (In $${pricing.priceInUsd} / Out $${pricing.priceOutUsd} لكل مليون) + السياق ${pricing.contextNote || "—"} والقدرات${(data.meta as { provider?: string } | undefined)?.provider ? ` — ${data.meta.provider}` : ""}`
-          : "OpenRouter مفيش له سعر معلن للموديل ده — العناصر الباقية اتسحبت، سعّره يدويًا من الشريحة"
+          ? pricing.free
+            ? `الموديل مجاني معلن على OpenRouter (0/0) — مش هيتم خصم رصيد. القدرات والسياق ${pricing.contextNote || "—"} اتسحبوا ✓`
+            : `اتسحبت التسعيرة (In $${pricing.priceInUsd} / Out $${pricing.priceOutUsd} لكل مليون) + السياق ${pricing.contextNote || "—"} والقدرات${(data.meta as { provider?: string } | undefined)?.provider ? ` — ${data.meta.provider}` : ""}`
+          : "OpenRouter مفيش له سعر معلن للموديل ده — القدرات اتسحبت، والأسعار المخزنة اتسابت زي ما هي (عدّلها يدويًا لو محتاج)"
       );
       await reload();
     } catch (e) {
@@ -759,7 +762,7 @@ export default function AdminModelDetail({
                 <button
                   onClick={() => void pullFromOpenRouter()}
                   disabled={busy}
-                  title="سحب قدرات وصيغ الموديل آليًا من OpenRouter (بيشتغل مع روابط openrouter.ai)"
+                  title="سحب القدرات والتسعيرة آليًا من OpenRouter — بيجرب endpoints الأول ولو فاضية بيرجع للقايمة العامة (بتشتغل مع أي موديل معروف على OpenRouter حتى لو مزوّده مختلف)"
                   className="flex items-center gap-1 rounded-md bg-surface-3 px-2 py-1 text-[10.5px] font-medium text-ink-2 transition-colors hover:text-ink disabled:opacity-50"
                 >
                   {pulling ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
@@ -837,7 +840,7 @@ export default function AdminModelDetail({
           <button
             onClick={() => void pullFromOpenRouter()}
             disabled={busy}
-            title="سحب التسعيرة تلقائيًا من OpenRouter لو الموديل عليه سعر معلن"
+            title="سحب التسعيرة تلقائيًا من OpenRouter — بيجرب endpoints الأول ولو فاضية بيرجع للقايمة العامة (بتشتغل مع أي موديل معروف على OpenRouter حتى لو مزوّده مختلف)"
             className="flex items-center gap-1 rounded-md border border-hair bg-surface-2 px-2 py-1.5 text-[11px] font-medium text-ink-2 hover:border-accent-line hover:text-accent disabled:opacity-40"
           >
             {pulling ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
