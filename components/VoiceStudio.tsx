@@ -34,6 +34,9 @@ const MOODS: { value: TtsMood; key: string }[] = [
   { value: "whispering", key: "ttsMoodWhisper" },
 ];
 
+/** نوع الصوت المطلوب — ذكر/أنثى بيتحول وصف مفتوح للـS2، فاضي = التلقائي بتاع المزوّد */
+type TtsGender = "" | "male" | "female";
+
 interface TtsModel {
   id: string;
   name: string;
@@ -114,10 +117,13 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [clips, setClips] = useState<Clip[]>([]);
-  /** اللمسة: طابع + سريع شوية + ضحك — بتتحول لعلامات S2 جوه النص على السيرفر */
+  /** اللمسة: صوت ذكر/أنثى + طابع + سريع شوية + ضحك — بتتحول لعلامات S2 جوه النص على السيرفر */
+  const [gender, setGender] = useState<TtsGender>("");
   const [mood, setMood] = useState<TtsMood>("");
   const [brisk, setBrisk] = useState(false);
   const [laughs, setLaughs] = useState(false);
+  const [styleOpen, setStyleOpen] = useState(false);
+  const styleRef = useRef<HTMLDivElement>(null);
   /** العينة المرجعية لنسخ الصوت (data URL) — بتظهر مع موديلات canClone */
   const [refClip, setRefClip] = useState<{ name: string; dataUrl: string } | null>(null);
   const refInputRef = useRef<HTMLInputElement>(null);
@@ -166,6 +172,23 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
     };
   }, [modelOpen]);
 
+  // قائمة اللمسة: إغلاق عند الضغط بره أو Escape — بنفس نمط قائمة الموديل
+  useEffect(() => {
+    if (!styleOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (styleRef.current && !styleRef.current.contains(e.target as Node)) setStyleOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setStyleOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [styleOpen]);
+
   function removeClip(id: number) {
     setClips((prev) => {
       const target = prev.find((c) => c.id === id);
@@ -192,6 +215,27 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
     fr.readAsDataURL(f);
   }
 
+  /** تصفير اللمسة كلها — يرجّع أداء المزوّد التلقائي */
+  function resetStyle() {
+    setGender("");
+    setMood("");
+    setBrisk(false);
+    setLaughs(false);
+  }
+
+  /** وصف اللمسة المختارة لمرة واحدة — للشارة على الزرار والتاريخ */
+  function styleSummary() {
+    if (!selected?.styleOk) return "";
+    return [
+      gender === "male" ? t("ttsMale") : gender === "female" ? t("ttsFemale") : "",
+      mood ? t(MOODS.find((m) => m.value === mood)?.key ?? "") : "",
+      laughs ? t("ttsLaughs") : "",
+      brisk ? t("ttsSpeedBrisk") : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  }
+
   async function generate() {
     const value = text.trim();
     if (!value || value.length > TTS_TEXT_MAX_CHARS || busy) return;
@@ -205,7 +249,7 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
           text: value,
           modelId: modelId || undefined,
           referenceAudio: refClip?.dataUrl,
-          style: { mood, speed: brisk ? "brisk" : "", laughs },
+          style: { voiceGender: gender, mood, speed: brisk ? "brisk" : "", laughs },
         }),
       });
       if (!r.ok) {
@@ -224,11 +268,7 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
       } catch {
         modelName = "";
       }
-      const label = selected?.styleOk
-        ? [mood ? t(MOODS.find((m) => m.value === mood)?.key ?? "") : "", laughs ? t("ttsLaughs") : "", brisk ? t("ttsSpeedBrisk") : ""]
-            .filter(Boolean)
-            .join(" · ")
-        : "";
+      const label = styleSummary();
       clipSeq.current += 1;
       setClips((prev) => [{ id: clipSeq.current, url, text: value, modelName, label, at: Date.now() }, ...prev]);
       // نسيب النص بعد النجاح — يعدّل ويجادّد براحته
@@ -415,44 +455,98 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
                     />
                   </label>
 
-                  {/* ——— ٣) اللمسة الصوتية (موديلات OpenRouter/Fish بس) ——— */}
+                  {/* ——— ٣) اللمسة الصوتية: زرار يفتح الخيارات (موديلات OpenRouter/Fish بس) ——— */}
                   {selected?.styleOk && (
-                    <div className="mt-5">
-                      <SectionLabel icon={<Smile size={13} aria-hidden="true" />}>{t("ttsStyleSection")}</SectionLabel>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-[11.5px] text-ink-3">{t("ttsMood")}</span>
-                        {MOODS.map((m) => (
-                          <Chip key={m.value || "normal"} active={mood === m.value} onClick={() => setMood(m.value)}>
-                            {t(m.key)}
-                          </Chip>
-                        ))}
-                      </div>
-                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                        <span className="text-[11.5px] text-ink-3">{t("ttsSpeed")}</span>
-                        <Chip active={!brisk} onClick={() => setBrisk(false)}>
-                          {t("ttsNormal")}
-                        </Chip>
-                        <Chip active={brisk} onClick={() => setBrisk(true)}>
-                          {t("ttsSpeedBrisk")}
-                        </Chip>
-                      </div>
-                      <div className="mt-2">
-                        <button
-                          type="button"
-                          onClick={() => setLaughs((v) => !v)}
-                          aria-pressed={laughs}
-                          className={cn(
-                            "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] transition-colors duration-1",
-                            laughs
-                              ? "border-accent-line bg-accent-soft text-accent"
-                              : "border-hair text-ink-2 hover:border-hair-2 hover:text-ink"
-                          )}
+                    <div className="relative mt-5" ref={styleRef}>
+                      <button
+                        type="button"
+                        onClick={() => setStyleOpen((o) => !o)}
+                        aria-haspopup="dialog"
+                        aria-expanded={styleOpen}
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-[12.5px] transition-colors duration-1",
+                          styleOpen || styleSummary()
+                            ? "border-accent-line bg-accent-soft text-accent"
+                            : "border-hair text-ink-2 hover:border-hair-2 hover:text-ink"
+                        )}
+                      >
+                        <Smile size={14} aria-hidden="true" />
+                        {t("ttsStyleSection")}
+                        {styleSummary() && (
+                          <span
+                            className="max-w-[150px] truncate rounded-full bg-surface px-2 py-px text-[10.5px] text-accent"
+                            dir="auto"
+                          >
+                            {styleSummary()}
+                          </span>
+                        )}
+                        <ChevronDown
+                          size={13}
+                          aria-hidden="true"
+                          className={cn("shrink-0 text-ink-3 transition-transform duration-2", styleOpen && "rotate-180")}
+                        />
+                      </button>
+                      {styleOpen && (
+                        <div
+                          role="dialog"
+                          aria-label={t("ttsStyleSection")}
+                          className="animate-materialize glass absolute inset-x-0 top-[calc(100%+6px)] z-modal rounded-2xl border border-hair p-4 shadow-3 sm:p-5"
                         >
-                          <Laugh size={13} aria-hidden="true" />
-                          {t("ttsLaughs")}
-                          {laughs && <Check size={12} strokeWidth={3} aria-hidden="true" />}
-                        </button>
-                      </div>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11.5px] text-ink-3">{t("ttsVoice")}</span>
+                            <Chip active={gender === ""} onClick={() => setGender("")}>
+                              {t("ttsNormal")}
+                            </Chip>
+                            <Chip active={gender === "male"} onClick={() => setGender("male")}>
+                              {t("ttsMale")}
+                            </Chip>
+                            <Chip active={gender === "female"} onClick={() => setGender("female")}>
+                              {t("ttsFemale")}
+                            </Chip>
+                          </div>
+                          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11.5px] text-ink-3">{t("ttsMood")}</span>
+                            {MOODS.map((m) => (
+                              <Chip key={m.value || "normal"} active={mood === m.value} onClick={() => setMood(m.value)}>
+                                {t(m.key)}
+                              </Chip>
+                            ))}
+                          </div>
+                          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11.5px] text-ink-3">{t("ttsSpeed")}</span>
+                            <Chip active={!brisk} onClick={() => setBrisk(false)}>
+                              {t("ttsNormal")}
+                            </Chip>
+                            <Chip active={brisk} onClick={() => setBrisk(true)}>
+                              {t("ttsSpeedBrisk")}
+                            </Chip>
+                          </div>
+                          <div className="mt-2.5 flex items-center justify-between gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setLaughs((v) => !v)}
+                              aria-pressed={laughs}
+                              className={cn(
+                                "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] transition-colors duration-1",
+                                laughs
+                                  ? "border-accent-line bg-accent-soft text-accent"
+                                  : "border-hair text-ink-2 hover:border-hair-2 hover:text-ink"
+                              )}
+                            >
+                              <Laugh size={13} aria-hidden="true" />
+                              {t("ttsLaughs")}
+                              {laughs && <Check size={12} strokeWidth={3} aria-hidden="true" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={resetStyle}
+                              className="rounded-full px-2 py-1.5 text-[11.5px] text-ink-3 transition-colors hover:bg-surface-3 hover:text-ink"
+                            >
+                              {t("ttsReset")}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 

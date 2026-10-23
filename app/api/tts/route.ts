@@ -66,6 +66,8 @@ export async function POST(req: NextRequest) {
   const styleRaw = body?.style && typeof body.style === "object" ? (body.style as Record<string, unknown>) : null;
   const style = styleRaw
     ? {
+        voiceGender:
+          styleRaw.voiceGender === "male" || styleRaw.voiceGender === "female" ? String(styleRaw.voiceGender) : "",
         mood: typeof styleRaw.mood === "string" ? styleRaw.mood.slice(0, 30) : "",
         speed: styleRaw.speed === "brisk" ? "brisk" : "",
         laughs: styleRaw.laughs === true,

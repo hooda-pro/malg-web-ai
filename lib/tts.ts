@@ -94,6 +94,8 @@ export interface SynthesizeOptions {
 
 /** لمسة الأداء اللي بيختارها المستخدم في الاستوديو — بتتحول لعلامات [brackets] جوا النص. */
 export interface TtsStyle {
+  /** نوع الصوت: male / female — وصف مفتوح بيأثر على الطبقة الصوتية (فاضي = التلقائي) */
+  voiceGender?: string;
   /** طابع الجملة: playful / angry / excited / calm / whispering — فاضي = عادي */
   mood?: string;
   /** سرعة: brisk = سريع شوية بصياغة طبيعية — غيره = عادية */
@@ -104,6 +106,7 @@ export interface TtsStyle {
 
 /** الطوابع المسموحة — من دليل Fish S2 (open-domain، بس منقّي هنا لمنع الفوضى) */
 const TTS_MOODS_ALLOWED = new Set(["", "playful", "angry", "excited", "calm", "whispering"]);
+const TTS_GENDERS_ALLOWED = new Set(["", "male", "female"]);
 
 /**
  * بيطبّق اللمسة على النص قبل النداء — علامات S2.1-Pro open-domain (اي وصف بين أقواس مربعة).
@@ -113,11 +116,14 @@ const TTS_MOODS_ALLOWED = new Set(["", "playful", "angry", "excited", "calm", "w
  */
 export function applyVoiceStyle(text: string, style: TtsStyle | undefined, isOpenRouter: boolean): string {
   if (!isOpenRouter || !style) return text;
+  const gender = typeof style.voiceGender === "string" && TTS_GENDERS_ALLOWED.has(style.voiceGender) ? style.voiceGender : "";
   const mood = typeof style.mood === "string" && TTS_MOODS_ALLOWED.has(style.mood) ? style.mood : "";
   const brisk = style.speed === "brisk";
   const laughs = style.laughs === true;
-  if (!mood && !brisk && !laughs) return text;
+  if (!gender && !mood && !brisk && !laughs) return text;
   const headParts = [
+    gender === "male" ? "[male voice]" : "",
+    gender === "female" ? "[female voice]" : "",
     mood ? `[${mood}]` : "",
     brisk ? "[speaking briskly but clearly]" : "",
   ].filter(Boolean);
