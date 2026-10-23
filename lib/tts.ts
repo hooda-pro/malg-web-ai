@@ -95,16 +95,35 @@ export interface SynthesizeResult {
 }
 
 function upstreamErrorMessage(status: number, bodyText: string): string {
+  let base = "";
+  let raw = "";
   try {
-    const j = JSON.parse(bodyText) as { error?: { message?: unknown } | string };
-    const m = typeof j?.error === "string" ? j.error : (j?.error as { message?: unknown } | undefined)?.message;
-    if (typeof m === "string" && m.trim()) return m.trim().slice(0, 300);
+    const j = JSON.parse(bodyText) as {
+      error?:
+        | string
+        | { message?: unknown; metadata?: { raw?: unknown; raw_message?: unknown; provider_name?: unknown } | string };
+    };
+    const e = typeof j?.error === "string" ? { message: j.error } : j?.error;
+    const m = typeof (e as { message?: unknown } | undefined)?.message === "string" ? (e as { message?: string }).message : undefined;
+    if (m?.trim()) base = m.trim().slice(0, 300);
+    // تفاصيل الخطأ الحقيقية من المزوّد — OpenRouter بيلفها في error.metadata
+    const md = (e as { metadata?: unknown } | undefined)?.metadata;
+    if (typeof md === "string") raw = md;
+    else if (md && typeof md === "object") {
+      const mdRaw = (md as { raw?: unknown }).raw;
+      const mdRawMessage = (md as { raw_message?: unknown }).raw_message;
+      if (typeof mdRaw === "string" && mdRaw.trim()) raw = mdRaw;
+      else if (typeof mdRawMessage === "string" && mdRawMessage.trim()) raw = mdRawMessage;
+    }
   } catch {
     // تجاهل — رسالة عامة تحت
   }
-  if (status === 401 || status === 403) return "مفتاح المزوّد مرفوض — راجع مفاتيح موديل الصوت من لوحة الأدمن";
-  if (status === 429) return "المزوّد مضغوط حاليًا (rate limit) — حاول بعد دقيقة";
-  return "تعذّر توليد الصوت من المزوّد — حاول مجددًا";
+  if (!base) {
+    if (status === 401 || status === 403) base = "مفتاح المزوّد مرفوض — راجع مفاتيح موديل الصوت من لوحة الأدمن";
+    else if (status === 429) base = "المزوّد مضغوط حاليًا (rate limit) — حاول بعد دقيقة";
+    else base = "تعذّر توليد الصوت من المزوّد — حاول مجددًا";
+  }
+  return raw ? `${base} — تفاصيل المزوّد: ${raw.trim().slice(0, 220)}` : base;
 }
 
 /** يولّد الصوت ويرجع الباينري — يرمي أخطاء عربية جاهزة للعرض (err.message). */
@@ -165,40 +184,59 @@ export async function synthesizeSpeech(opts: SynthesizeOptions): Promise<Synthes
   if (voiceValue) payload.voice = voiceValue;
   if (inputReferences) payload.input_references = inputReferences;
 
+  // أسماء محاولة النداء: الاسم المخزّن زي ما هو أولًا، وعلى OpenRouter لو مكتوب بدون
+  // لاحقة التسعير بنداّ كمان بإضافة «:free» — التجربة الحية بالمفتاح أثبتت إن توجيه
+  // الصوت بيرجّع 404 «No endpoints found» للاسم من غيرها (مثال دليل صفحة النموذج بيغلط).
+  const modelVariants = [resolved.config.model];
+  if (/openrouter\.ai/i.test(endpoint) && !/:free$/i.test(resolved.config.model)) {
+    modelVariants.push(`${resolved.config.model}:free`);
+  }
+
   let lastError = "";
-  for (const key of keys) {
-    let res: Response;
-    try {
-      res = await fetch(endpoint, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(TTS_TIMEOUT_MS),
-      });
-    } catch {
-      lastError = "تعذّر الوصول لمزوّد الصوت — حاول مجددًا";
-      continue; // جرّب المفتاح التالي
-    }
-    if (!res.ok) {
-      const bodyText = await res.text().catch(() => "");
-      if (res.status === 400) {
-        // 400 = خطأ في جسم الطلب نفسه (مش مفتاح/ضغط) — سجّله بالتفصيل عشان التشخيص
-        console.error(`[MALG tts] 400 من مزوّد الصوت (${resolved.config.model}):`, bodyText.slice(0, 500));
-        throw new Error(upstreamErrorMessage(res.status, bodyText));
+  outer: for (const key of keys) {
+    for (const modelVariant of modelVariants) {
+      let res: Response;
+      try {
+        res = await fetch(endpoint, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, model: modelVariant }),
+          signal: AbortSignal.timeout(TTS_TIMEOUT_MS),
+        });
+      } catch {
+        lastError = "تعذّر الوصول لمزوّد الصوت — حاول مجددًا";
+        continue outer; // الشبكة مقطوعة — جرّب المفتاح التالي
       }
-      lastError = upstreamErrorMessage(res.status, bodyText);
-      continue; // 401/429/5xx → المفتاح التالي
+      if (!res.ok) {
+        const bodyText = await res.text().catch(() => "");
+        const msg = upstreamErrorMessage(res.status, bodyText);
+        if (res.status === 400 || res.status === 404) {
+          // 400/404 = مشكلة في الطلب نفسه (مش المفتاح) — سجّل التفاصيل وجرّب اسم النموذج التاني
+          console.error(
+            `[MALG tts] ${res.status} من مزوّد الصوت (${modelVariant}):`,
+            bodyText.slice(0, 500)
+          );
+          lastError = msg;
+          continue; // مسار الاسم البديل (بدون :free مثلاً)
+        }
+        lastError = msg;
+        continue outer; // 401/429/5xx → المفتاح التالي
+      }
+      if (modelVariant !== resolved.config.model) {
+        console.error(`[MALG tts] نجح التوليد بالاسم البديل «${modelVariant}» — عدّل اسم الموديل في الصف لده`);
+      }
+      const contentType = res.headers.get("content-type") || "audio/mpeg";
+      if (!contentType.startsWith("audio/")) {
+        const bodyText = await res.text().catch(() => "");
+        lastError = upstreamErrorMessage(res.status, bodyText);
+        continue;
+      }
+      const buf = new Uint8Array(await res.arrayBuffer());
+      if (buf.length === 0) throw new Error("المزوّد رجّع صوتًا فارغًا — حاول مجددًا");
+      // الخصم بعد النجاح فقط — بعدد الحروف (تسعير الصوت بالحرف)
+      await deductTokens(opts.userId, text.length, opts.isAdmin).catch(() => {});
+      return { audio: buf, contentType, modelName: resolved.config.displayName, chars: text.length };
     }
-    const contentType = res.headers.get("content-type") || "audio/mpeg";
-    if (!contentType.startsWith("audio/")) {
-      const bodyText = await res.text().catch(() => "");
-      throw new Error(upstreamErrorMessage(res.status, bodyText));
-    }
-    const buf = new Uint8Array(await res.arrayBuffer());
-    if (buf.length === 0) throw new Error("المزوّد رجّع صوتًا فارغًا — حاول مجددًا");
-    // الخصم بعد النجاح فقط — بعدد الحروف (تسعير الصوت بالحرف)
-    await deductTokens(opts.userId, text.length, opts.isAdmin).catch(() => {});
-    return { audio: buf, contentType, modelName: resolved.config.displayName, chars: text.length };
   }
   throw new Error(lastError || "تعذّر توليد الصوت — حاول مجددًا");
 }

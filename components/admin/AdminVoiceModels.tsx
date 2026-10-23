@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AudioLines, Check, Info, Loader2, Mic, Plus, Trash2 } from "lucide-react";
+import { AudioLines, Check, Info, Loader2, Mic, Plus, RefreshCw, Trash2 } from "lucide-react";
 
 interface Row {
   id: string;
@@ -189,6 +189,34 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
       await load();
     } catch (e) {
       notify("err", e instanceof Error ? e.message : "فشل التحديث");
+    } finally {
+      setCapsBusy(null);
+    }
+  };
+
+  /** سحب قدرات الصف من OpenRouter آليًا (هندسة الصف: openrouter فقط) — بيكتب الوسوم والصيغ صريحة */
+  const pullCaps = async (row: Row) => {
+    setCapsBusy(row.id);
+    try {
+      const res = await fetch(`/api/admin/models/${encodeURIComponent(row.id)}/pull`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "فشل السحب");
+      const caps: string[] = Array.isArray(data.capabilities) ? data.capabilities : [];
+      const meta = data.meta as { supportsVoiceCloning?: boolean; provider?: string } | undefined;
+      notify(
+        "ok",
+        caps.length && caps[0] !== "none"
+          ? `قدرات ${row.id} اتسحبت من OpenRouter${meta?.provider ? ` (${meta.provider})` : ""}: ${caps.join(" · ")}`
+          : `OpenRouter معرفش قدرات صوت لـ${row.id} — اتخزنت «مفيش قدرات»`
+      );
+      setFormatsDraft((prev) => {
+        const next = { ...prev };
+        delete next[row.id];
+        return next;
+      });
+      await load();
+    } catch (e) {
+      notify("err", e instanceof Error ? e.message : "فشل السحب");
     } finally {
       setCapsBusy(null);
     }
@@ -430,6 +458,15 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
               </div>
               {/* ——— سطر القدرات + الصيغ ——— */}
               <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-hair pt-2.5">
+                <button
+                  onClick={() => void pullCaps(m)}
+                  disabled={actingId !== null || capsBusy !== null}
+                  title="سحب قدرات وصيغ الموديل آليًا من OpenRouter (بيشتغل مع روابط openrouter.ai)"
+                  className="flex items-center gap-1 rounded-md bg-surface-3 px-2 py-1 text-[10.5px] font-medium text-ink-2 transition-colors hover:text-ink disabled:opacity-50"
+                >
+                  {capsBusy === m.id ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
+                  اسحب القدرات
+                </button>
                 <span className="text-[10.5px] font-medium text-ink-3">القدرات:</span>
                 {/* صف الخدمة (tts): «توليد صوت» قدرته الأساسية المقفولة — والباقي نسخ صوتي */}
                 {m.modality === "tts" && (
