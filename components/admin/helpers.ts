@@ -66,6 +66,13 @@ export function usagePercent(used: number, total: number): number {
   return Math.min(Math.round((used / total) * 100), 100);
 }
 
+/** عرض سعر بالدولار من micro-dollar: 4 → "4"، 150000 → "0.15" (من غير أصفار زيادة) */
+export function fmtPrice(micro: number | null | undefined): string {
+  const usd = Math.max(Number(micro) || 0, 0) / 1_000_000;
+  if (usd === 0) return "0";
+  return usd >= 0.01 ? String(Math.round(usd * 100) / 100) : String(Math.round(usd * 1000) / 1000);
+}
+
 export { formatTokens };
 
 /** أول حرف من الاسم للـ avatar */

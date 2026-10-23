@@ -2,12 +2,11 @@
 
 import { useCallback, useState } from "react";
 import {
-  AudioLines,
   CheckCircle2,
+  Layers,
   LayoutDashboard,
   LogOut,
   MessageSquare,
-  PlugZap,
   ScrollText,
   Search,
   ShieldCheck,
@@ -23,20 +22,19 @@ import UserDetail from "./UserDetail";
 import DeletionsList from "./DeletionsList";
 import AdminLogs from "./AdminLogs";
 import AdminSecurity from "./AdminSecurity";
-import AdminProvider from "./AdminProvider";
+import AdminModelsList from "./AdminModelsList";
+import AdminModelDetail from "./AdminModelDetail";
 import AdminSearch from "./AdminSearch";
 import AdminMcp from "./AdminMcp";
-import AdminVoiceModels from "./AdminVoiceModels";
 import Logo from "../Logo";
 
-type Section = "overview" | "users" | "deletions" | "provider" | "voice" | "search" | "logs" | "security" | "mcp";
+type Section = "overview" | "users" | "deletions" | "models" | "search" | "logs" | "security" | "mcp";
 
 const SECTIONS: { id: Section; label: string; icon: typeof Users }[] = [
   { id: "overview", label: "نظرة عامة", icon: LayoutDashboard },
   { id: "users", label: "المستخدمين", icon: Users },
   { id: "deletions", label: "حذف الحسابات", icon: UserMinus },
-  { id: "provider", label: "الموديلات والمزوّدون", icon: PlugZap },
-  { id: "voice", label: "النماذج الصوتية", icon: AudioLines },
+  { id: "models", label: "الموديلات", icon: Layers },
   { id: "search", label: "البحث", icon: Search },
   { id: "logs", label: "سجل الإجراءات", icon: ScrollText },
   { id: "security", label: "الأمان", icon: ShieldCheck },
@@ -47,8 +45,7 @@ const SECTION_TITLES: Record<Section, string> = {
   overview: "نظرة عامة",
   users: "المستخدمين",
   deletions: "حذف الحسابات (طلبات معلقة)",
-  provider: "الموديلات والمزوّدون (API)",
-  voice: "النماذج الصوتية — أذن المنصة (STT)",
+  models: "إدارة الموديلات",
   search: "البحث الحقيقي",
   logs: "سجل إجراءات الأدمن",
   security: "أمان الحساب",
@@ -65,6 +62,7 @@ export default function AdminPanel({
 }) {
   const [section, setSection] = useState<Section>("overview");
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   const notify = useCallback((type: "ok" | "err", text: string) => {
@@ -102,6 +100,7 @@ export default function AdminPanel({
                 onClick={() => {
                   setSection(id);
                   if (id !== "users") setSelectedUserId(null);
+                  if (id !== "models") setSelectedModelId(null);
                 }}
                 title={label}
                 className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-colors duration-1 md:px-3 ${
@@ -141,7 +140,7 @@ export default function AdminPanel({
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-hair bg-surface/70 px-4 py-3 md:px-6">
           <h1 className="text-[15px] font-semibold tracking-title text-ink">
-            {section === "users" && selectedUserId ? "تفاصيل المستخدم" : SECTION_TITLES[section]}
+            {section === "users" && selectedUserId ? "تفاصيل المستخدم" : section === "models" && selectedModelId ? "تفاصيل الموديل" : SECTION_TITLES[section]}
           </h1>
           <div className="flex items-center gap-2 rounded-full border border-hair bg-surface px-3 py-1.5 shadow-1">
             <ShieldCheck size={14} className="text-accent" />
@@ -169,8 +168,16 @@ export default function AdminPanel({
             ))}
           {section === "logs" && <AdminLogs />}
           {section === "deletions" && <DeletionsList onOpenUser={openUser} />}
-          {section === "provider" && <AdminProvider notify={notify} />}
-          {section === "voice" && <AdminVoiceModels notify={notify} />}
+          {section === "models" &&
+            (selectedModelId ? (
+              <AdminModelDetail
+                modelId={selectedModelId}
+                onBack={() => setSelectedModelId(null)}
+                notify={notify}
+              />
+            ) : (
+              <AdminModelsList onSelect={setSelectedModelId} notify={notify} />
+            ))}
           {section === "search" && <AdminSearch notify={notify} />}
           {section === "security" && <AdminSecurity admin={admin} notify={notify} />}
           {section === "mcp" && <AdminMcp notify={notify} />}
