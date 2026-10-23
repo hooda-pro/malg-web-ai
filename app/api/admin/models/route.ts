@@ -38,8 +38,10 @@ export async function POST(req: NextRequest) {
   // الموديل الجديد ينزل في آخر الترتيب (مش الأول) — عشان الترتيب اليدوي يفضل ثابت
   const maxRows = (await sql`SELECT COALESCE(MAX(sort_order), -1)::int AS m FROM ai_models`) as { m: number }[];
   const nextOrder = Number(maxRows[0]?.m ?? -1) + 1;
-  // قيم مبدئية آمنة — الأدمن يعدل الرابط/المفاتيح من نموذج المزوّد قبل الاعتماد عليه
-  const modality = (body as { modality?: unknown }).modality === "tts" ? "tts" : "chat";
+  // قيم مبدئية آمنة — الأدمن يعدل الرابط/المفاتيح من نموذج المزوّد قبل الاعتماد عليه.
+  // stt = موديل إدخال صوتي («أذن المنصة» — بترجم التسجيلات لكل الموديلات، مخفي من الـAPI).
+  const rawModality = (body as { modality?: unknown }).modality;
+  const modality = rawModality === "tts" || rawModality === "stt" ? rawModality : "chat";
   await sql`
     INSERT INTO ai_models (id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, sort_order, modality)
     VALUES (${v.id}, ${v.name}, ${v.description}, 'https://api.openai.com/v1', 'chat_completions', ${v.id}, '{}', 0.4, 128000, TRUE, ${isFirst}, ${nextOrder}, ${modality})

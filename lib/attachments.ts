@@ -788,6 +788,10 @@ export interface ApiContentOptions {
   /** الموديل بيسمع التسجيلات الصوتية فعليًا — بتتبعت كـ input_audio (مربوط بعلم «المايك» للـ
    * موديل من لوحة الأدمن). false = السلوك القديم: الصوت يتجاهل تمامًا. */
   audioNative?: boolean;
+  /** المسار العالمي لرسايل الصوت: نصوص الترجمة بموديل الإدخال الصوتي (lib/voiceInput.ts)
+   * — بنفس ترتيب مرفقات الصوت في الميتا (null = فشل ترجمة التسجيل ده). بتستخدم بس
+   * لما audioNative = false: اللي اترجم تُبعت كنص، والباقي (فشل) بيفضل ملاحظة «ماوصلش». */
+  voiceTranscripts?: (string | null)[];
   /** false → الصور (والصوت) مبتتبعتش (بتتحول لسطر نصي) — لرسايل قديمة عشان نوفر توكنز. */
   includeImages?: boolean;
 }
@@ -822,6 +826,8 @@ export function buildFilesManifest(files: AttachedFile[], inlinedPaths: Set<stri
  * - الصور: بتتبعت كصورة حقيقية بس لو includeImages (آخر رسالة فيها صور).
  * - التسجيلات الصوتية من التطبيق: بتتبعت كـ input_audio (صوت حقيقي يسمعه الموديل)
  *   بس لو audioNative مفعّلة (علم «المايك» للموديل من الأدمن) — ودي آخر رسالة فيها وسائط.
+ *   وإلا بيتحاول السيرفر يترجمها بموديل الإدخال الصوتي (modality=stt — lib/voiceInput.ts)
+ *   عبر voiceTranscripts، وترجمة ناجحة تتبعت كنص، والفاشلة بتفضل ملاحظة «ماوصلش».
  */
 export function toApiUserContent(content: string, opts: ApiContentOptions = {}): string | ApiContentPart[] {
   const inlineBudget = opts.inlineBudgetChars ?? 0;
@@ -868,6 +874,31 @@ export function toApiUserContent(content: string, opts: ApiContentOptions = {}):
   // لأن التحويل لـ inline بيحصل في materializeRemoteAttachments قبل نداء الموديل.
   // (فحص رخيص هنا — التحليل الكامل لبيانات الصوت بيحصل مرة واحدة تحت عند بناء الـ parts.)
   const audioNative = opts.audioNative === true;
+  const allVoiceAttachments = attachments.filter((a) => a.kind === "audio");
+  // المسار العالمي لرسايل الصوت: لو الموديل مش بيسمع أصلًا (مفيش «المايك»، أو بروتوكوله
+  // مش chat_completions) والسيرفر قدر يترجم التسجيلات بموديل الإدخال الصوتي (lib/voiceInput.ts)
+  // — الترجمة بتتبعت كنص بدل ما نرمي التسجيل بلاحظة «ماوصلش». الثابتات: الترتيب متساوي
+  // مع ترتيب مرفقات الصوت في الميتا (extractAttachmentsMeta ثابت بترتيبه)، والنصوص
+  // بتتوفر من /api/chat لآخر رسالة مستخدم بس (الرسايل القديمة زي ما كانت).
+  const sttTexts = !audioNative ? opts.voiceTranscripts : undefined;
+  let sttHit = 0;
+  const sttBlocks: string[] = [];
+  if (sttTexts) {
+    let voiceOrdinal = 0;
+    for (const a of allVoiceAttachments) {
+      const transcript = sttTexts[voiceOrdinal++];
+      if (typeof transcript === "string" && transcript.trim()) {
+        sttHit++;
+        sttBlocks.push(
+          `[Voice message from the user — automatically transcribed by the platform's voice model. ` +
+            `The audio itself is NOT attached; THIS transcript IS the user's spoken message. Reply to this text as if the user typed it:]\n\n"${transcript.trim()}"`
+        );
+      }
+    }
+    if (sttBlocks.length > 0) {
+      text = `${text}\n\n${sttBlocks.join("\n\n")}`.trim();
+    }
+  }
   const audios = audioNative
     ? attachments.filter((a) => {
         if (a.kind !== "audio") return false;
@@ -878,7 +909,8 @@ export function toApiUserContent(content: string, opts: ApiContentOptions = {}):
   // تسجيلات صوتية مش هتوصل للموديل (الموديل مش مفعّل له «المايك»، أو بروتوكوله مش chat_completions، أو السيرفر
   // ما قدرش يجيب الملف): قبل كده كانت الرسالة بتفضل فاضية والموديل يستلم تذكير الصيغة بس فيرد «فهمت» —
   // دلوقتي بنقوله بصراحة إن التسجيل ماوصلش عشان يقول للمستخدم بدل ما يتظاهر إنه سمع.
-  const lostVoice = attachments.filter((a) => a.kind === "audio").length - audios.length;
+  // المسار العالمي (stt): اللي اترجم بنجاح بيتشال من عداد المفقود — مفيش ملاحظة ملفقية فوق الترجمة الصحيحة.
+  const lostVoice = allVoiceAttachments.length - audios.length - sttHit;
   if (lostVoice > 0) {
     const lostNote = includeImages
       ? `[The user sent ${lostVoice === 1 ? "a voice message" : `${lostVoice} voice messages`}, but the audio ${VOICE_UNDELIVERED_MARK} (this model cannot receive audio, or the recording could not be loaded). Do NOT guess or invent what was said. Tell the user briefly that you could not hear it, and ask them to type the message or try again.]`

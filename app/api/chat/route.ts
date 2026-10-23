@@ -14,7 +14,8 @@ import { checkAndMaybeRenewQuota, deductTokens } from "@/lib/quota";
 import { getCostMultiplier, hasPaidSubscription, isModelPaid } from "@/lib/subscription";
 import { getMemory, maybeRefreshMemory } from "@/lib/memory";
 import { callMcpTool, getMcpTools } from "@/lib/mcp";
-import { getModelProvider, isVoiceModelRow } from "@/lib/provider";
+import { getModelProvider, isVoiceModelActive } from "@/lib/provider";
+import { transcribeVoiceAttachments } from "@/lib/voiceInput";
 import {
   negotiateUpstream,
   estimateTokens,
@@ -237,8 +238,10 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   // التوكنز المتبقية للمستخدم قبل الرد ده (null = أدمن، مفيش حد) — بنقطع الرد في نصه لو خلصت.
   const quotaRemaining = quotaCheck.remaining;
 
-  // نموذج الصوت: مقفول لغير الأدمن — واجهة الصوت منفصلة "قريبًا"
-  if (!isAdmin && isVoiceModelRow(model)) {
+  // نموذج الصوت: مقفول لغير الأدمن — واجهة الصوت منفصلة "قريبًا"، وموديلات الإدخال
+  // الصوتي (stt) هي بنية تحتية للترجمة — الفحص هنا بقاعدة الداتابيز (modality) مش
+  // الاعتماد على شكل الـid، فوحد ممكن ينادي على موديل الأذن بالـslug تبعه يشوف 403.
+  if (!isAdmin && (await isVoiceModelActive(model))) {
     console.warn("[chat-reject] voice-model user=", user.id, "model=", model);
     return NextResponse.json(
       { error: "نموذج الصوت جاي قريبًا — لسه مش متاح في شات الموقع." },
@@ -372,6 +375,20 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   // (بروتوكول responses مش بيستقبل input_audio هنا — بيتحوّل لنص — فمفيش فايدة نقول للموديل إنه هيسمع.)
   const audioNative = modelCfg?.supportsMic === true && modelCfg.protocol === "chat_completions";
 
+  // المسار العالمي لرسايل الصوت: الموديل مش بيسمع أصلًا؟ بنترجم التسجيلات بموديل
+  // الإدخال الصوتي (modality=stt — الأدمن يضبطه من واجهة «النماذج الصوتية» في
+  // لوحة الأدمن) ونبعت النص لموديل الشات كأنه كلام المستخدم — فكل الموديلات
+  // بتسمع الرسايل الصوتية، من غير ما موديل الصوت نفسه يكون متاح للنداء المباشر.
+  // (موديل الصوت بيتحدد أول صف نشط modality=stt — بروتوكول chat_completions.)
+  let voiceTranscripts: (string | null)[] | undefined;
+  if (!audioNative) {
+    voiceTranscripts =
+      (await transcribeVoiceAttachments(materializedPrompt).catch((e) => {
+        console.error("[MALG chat] ترجمة التسجيل فشلت", e);
+        return null;
+      })) ?? undefined;
+  }
+
   // حقائق المستخدم المحفوظة — قراءة DB رخيصة، وفشلها لا يوقف الرد.
   const { getTopFacts, buildFactsBlock } = await import("@/lib/facts");
   const factsBlock = buildFactsBlock(await getTopFacts(user.id, 10).catch(() => []));
@@ -425,6 +442,9 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
               includeImages: i === lastImageIdx,
               videoNative,
               audioNative,
+              // الترجمات دي بتتظبط للرسالة الحالية بس (ليها ملف مادي هنا) — الرسايل
+              // القديمة بتفضل بلا ترجمات زي ما كانت (سلوك الصوت القديم كذلك).
+              voiceTranscripts: i === lastUserIdx ? voiceTranscripts : undefined,
             })
           : extractAgentStepsMeta(m.content).visibleText,
     })),

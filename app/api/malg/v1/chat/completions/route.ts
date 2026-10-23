@@ -15,7 +15,7 @@ import {
 import { API_IDENTITY_SYSTEM_PROMPT } from "@/lib/systemPrompt";
 import { getCostMultiplier, hasPaidSubscription } from "@/lib/subscription";
 import { getUserFlags } from "@/lib/usageGuard";
-import { isVoiceModelRow } from "@/lib/provider";
+import { isVoiceModelActive } from "@/lib/provider";
 
 export const dynamic = "force-dynamic";
 // سقف Hobby = 300 (قيمة أكبر بتكسر الـ Deploy على Hobby). على Pro ارفعها لـ 800.
@@ -255,9 +255,10 @@ export async function POST(req: NextRequest) {
   let resolved = await resolveApiModel(requestedModel, keyRow.model_id);
   let modelId = resolved.id;
 
-  // نموذج الصوت: مقفول لغير الأدمن — مكانه واجهة صوت منفصلة "جاي قريبًا"
-  // (الطلب ببساطة مبيتنفذش، عشان الشات النصي والصوت يفضلوا فصل تام).
-  if (isVoiceModelRow(modelId)) {
+  // نموذج الصوت: مقفول لغير الأدمن — واجهة الصوت منفصلة "جاي قريبًا"، وموديلات
+  // الإدخال الصوتي (stt) بنية تحتية للترجمة بس — الفحص بقاعدة الداتابيز (modality)
+  // مش الاعتماد على شكل الـid، فمحدش ينفع ينادي على موديل الأذن من الـAPI مباشرة.
+  if (await isVoiceModelActive(modelId)) {
     const voiceFlags = await getUserFlags(keyRow.user_id).catch(() => null);
     if (!voiceFlags?.isAdmin) {
       console.error(`[MALG api] 403 voice model blocked key=${keyRow.id} model=${modelId}`);

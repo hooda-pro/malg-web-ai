@@ -73,8 +73,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     sets.push("المايك " + (body.supports_mic ? "ON" : "OFF"));
     await sql`UPDATE ai_models SET supports_mic = ${body.supports_mic}, updated_at = now() WHERE id = ${id}`;
   }
-  if (body.modality === "chat" || body.modality === "tts") {
-    sets.push(body.modality === "tts" ? "صوت (TTS)" : "محادثة");
+  if (body.modality === "chat" || body.modality === "tts" || body.modality === "stt") {
+    sets.push(
+      body.modality === "tts" ? "صوت (TTS)" : body.modality === "stt" ? "إدخال صوتي (أذن المنصة)" : "محادثة"
+    );
     await sql`UPDATE ai_models SET modality = ${body.modality}, updated_at = now() WHERE id = ${id}`;
   }
   if (typeof body.tts_voice === "string") {

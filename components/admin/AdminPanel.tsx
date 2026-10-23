@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import {
+  AudioLines,
   CheckCircle2,
   LayoutDashboard,
   LogOut,
@@ -25,15 +26,17 @@ import AdminSecurity from "./AdminSecurity";
 import AdminProvider from "./AdminProvider";
 import AdminSearch from "./AdminSearch";
 import AdminMcp from "./AdminMcp";
+import AdminVoiceModels from "./AdminVoiceModels";
 import Logo from "../Logo";
 
-type Section = "overview" | "users" | "deletions" | "provider" | "search" | "logs" | "security" | "mcp";
+type Section = "overview" | "users" | "deletions" | "provider" | "voice" | "search" | "logs" | "security" | "mcp";
 
 const SECTIONS: { id: Section; label: string; icon: typeof Users }[] = [
   { id: "overview", label: "نظرة عامة", icon: LayoutDashboard },
   { id: "users", label: "المستخدمين", icon: Users },
   { id: "deletions", label: "حذف الحسابات", icon: UserMinus },
   { id: "provider", label: "الموديلات والمزوّدون", icon: PlugZap },
+  { id: "voice", label: "النماذج الصوتية", icon: AudioLines },
   { id: "search", label: "البحث", icon: Search },
   { id: "logs", label: "سجل الإجراءات", icon: ScrollText },
   { id: "security", label: "الأمان", icon: ShieldCheck },
@@ -45,6 +48,7 @@ const SECTION_TITLES: Record<Section, string> = {
   users: "المستخدمين",
   deletions: "حذف الحسابات (طلبات معلقة)",
   provider: "الموديلات والمزوّدون (API)",
+  voice: "النماذج الصوتية — أذن المنصة (STT)",
   search: "البحث الحقيقي",
   logs: "سجل إجراءات الأدمن",
   security: "أمان الحساب",
@@ -166,6 +170,7 @@ export default function AdminPanel({
           {section === "logs" && <AdminLogs />}
           {section === "deletions" && <DeletionsList onOpenUser={openUser} />}
           {section === "provider" && <AdminProvider notify={notify} />}
+          {section === "voice" && <AdminVoiceModels notify={notify} />}
           {section === "search" && <AdminSearch notify={notify} />}
           {section === "security" && <AdminSecurity admin={admin} notify={notify} />}
           {section === "mcp" && <AdminMcp notify={notify} />}

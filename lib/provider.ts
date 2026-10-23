@@ -88,8 +88,9 @@ export interface ModelSummary {
   supportsVideo: boolean;
   /** التسجيل الصوتي (مايك → نص) متاح مع هذا الموديل — يحدده الأدمن */
   supportsMic: boolean;
-  /** نوع الموديل: محادثة (chat) أو توليد صوت (tts) — نفس الجدول والإعداد */
-  modality: "chat" | "tts";
+  /** نوع الموديل: محادثة (chat)، توليد صوت (tts)، أو إدخال صوتي (stt — «أذن المنصة»
+   * اللي بتقرا تسجيلات المستخدمين لكل الموديلات، مخفية من الـAPI والانتقاء). */
+  modality: "chat" | "tts" | "stt";
   /** الصوت الافتراضي لموديلات TTS (مثال: alloy) — فارغ = صوت المزوّد الافتراضي */
   ttsVoice: string;
 }
@@ -200,7 +201,12 @@ function modelRowToSummary(r: ModelRow): ModelSummary {
     supportsVideo: (r as { supports_video?: unknown }).supports_video === true,
     supportsMic: (r as { supports_mic?: unknown }).supports_mic === true,
     sortOrder: Number((r as { sort_order?: unknown }).sort_order ?? 0) || 0,
-    modality: (r as { modality?: unknown }).modality === "tts" ? "tts" : "chat",
+    modality:
+      (r as { modality?: unknown }).modality === "tts"
+        ? "tts"
+        : (r as { modality?: unknown }).modality === "stt"
+          ? "stt"
+          : "chat",
     ttsVoice: typeof voiceRaw === "string" ? voiceRaw.slice(0, 80) : "",
   };
 }
@@ -231,14 +237,29 @@ async function selectModelRows(whereActive: boolean): Promise<ModelRow[]> {
 
 /** كل الموديلات (للأدمن: الكل، للواجهة: النشطة فقط) — فارغ لو الجدول لسه متعملش.
  *  modality اختياري لتصفية النوع (موديلات الشات لا ترى موديلات الصوت والعكس). */
-/** صف موديل صوت: modality='tts' أو المعرّف نفسه فيه voice — مكانه واجهة صوت
- * منفصلة "قريبًا"، فمش بيظهر كاختيار شات عادي ولا يقبل نداءات الشات. */
+/** صف موديل صوت: modality='tts' (واجهة الصوت المنفصلة "قريبًا") أو modality='stt'
+ * («أذن المنصة» — الترجمة العالمية للتسجيلات) — أو المعرّف نفسه فيه voice.
+ * الاتنين مخفيين تمامًا: مش بيظهروا كاختيار شات ولا يقبلوا نداءات شات ولا في API خارجي. */
 export function isVoiceModelRow(id: string, modality?: string | null): boolean {
-  if (modality === "tts") return true;
+  if (modality === "tts" || modality === "stt") return true;
   return /voice/i.test(String(id ?? ""));
 }
 
-export async function listModels(activeOnly = false, modality?: "chat" | "tts"): Promise<ModelSummary[]> {
+/** الحقيقة من الداتابيز: هل الموديل ده صف موديل صوت (مقفول للشات) — فحص الـmodality
+ * المسجّل مش الاعتماد على شكل الـid (الأدمن ممكن يسمّي موديل stt باسم مفيهوش voice).
+ * fallback للفحص بالـid لو فشل الاتصال بالداتابيز. */
+export async function isVoiceModelActive(modelId: string): Promise<boolean> {
+  try {
+    const rows = (await sql`SELECT modality FROM ai_models WHERE is_active = TRUE AND id = ${modelId} LIMIT 1`) as {
+      modality?: string | null;
+    }[];
+    return isVoiceModelRow(modelId, rows[0]?.modality ?? null);
+  } catch {
+    return /voice/i.test(String(modelId ?? ""));
+  }
+}
+
+export async function listModels(activeOnly = false, modality?: "chat" | "tts" | "stt"): Promise<ModelSummary[]> {
   try {
     const rows = await selectModelRows(activeOnly);
     return rows.map(modelRowToSummary).filter((m) => !modality || m.modality === modality);

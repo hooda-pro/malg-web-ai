@@ -765,6 +765,14 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
                           <AudioLines size={10} />
                           صوت
                         </span>
+                      ) : m.modality === "stt" ? (
+                        <span
+                          className="flex shrink-0 items-center gap-1 rounded-full bg-accent-soft px-1.5 py-px text-[10.5px] font-medium text-accent"
+                          title="إدخال صوتي (STT) — أذن المنصة: بترجم التسجيلات لكل الموديلات، مخفي من الـAPI والشات"
+                        >
+                          <Mic size={10} />
+                          أذن
+                        </span>
                       ) : (
                         <span className="shrink-0 rounded-full bg-surface-3 px-1.5 py-px text-[10.5px] font-medium text-ink-2">
                           محادثة
@@ -800,16 +808,22 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
                     )}
                   </button>
                   <button
-                    onClick={() => setModality(m.id, m.modality === "tts" ? "chat" : "tts")}
+                    onClick={() => setModality(m.id, m.modality === "tts" ? "chat" : m.modality === "stt" ? "chat" : "tts")}
                     disabled={busy}
-                    title={m.modality === "tts" ? "حوّله لموديل محادثة" : "حوّله لموديل صوتي (TTS)"}
+                    title={
+                      m.modality === "tts"
+                        ? "حوّله لموديل محادثة"
+                        : m.modality === "stt"
+                          ? "حوّله لموديل محادثة عادي (مش مترجم صوت)"
+                          : "حوّله لموديل صوتي (TTS)"
+                    }
                     aria-label="تبديل النوع محادثة/صوت"
                     className="grid h-7 w-7 shrink-0 place-items-center rounded-full transition-colors duration-1 hover:bg-surface-3 disabled:opacity-40"
                   >
                     {acting ? (
                       <Loader2 size={13} className="animate-spin" />
                     ) : (
-                      <Mic size={13} className={m.modality === "tts" ? "text-accent" : "text-ink-3"} />
+                      <Mic size={13} className={m.modality !== "chat" ? "text-accent" : "text-ink-3"} />
                     )}
                   </button>
                   <button
@@ -1074,6 +1088,17 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
             <label className="mb-1 block text-[12px] text-ink-2">اسم الموديل (زي ما المزوّد مسمّيه بالظبط)</label>
             <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="deepseek-chat" dir="ltr" className={`${inputCls} tnum`} />
           </div>
+          {selectedSummary?.modality === "stt" && (
+            <div className="rounded-md border border-accent-line bg-accent-soft/30 px-3 py-2.5 text-[12px] leading-5 text-ink-2">
+              <p className="font-medium text-ink">موديل إدخال صوتي — «أذن المنصة»</p>
+              <p className="mt-1">
+                ده المترجم العالمي للتسجيلات الصوتية لكل موديلات الشات. لو بتستخدم OpenRouter حط
+                <span dir="ltr" className="mx-1 font-mono">https://openrouter.ai/api/v1</span>وموديل مثل
+                <span dir="ltr" className="mx-1 font-mono">fish-audio/s2.1-pro-free:free</span>ومفتاح OpenRouter.
+                النموذج ده مش بيظهر في الـAPI ولا شات الموقع ومش ممكن حد ينادي عليه مباشرة.
+              </p>
+            </div>
+          )}
           {selectedSummary?.modality === "tts" && (
             <div>
               <label className="mb-1 block text-[12px] text-ink-2">الصوت الافتراضي (Voice — مثال: alloy)</label>
