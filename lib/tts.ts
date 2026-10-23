@@ -155,9 +155,14 @@ export async function synthesizeSpeech(opts: SynthesizeOptions): Promise<Synthes
   const payload: Record<string, unknown> = {
     model: resolved.config.model,
     input: text,
-    voice: resolved.voice || TTS_DEFAULT_VOICE,
     response_format: resolved.ttsFormat,
   };
+  // الصوت (voice): اسم الصوت خاص بكل مزوّد — على OpenAI نكتب alloy افتراضيًا لو الصف من غير صوت،
+  // وغير كده (زي OpenRouter/Fish) «alloy» أصلاً مش صوت صالح فبقى سبب 400 —
+  // فمبعتش voice أصلًا لو الأدمن محددش واحد، والمزوّد بياخد صوته الافتراضي.
+  const isOpenAiSpeech = /openai\.com/i.test(endpoint);
+  const voiceValue = resolved.voice || (isOpenAiSpeech ? TTS_DEFAULT_VOICE : "");
+  if (voiceValue) payload.voice = voiceValue;
   if (inputReferences) payload.input_references = inputReferences;
 
   let lastError = "";
@@ -176,7 +181,11 @@ export async function synthesizeSpeech(opts: SynthesizeOptions): Promise<Synthes
     }
     if (!res.ok) {
       const bodyText = await res.text().catch(() => "");
-      if (res.status === 400) throw new Error(upstreamErrorMessage(res.status, bodyText));
+      if (res.status === 400) {
+        // 400 = خطأ في جسم الطلب نفسه (مش مفتاح/ضغط) — سجّله بالتفصيل عشان التشخيص
+        console.error(`[MALG tts] 400 من مزوّد الصوت (${resolved.config.model}):`, bodyText.slice(0, 500));
+        throw new Error(upstreamErrorMessage(res.status, bodyText));
+      }
       lastError = upstreamErrorMessage(res.status, bodyText);
       continue; // 401/429/5xx → المفتاح التالي
     }
