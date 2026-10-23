@@ -12,11 +12,13 @@ import {
   Database,
   Download,
   KeyRound,
+  LifeBuoy,
   Lock,
   LogOut,
   Puzzle,
   RefreshCw,
   Settings2,
+  Sparkles,
   Trash2,
   UserRound,
   Wand2,
@@ -380,6 +382,22 @@ function GeneralTab({ onLockedModel }: { onLockedModel: () => void }) {
       <SectionTitle>{t("aboutTitle")}</SectionTitle>
       <Panel>
         <p className="text-pretty px-4 py-3.5 text-[13px] leading-6 text-ink-3">{t("aboutBody")}</p>
+        <div className="flex flex-wrap gap-x-5 gap-y-1.5 border-t border-hair px-4 py-3">
+          <a
+            href="/help"
+            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent transition-colors duration-1 hover:underline"
+          >
+            <LifeBuoy size={13} />
+            {t("menuHelp")}
+          </a>
+          <a
+            href="/welcome"
+            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent transition-colors duration-1 hover:underline"
+          >
+            <Sparkles size={13} />
+            {t("menuPlatformTour")}
+          </a>
+        </div>
       </Panel>
     </>
   );

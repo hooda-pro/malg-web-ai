@@ -27,6 +27,7 @@ const COLUMNS = [
     links: [
       { href: "/privacy", labelKey: "footPrivacy" },
       { href: "/terms", labelKey: "footTerms" },
+      { href: "/help", labelKey: "footHelp" },
       { href: "#faq", labelKey: "footFaq" },
     ],
   },

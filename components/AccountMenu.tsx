@@ -10,11 +10,13 @@ import {
   KeyRound,
   Keyboard,
   LayoutDashboard,
+  LifeBuoy,
   LogOut,
   Monitor,
   Moon,
   Settings2,
   ShieldCheck,
+  Sparkles,
   Sun,
   Wand2,
 } from "lucide-react";
@@ -207,6 +209,20 @@ export default function AccountMenu({
                   </span>
                 ) : undefined
               }
+            />
+            <MenuItem
+              icon={<LifeBuoy size={16} />}
+              label={t("menuHelp")}
+              href="/help"
+              onSelect={() => setOpen(false)}
+              trailing={<ArrowUpRight size={14} className="flip-rtl text-ink-3" />}
+            />
+            <MenuItem
+              icon={<Sparkles size={16} />}
+              label={t("menuPlatformTour")}
+              href="/welcome"
+              onSelect={() => setOpen(false)}
+              trailing={<ArrowUpRight size={14} className="flip-rtl text-ink-3" />}
             />
             {showShortcuts && (
               <MenuItem
