@@ -22,13 +22,13 @@ export const dynamic = "force-dynamic";
 // سقف Hobby = 300 (قيمة أكبر بتكسر الـ Deploy على Hobby). على Pro ارفعها لـ 800.
 export const maxDuration = 300;
 
-// حد أقصى لعدد الرسائل ولطول كل رسالة في الطلب الواحد — يحمي من استهلاك
-// رصيد ضخم بغلطة أو ضغط زائد على المزوّدين المجانيين (malg-2.1 / malg-2.2)
-// بطلب برمجي واحد ضخم. الأرقام دي أعلى من نسخة أول إصدار من الـ endpoint عشان
-// تستوعب جلسات أدوات برمجة حقيقية (محتوى ملفات كاملة في رسايل tool، ومحادثة
-// طويلة فيها رحلات ذهاب وإياب كتير مع استدعاءات أدوات).
-const MAX_MESSAGES = 200;
-const MAX_MESSAGE_LENGTH = 100_000;
+// مفيش حد لعدد الرسائل في الطلب الواحد — جلسات أدوات البرمجة (OpenCode/Cline)
+// بتبعت تاريخ المحادثة كله في كل لفة، فأي سقف لعدد الرسائل بيقطع الجلسات
+// الطويلة بخطأ 400 من غير ما توصل للموديل أصلًا. الحماية الحقيقية من الاستهلاك
+// الضخم موجودة بره: فحص رصيد الـ API قبل الطلب + خصم بالتوكنز/التكلفة الفعلية
+// بعد الرد + rate limit لكل مفتاح. السقف الوحيد المتبقي طول الرسالة الواحدة —
+// رقم سخي يستوعب محتوى ملفات كاملة وoutputs أدوات كبيرة في رسالة tool واحدة.
+const MAX_MESSAGE_LENGTH = 400_000;
 
 const GENERIC_MISSING_KEY_MESSAGE = "مفتاح API مفقود أو غير صالح";
 const GENERIC_UPSTREAM_ERROR = "حصل خطأ غير متوقع أثناء توليد الرد — جرب تاني.";
@@ -317,13 +317,6 @@ export async function POST(req: NextRequest) {
   const extPriceOutMicro = extModelCfg?.priceOutMicro ?? 0;
   // ربح الأدمن الثابت لكل مليون وحدة (يتضاف فوق التكلفة × الهامش)
   const extProfitMicro = extModelCfg?.profitUsdMicro ?? 0;
-
-  if (rawMessages.length > MAX_MESSAGES) {
-    return NextResponse.json(
-      { error: `أقصى عدد رسائل مسموح في الطلب الواحد: ${MAX_MESSAGES}` },
-      { status: 400 }
-    );
-  }
 
   const apiMessages: ApiMessage[] = [];
   for (const m of rawMessages) {
