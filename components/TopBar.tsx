@@ -233,13 +233,11 @@ function TokensBadge({
 
 /** اختيار الموديل — يُستخدم تحت خانة الكتابة (مضغوط، القايمة تفتح لفوق) زي كلود. */
 export function ModelPicker({
-  lockedModel,
   onPickModel,
   onLockedModel,
   compact,
   dropUp,
 }: {
-  lockedModel?: ModelId | null;
   onPickModel: (id: ModelId) => void;
   onLockedModel?: (id: ModelId) => void;
   compact?: boolean;
@@ -265,7 +263,7 @@ export function ModelPicker({
     };
   }, [open]);
 
-  const displayId = lockedModel ?? model;
+  const displayId = model;
   const currentLabel = models.find((m) => m.id === displayId)?.label ?? models[0]?.label ?? displayId;
   // الشات النصي قابل للاختيار — وصفوف الصوت قسم منفصل "قريبًا" (مش قابل للاختيار)
   const pickable = models.filter((m) => !m.comingSoon);
@@ -290,7 +288,6 @@ export function ModelPicker({
         ) : (
           <span dir="ltr" className={cn("font-semibold tracking-title text-ink", compact ? "text-[12.5px]" : "text-[15px]")}>{currentLabel}</span>
         )}
-        {lockedModel && <Lock size={11} className="text-ink-3" aria-hidden="true" />}
         <ChevronDown
           size={compact ? 12 : 14}
           className={cn("text-ink-3 transition-transform duration-2 ease-soft", open && "rotate-180")}
@@ -392,12 +389,6 @@ export function ModelPicker({
                 </div>
               ))}
             </>
-          )}
-          {lockedModel && (
-            <p className="mt-1 flex gap-2 border-t border-hair px-2.5 pb-1 pt-2.5 text-[11.5px] leading-5 text-ink-3">
-              <Lock size={12} className="mt-1 shrink-0" />
-              {t("modelLockedHint")}
-            </p>
           )}
         </div>
       )}

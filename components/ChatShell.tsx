@@ -58,24 +58,6 @@ function isPreviewCommand(text: string): boolean {
   );
 }
 
-function loadSessionModels(): Record<string, ModelId> {
-  try {
-    const raw = localStorage.getItem(SESSION_MODELS_KEY);
-    if (raw) return JSON.parse(raw) as Record<string, ModelId>;
-  } catch {
-    // تجاهل
-  }
-  return {};
-}
-
-function saveSessionModels(map: Record<string, ModelId>) {
-  try {
-    localStorage.setItem(SESSION_MODELS_KEY, JSON.stringify(map));
-  } catch {
-    // تجاهل
-  }
-}
-
 /**
  * بيجمّع شنكات البث ويطبّقها مرة واحدة كل فريم (requestAnimationFrame) بدل setState
  * مع كل شنك — عدد ريندرات أقل بكتير، فالنص بينزل بسلاسة ومن غير تهنيج على الموبايل.
@@ -163,10 +145,13 @@ export default function ChatShell() {
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
 
-  // كل شات بيتثبت على أول موديل اتبعتله رسالة بيه لحد ما يتفتح شات جديد
-  const [sessionModels, setSessionModels] = useState<Record<string, ModelId>>({});
   useEffect(() => {
-    setSessionModels(loadSessionModels());
+    // تنظيف مفتاح قديم كان بيثبّت كل شات على موديل واحد (الميزة اتلغت)
+    try {
+      localStorage.removeItem(SESSION_MODELS_KEY);
+    } catch {
+      // تجاهل
+    }
     try {
       setSidebarCollapsed(localStorage.getItem(SIDEBAR_KEY) === "1");
     } catch {
@@ -192,13 +177,9 @@ export default function ChatShell() {
   const messagesRef = useRef<ChatMessage[]>([]);
   messagesRef.current = messages;
 
-  const lockedModel: ModelId | undefined = currentSessionId
-    ? sessionModels[currentSessionId]
-    : undefined;
-
   // المايك يظهر فقط لو موديل الشات الحالي مفعّل له من الأدمن
   const composerSupportsMic =
-    (models ?? []).find((m) => m.id === (lockedModel ?? model))?.supportsMic === true;
+    (models ?? []).find((m) => m.id === model)?.supportsMic === true;
 
   const abortRef = useRef<AbortController | null>(null);
   // جلسة فيها إرسال شغّال حاليًا — بنمنع بيها refresh الرسايل (لما شات جديد
@@ -221,33 +202,11 @@ export default function ChatShell() {
     }, 6000);
   }, []);
 
-  const lockSessionModel = useCallback((sessionId: string, m: ModelId) => {
-    setSessionModels((prev) => {
-      if (prev[sessionId]) return prev;
-      const next = { ...prev, [sessionId]: m };
-      saveSessionModels(next);
-      return next;
-    });
-  }, []);
-
-  const forgetSessionModel = useCallback((sessionId: string) => {
-    setSessionModels((prev) => {
-      if (!(sessionId in prev)) return prev;
-      const next = { ...prev };
-      delete next[sessionId];
-      saveSessionModels(next);
-      return next;
-    });
-  }, []);
-
   const handlePickModel = useCallback(
     (id: ModelId) => {
       setModel(id);
-      if (lockedModel && lockedModel !== id) {
-        showToast(t("toastModelLocked", { current: lockedModel, picked: id }));
-      }
     },
-    [lockedModel, setModel, showToast, t]
+    [setModel]
   );
 
   const toggleSidebar = useCallback(() => {
@@ -476,9 +435,8 @@ export default function ChatShell() {
       } catch {
         // تجاهل
       }
-      forgetSessionModel(id);
     },
-    [forgetSessionModel]
+    []
   );
 
   /** بدء محادثة مؤقتة — رسايلها مش بتظهر في القايمة وبتتمسح عند الخروج */
@@ -575,7 +533,6 @@ export default function ChatShell() {
       action: async () => {
         try {
           await fetch(`/api/sessions/${id}`, { method: "DELETE" });
-          forgetSessionModel(id);
           const list = await refreshSessions();
           if (currentSessionRef.current === id) {
             setCurrentSessionId(list.length > 0 ? list[0].id : null);
@@ -597,12 +554,6 @@ export default function ChatShell() {
       setMessages([]);
       markLoaded(null);
       setPanelOpen(false);
-      setSessionModels({});
-      try {
-        localStorage.removeItem(SESSION_MODELS_KEY);
-      } catch {
-        // تجاهل
-      }
     } catch {
       showToast(t("toastClearFail"));
       throw new Error("clear failed");
@@ -714,8 +665,7 @@ export default function ChatShell() {
       }
       inFlightSessionRef.current = sessionId;
 
-      const effectiveModel = sessionModels[sessionId] ?? model;
-      lockSessionModel(sessionId, effectiveModel);
+      const effectiveModel = model;
 
       // نبني كتلة المرفقات (بيانات الصور Base64 + محتوى الملفات النصية المستخرج)
       // ونحطها في نص الرسالة الفعلي المتخزّن — عشان الموديل يقدر يقرا محتوى
@@ -916,8 +866,6 @@ export default function ChatShell() {
       lang,
       tone,
       model,
-      sessionModels,
-      lockSessionModel,
       customInstructions,
       nickname,
       t,
@@ -958,7 +906,7 @@ export default function ChatShell() {
       abortRef.current = controller;
       let accContent = "";
       const batch = createChunkBatcher((c) => setContinuationStreamingContent((prev) => prev + c));
-      const effectiveModel = sessionModels[sessionId] ?? model;
+      const effectiveModel = model;
 
       try {
         const res = await fetch("/api/chat/continue", {
@@ -1031,7 +979,6 @@ export default function ChatShell() {
       lang,
       tone,
       model,
-      sessionModels,
       customInstructions,
       nickname,
       t,
@@ -1422,7 +1369,6 @@ export default function ChatShell() {
                   onStop={stopGeneration}
                   disabled={!authChecked}
                   micEnabled={composerSupportsMic}
-                  lockedModel={lockedModel}
                   onPickModel={handlePickModel}
                   onLockedModel={() => {
                     showToast(t("modelLockedToast"));
@@ -1461,7 +1407,6 @@ export default function ChatShell() {
               onStop={stopGeneration}
               disabled={!authChecked}
               micEnabled={composerSupportsMic}
-              lockedModel={lockedModel}
               onPickModel={handlePickModel}
               onLockedModel={() => {
                 showToast(t("modelLockedToast"));

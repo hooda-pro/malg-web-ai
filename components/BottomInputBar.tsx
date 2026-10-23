@@ -68,7 +68,6 @@ export default function BottomInputBar({
   onStop,
   disabled,
   embedded,
-  lockedModel,
   onPickModel,
   onLockedModel,
   micEnabled,
@@ -82,8 +81,6 @@ export default function BottomInputBar({
   disabled: boolean;
   /** وضع المنتصف (شات جديد): بدون حواف جانبية إضافية */
   embedded?: boolean;
-  /** الموديل اللي الشات الحالي متثبت عليه (لو اتبعت فيه رسايل بالفعل) */
-  lockedModel?: ModelId | null;
   onPickModel: (id: ModelId) => void;
   /** ضغطة على موديل مقفول (اشتراك) — تفتح الباقات بدل الاختيار */
   onLockedModel?: (id: ModelId) => void;
@@ -620,7 +617,6 @@ export default function BottomInputBar({
         <ModelPicker
           compact
           dropUp
-          lockedModel={lockedModel}
           onPickModel={onPickModel}
           onLockedModel={onLockedModel}
         />
