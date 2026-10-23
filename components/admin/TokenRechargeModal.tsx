@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 import { Coins, Loader2, X } from "lucide-react";
-import { formatTokens } from "@/lib/ai";
+import { formatBalance } from "@/lib/ai";
 import type { AdminUserDetail } from "./adminTypes";
 
 type Mode = "add" | "set" | "reset";
 
-const QUICK_ADD = [50_000, 100_000, 250_000, 500_000, 1_000_000];
-const QUICK_SET = [100_000, 500_000, 1_000_000, 2_000_000];
+/** المبالغ السريعة بالدولار */
+const QUICK_ADD = [1, 2, 5, 10, 25];
+const QUICK_SET = [2, 5, 10, 20];
 
-/** نافذة إدارة رصيد توكنز مستخدم — شحن إضافي، رصيد محدد، أو تصفير الاستهلاك */
+/** نافذة إدارة رصيد شات مستخدم — شحن إضافي، رصيد محدد، أو تصفير الاستهلاك. المبالغ بالدولار (تحديث ١٩). */
 export default function TokenRechargeModal({
   user,
   onClose,
@@ -21,19 +22,19 @@ export default function TokenRechargeModal({
   onDone: () => void;
 }) {
   const [mode, setMode] = useState<Mode>("add");
-  const [amount, setAmount] = useState("100000");
+  const [amount, setAmount] = useState("2");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const submit = async () => {
     setError(null);
-    const parsed = Math.floor(Number(amount));
+    const parsed = Number(String(amount).replace(",", "."));
     if (mode !== "reset" && (!Number.isFinite(parsed) || parsed < 0)) {
-      setError("أدخل رقم توكنز صحيح");
+      setError("أدخل مبلغ بالدولار صحيح (مثال: 2.5)");
       return;
     }
     if (mode === "add" && parsed <= 0) {
-      setError("كمية الشحن لازم تكون أكبر من صفر");
+      setError("مبلغ الشحن لازم يكون أكبر من صفر");
       return;
     }
 
@@ -65,7 +66,7 @@ export default function TokenRechargeModal({
         <div className="flex items-center justify-between px-6 pb-2 pt-6">
           <div className="flex items-center gap-2">
             <Coins size={15} className="text-accent" />
-            <h3 className="text-[18px] font-semibold tracking-title text-ink">إدارة رصيد التوكنز</h3>
+            <h3 className="text-[18px] font-semibold tracking-title text-ink">إدارة رصيد الشات</h3>
           </div>
           <button onClick={onClose} aria-label="إغلاق" className="-me-2 grid h-8 w-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-3 hover:text-ink">
             <X size={15} />
@@ -78,13 +79,13 @@ export default function TokenRechargeModal({
             <div className="tnum flex items-center justify-between text-[12px]">
               <span className="text-ink-3">الرصيد الحالي</span>
               <span className="text-ink">
-                {formatTokens(user.usedTokens)} / {formatTokens(user.totalAllocatedTokens)}
+                {formatBalance(user.usedMicro)} / {formatBalance(user.totalMicro)}
               </span>
             </div>
             <div className="tnum mt-1 flex items-center justify-between text-[12px]">
               <span className="text-ink-3">المتبقي</span>
               <span className="text-accent">
-                {formatTokens(Math.max(user.totalAllocatedTokens - user.usedTokens, 0))}
+                {formatBalance(Math.max(user.totalMicro - user.usedMicro, 0))}
               </span>
             </div>
           </div>
@@ -120,12 +121,12 @@ export default function TokenRechargeModal({
                 <Coins size={14} className="shrink-0 text-ink-3" />
                 <input
                   value={amount}
-                  onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ""))}
-                  inputMode="numeric"
+                  onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))}
+                  inputMode="decimal"
                   dir="ltr"
                   autoFocus
                   className="w-full bg-transparent text-[13.5px] text-ink focus:outline-none"
-                  placeholder="عدد التوكنز"
+                  placeholder="مبلغ بالدولار (مثال: 2.5)"
                   onKeyDown={(e) => e.key === "Enter" && submit()}
                 />
               </div>
@@ -137,7 +138,7 @@ export default function TokenRechargeModal({
                     className="tnum rounded border border-hair px-2 py-1 text-[11.5px] text-ink-2 transition-colors hover:border-accent-line hover:text-accent"
                   >
                     {mode === "add" ? "+" : "="}
-                    {formatTokens(v)}
+                    {formatBalance(Math.round(v * 1_000_000))}
                   </button>
                 ))}
               </div>

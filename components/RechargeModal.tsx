@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Check, Copy, Crown, Lock, MessageCircle, Zap } from "lucide-react";
-import { formatTokens } from "@/lib/ai";
+import { formatBalance } from "@/lib/ai";
 import type { SessionUser } from "@/lib/types";
 import type { SubscriptionInfo } from "@/lib/plans";
 import {
@@ -22,12 +22,8 @@ const STEPS = [
   "بعد تأكيد الدفع الرصيد بيتضاف لحسابك على طول",
 ];
 
-function perMillion(pkg: RechargePackage): number {
-  return Math.round((pkg.price / pkg.tokens) * 1_000_000);
-}
-
 /**
- * شحن الرصيد: باقات توكنز + تحويل على واتساب الدعم برسالة جاهزة
+ * شحن الرصيد: باقات رصيد بالدولار + تحويل على واتساب الدعم برسالة جاهزة
  * فيها بيانات الحساب والباقة المختارة.
  */
 export default function RechargeModal({
@@ -47,7 +43,6 @@ export default function RechargeModal({
   const [selectedId, setSelectedId] = useState<string>(defaultPkg.id);
   const [copied, setCopied] = useState(false);
   const selected = RECHARGE_PACKAGES.find((p) => p.id === selectedId) ?? defaultPkg;
-  const basePerMillion = perMillion(RECHARGE_PACKAGES[0]);
 
   const openWhatsApp = (pkg: RechargePackage | null) => {
     const url = buildWhatsAppLink(buildRechargeMessage(pkg, user));
@@ -74,7 +69,7 @@ export default function RechargeModal({
       size="md"
       labelledBy="mlag-recharge-title"
       title="شحن الرصيد"
-      subtitle="زوّد رصيد التوكنز بتاعك وكمّل شغلك من غير ما تستنى التجديد."
+      subtitle="زوّد رصيدك بتاعك وكمّل شغلك من غير ما تستنى التجديد."
       footer={
         locked ? (
           <Button variant="primary" onClick={onOpenPlans} className="w-full">
@@ -87,10 +82,10 @@ export default function RechargeModal({
             {remaining !== null ? (
               <>
                 رصيدك الحالي{" "}
-                <span className="font-semibold text-ink">{formatTokens(remaining)}</span>
+                <span className="font-semibold text-ink">{formatBalance(remaining)}</span>
                 {" → "}
                 <span className="font-semibold text-accent">
-                  {formatTokens(remaining + selected.tokens)}
+                  {formatBalance(remaining + selected.balanceMicro)}
                 </span>
               </>
             ) : (
@@ -111,7 +106,7 @@ export default function RechargeModal({
             <Lock size={15} className="text-warn" />
             الشحن للمشتركين فقط
           </p>
-          <p className="mt-1 text-[12.5px] leading-6 text-ink-2">اشترك في باقة Pro أولًا، ثم اشحن التوكنز بحرية.</p>
+          <p className="mt-1 text-[12.5px] leading-6 text-ink-2">اشترك في باقة Pro أولًا، ثم اشحن رصيدك بحرية.</p>
           <Button variant="primary" size="sm" onClick={onOpenPlans} className="mt-3">
             <Crown size={14} />
             اشترك في Pro
@@ -128,8 +123,6 @@ export default function RechargeModal({
       >
         {RECHARGE_PACKAGES.map((pkg) => {
           const active = pkg.id === selectedId;
-          const pm = perMillion(pkg);
-          const saving = Math.round(((basePerMillion - pm) / basePerMillion) * 100);
           return (
             <button
               key={pkg.id}
@@ -158,9 +151,9 @@ export default function RechargeModal({
               <span className="mt-2 flex items-baseline gap-1.5">
                 <Zap size={14} className="self-center text-accent" />
                 <span className="tnum text-[24px] font-semibold leading-none tracking-display text-ink">
-                  {formatTokens(pkg.tokens)}
+                  {formatBalance(pkg.balanceMicro)}
                 </span>
-                <span className="text-[12px] text-ink-3">توكنز</span>
+                <span className="text-[12px] text-ink-3">رصيد</span>
               </span>
               <span className="mt-3 flex items-center justify-between gap-2 border-t border-hair pt-3">
                 <span className="tnum text-[15px] font-semibold text-ink">{pkg.price} جنيه</span>
@@ -168,11 +161,7 @@ export default function RechargeModal({
                   <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent">
                     {pkg.badge}
                   </span>
-                ) : saving > 0 ? (
-                  <span className="tnum text-[11.5px] font-medium text-live">وفّر {saving}%</span>
-                ) : (
-                  <span className="tnum text-[11.5px] text-ink-3">{pm} ج / مليون</span>
-                )}
+                ) : null}
               </span>
             </button>
           );

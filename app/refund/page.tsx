@@ -24,9 +24,9 @@ export default function RefundPage() {
       </section>
 
       <section className="mt-6">
-        <h2 className="text-lg font-semibold">2. التوكنز مسبقة الدفع</h2>
+        <h2 className="text-lg font-semibold">2. الرصيد مسبق الدفع</h2>
         <p className="mt-2">
-          رصيد التوكنز المشحون وغير المستخدم بالكامل قابل للاسترداد خلال 14
+          الرصيد المشحون وغير المستخدم بالكامل قابل للاسترداد خلال 14
           يومًا من تاريخ الشراء، بشرط عدم استهلاك أي جزء منه.
         </p>
       </section>

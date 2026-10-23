@@ -16,9 +16,8 @@ import {
   Zap,
 } from "lucide-react";
 import type { SessionUser } from "@/lib/types";
-import { formatTokens } from "@/lib/ai";
+import { formatBalance } from "@/lib/ai";
 import {
-  API_TOKEN_PRICE_PER_MILLION,
   buildApiRechargeMessage,
   buildWhatsAppLink,
 } from "@/lib/recharge";
@@ -50,7 +49,7 @@ interface ApiKeyRow {
   createdAt: string;
 }
 
-const QUICK_AMOUNTS = [1_000_000, 5_000_000, 10_000_000];
+const QUICK_AMOUNTS = [2_000_000, 5_000_000, 20_000_000];
 
 type SnippetId = "curl" | "python" | "js" | "cline" | "opencode" | "codex" | "claude";
 
@@ -63,10 +62,6 @@ const SNIPPET_TABS: { id: SnippetId; label: string }[] = [
   { id: "codex", label: "Codex CLI" },
   { id: "claude", label: "Claude Code" },
 ];
-
-function priceFor(tokens: number): number {
-  return Math.round((tokens / 1_000_000) * API_TOKEN_PRICE_PER_MILLION);
-}
 
 type TFn = (key: string, params?: Record<string, string | number>) => string;
 
@@ -255,7 +250,7 @@ export default function ApiKeysPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t("akLoadError"));
       setKeys(data.keys || []);
-      if (data.quota) setQuota({ total: data.quota.totalAllocatedTokens, used: data.quota.usedTokens });
+      if (data.quota) setQuota({ total: data.quota.totalMicro, used: data.quota.usedMicro });
     } catch (e) {
       setError(e instanceof Error ? e.message : t("akLoadError"));
     } finally {
@@ -275,8 +270,8 @@ export default function ApiKeysPage() {
   const base = origin || "https://your-domain";
   const snip = useMemo(() => buildSnippet(snippet, base, t), [snippet, base, t]);
 
-  const openWhatsApp = (tokens: number | null) => {
-    const url = buildWhatsAppLink(buildApiRechargeMessage(tokens, user));
+  const openWhatsApp = (balance: number | null) => {
+    const url = buildWhatsAppLink(buildApiRechargeMessage(balance, user));
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
@@ -439,7 +434,7 @@ export default function ApiKeysPage() {
           <div className="border-b border-hair p-5 sm:border-b-0 sm:border-e">
             <p className="text-[12.5px] text-ink-3">{t("akBalanceRemaining")}</p>
             <p className="tnum mt-1.5 text-[28px] font-semibold leading-none tracking-display text-ink">
-              {loading && !quota ? "—" : formatTokens(remaining)}
+              {loading && !quota ? "—" : formatBalance(remaining)}
             </p>
             <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-surface-3">
               <div
@@ -451,9 +446,9 @@ export default function ApiKeysPage() {
           <div className="border-b border-hair p-5 sm:border-b-0 sm:border-e">
             <p className="text-[12.5px] text-ink-3">{t("akUsed")}</p>
             <p className="tnum mt-1.5 text-[28px] font-semibold leading-none tracking-display text-ink">
-              {formatTokens(quota?.used ?? 0)}
+              {formatBalance(quota?.used ?? 0)}
             </p>
-            <p className="tnum mt-3 text-[12.5px] text-ink-3">{t("akOfTotal", { total: formatTokens(quota?.total ?? 0) })}</p>
+            <p className="tnum mt-3 text-[12.5px] text-ink-3">{t("akOfTotal", { total: formatBalance(quota?.total ?? 0) })}</p>
           </div>
           <div className="p-5">
             <p className="text-[12.5px] text-ink-3">{t("akActiveKeys")}</p>
@@ -616,17 +611,17 @@ export default function ApiKeysPage() {
           <SectionHead
             id="topup-title"
             title={t("akTopupTitle")}
-            hint={t("akTopupHint", { price: API_TOKEN_PRICE_PER_MILLION })}
+            hint={t("akTopupHint")}
           />
           <div role="radiogroup" aria-label={t("akAmountAria")} className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-            {QUICK_AMOUNTS.map((tokens) => {
-              const active = amount === tokens;
+            {QUICK_AMOUNTS.map((micro) => {
+              const active = amount === micro;
               return (
                 <button
-                  key={tokens}
+                  key={micro}
                   role="radio"
                   aria-checked={active}
-                  onClick={() => setAmount(tokens)}
+                  onClick={() => setAmount(micro)}
                   className={cn(
                     "flex items-center justify-between gap-3 rounded-lg border bg-surface p-4 text-start shadow-1 transition-all duration-2 ease-soft",
                     active ? "border-accent shadow-[0_0_0_3.5px_var(--accent-soft)]" : "border-hair hover:border-hair-2"
@@ -636,10 +631,10 @@ export default function ApiKeysPage() {
                     <span className="flex items-center gap-1.5">
                       <Zap size={13} className="text-accent" />
                       <span className="tnum text-[20px] font-semibold tracking-title text-ink">
-                        {formatTokens(tokens)}
+                        {formatBalance(micro)}
                       </span>
                     </span>
-                    <span className="tnum mt-1 block text-[13px] text-ink-2">{formatTokens(priceFor(tokens))} {t("akCurrency")}</span>
+                    <span className="mt-1 block text-[13px] text-ink-2">{t("akBalanceUnit")}</span>
                   </span>
                   <span
                     className={cn(
@@ -663,7 +658,7 @@ export default function ApiKeysPage() {
             </button>
             <Button variant="primary" onClick={() => openWhatsApp(amount)}>
               <MessageCircle size={15} />
-              {t("akRechargeWatsapp", { amount: formatTokens(amount) })}
+              {t("akRechargeWatsapp", { amount: formatBalance(amount) })}
             </Button>
           </div>
         </section>

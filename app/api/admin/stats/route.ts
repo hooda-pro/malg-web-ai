@@ -30,22 +30,22 @@ export async function GET() {
     SELECT
       (SELECT COUNT(*)::int FROM chat_sessions) AS total_sessions,
       (SELECT COUNT(*)::int FROM chat_messages) AS total_messages,
-      (SELECT COALESCE(SUM(total_allocated_tokens), 0) FROM user_quota) AS total_allocated,
-      (SELECT COALESCE(SUM(used_tokens), 0) FROM user_quota) AS total_used
+      (SELECT COALESCE(SUM(total_micro), 0) FROM user_credits) AS total_balance_micro,
+      (SELECT COALESCE(SUM(used_micro), 0) FROM user_credits) AS total_used_micro
   `)[0] as {
     total_sessions: number;
     total_messages: number;
-    total_allocated: unknown;
-    total_used: unknown;
+    total_balance_micro: unknown;
+    total_used_micro: unknown;
   };
 
   const topUsers = (await sql`
-    SELECT u.id, u.display_name, u.email, q.used_tokens, q.total_allocated_tokens
+    SELECT u.id, u.display_name, u.email, c.used_micro, c.total_micro
     FROM users u
-    JOIN user_quota q ON q.user_id = u.id
-    ORDER BY q.used_tokens DESC
+    JOIN user_credits c ON c.user_id = u.id
+    ORDER BY c.used_micro DESC
     LIMIT 5
-  `) as { id: string; display_name: string; email: string; used_tokens: unknown; total_allocated_tokens: unknown }[];
+  `) as { id: string; display_name: string; email: string; used_micro: unknown; total_micro: unknown }[];
 
   const recentUsers = (await sql`
     SELECT id, display_name, email, created_at
@@ -63,14 +63,14 @@ export async function GET() {
       newWeek: Number(userRows?.new_week ?? 0),
       totalSessions: Number(chatRows?.total_sessions ?? 0),
       totalMessages: Number(chatRows?.total_messages ?? 0),
-      totalAllocated: Number(chatRows?.total_allocated ?? 0),
-      totalUsed: Number(chatRows?.total_used ?? 0),
+      totalBalanceMicro: Number(chatRows?.total_balance_micro ?? 0),
+      totalUsedMicro: Number(chatRows?.total_used_micro ?? 0),
       topUsers: topUsers.map((r) => ({
         id: r.id,
         displayName: r.display_name,
         email: r.email,
-        usedTokens: Number(r.used_tokens ?? 0),
-        totalAllocatedTokens: Number(r.total_allocated_tokens ?? 0),
+        usedMicro: Number(r.used_micro ?? 0),
+        totalMicro: Number(r.total_micro ?? 0),
       })),
       recentUsers: recentUsers.map((r) => ({
         id: r.id,

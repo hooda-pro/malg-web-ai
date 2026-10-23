@@ -55,6 +55,10 @@ export interface ProviderConfig {
   maxTokens: number;
   tier: ModelTier;
   costMultiplier: number;
+  /** سعر الموديل بالدولار لكل مليون وحدة إدخال — بالـmicro-dollar (0 = مجاني بلا خصم) */
+  priceInMicro: number;
+  /** سعر الموديل بالدولار لكل مليون وحدة إخراج — بالـmicro-dollar (0 = مجاني بلا خصم) */
+  priceOutMicro: number;
   supportsVideo: boolean;
   /** التسجيل الصوتي (مايك → نص) متاح مع هذا الموديل — يحدده الأدمن */
   supportsMic: boolean;
@@ -85,6 +89,11 @@ export interface ModelSummary {
   updatedAt: string | null;
   tier: ModelTier;
   costMultiplier: number;
+  /** سعر الإدخال/الإخراج بالدولار لكل مليون وحدة — بالـmicro-dollar (0 = مجاني بلا خصم) */
+  priceInMicro: number;
+  priceOutMicro: number;
+  /** ملاحظة السياق المعروضة (مثال: "1.0M") — تعريفية فقط */
+  contextNote: string;
   supportsVideo: boolean;
   /** التسجيل الصوتي (مايك → نص) متاح مع هذا الموديل — يحدده الأدمن */
   supportsMic: boolean;
@@ -121,6 +130,9 @@ export interface ModelRow {
   max_tokens: unknown;
   tier: unknown;
   cost_multiplier: unknown;
+  price_in_usd?: unknown;
+  price_out_usd?: unknown;
+  context_note?: unknown;
   supports_video: unknown;
   is_active: boolean;
   is_default: unknown;
@@ -179,6 +191,8 @@ function modelRowToConfig(r: ModelRow): ModelProviderConfig {
     protocol: r.protocol,
     tier: r.tier,
     cost_multiplier: r.cost_multiplier,
+    price_in_usd: r.price_in_usd,
+    price_out_usd: r.price_out_usd,
     supports_video: r.supports_video,
   });
   return {
@@ -202,6 +216,11 @@ function modelRowToSummary(r: ModelRow): ModelSummary {
     updatedAt: r.updated_at ?? null,
     tier: (r as { tier?: unknown }).tier === "paid" ? "paid" : "free",
     costMultiplier: clampCostMultiplier((r as { cost_multiplier?: unknown }).cost_multiplier),
+    priceInMicro: clampPriceMicro((r as { price_in_usd?: unknown }).price_in_usd),
+    priceOutMicro: clampPriceMicro((r as { price_out_usd?: unknown }).price_out_usd),
+    contextNote: typeof (r as { context_note?: unknown }).context_note === "string"
+      ? String((r as { context_note?: unknown }).context_note).slice(0, 40)
+      : "",
     supportsVideo: (r as { supports_video?: unknown }).supports_video === true,
     supportsMic: (r as { supports_mic?: unknown }).supports_mic === true,
     sortOrder: Number((r as { sort_order?: unknown }).sort_order ?? 0) || 0,
@@ -228,14 +247,14 @@ export function invalidateModelCache(modelId?: string) {
 async function selectModelRows(whereActive: boolean): Promise<ModelRow[]> {
   if (whereActive) {
     return (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, modality, tts_voice, capabilities, audio_formats
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, modality, tts_voice, capabilities, audio_formats, price_in_usd, price_out_usd, context_note
       FROM ai_models
       WHERE is_active = TRUE
       ORDER BY is_default DESC, sort_order ASC, created_at ASC
     `) as ModelRow[];
   }
   return (await sql`
-    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, modality, tts_voice, capabilities, audio_formats
+    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, modality, tts_voice, capabilities, audio_formats, price_in_usd, price_out_usd, context_note
     FROM ai_models
     ORDER BY is_default DESC, sort_order ASC, created_at ASC
   `) as ModelRow[];
@@ -369,7 +388,7 @@ export async function getModelProvider(modelId: string): Promise<ModelProviderCo
 
   try {
     const rows = (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, price_in_usd, price_out_usd
       FROM ai_models
       WHERE id = ${id} AND is_active = TRUE
       LIMIT 1
@@ -381,7 +400,7 @@ export async function getModelProvider(modelId: string): Promise<ModelProviderCo
     }
     // fallback: الموديل الافتراضي النشط
     const defs = (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, price_in_usd, price_out_usd
       FROM ai_models
       WHERE is_active = TRUE
       ORDER BY is_default DESC, sort_order ASC, created_at ASC
@@ -436,7 +455,7 @@ export interface TtsModelConfig {
  * بيشمّل صفوف Modality='tts' + صفوف «النماذج الصوتية» (stt) اللي ليها قدرة tts. */
 export async function getTtsModelConfig(modelId?: string): Promise<TtsModelConfig> {
   const rows = (await sql`
-    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, modality, tts_voice, capabilities, audio_formats
+    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, modality, tts_voice, capabilities, audio_formats, price_in_usd, price_out_usd
     FROM ai_models
     WHERE is_active = TRUE AND (modality = 'tts' OR (modality = 'stt' AND capabilities LIKE '%tts%'))
     ORDER BY is_default DESC, sort_order ASC, created_at ASC
@@ -460,7 +479,7 @@ export async function getTtsModelConfig(modelId?: string): Promise<TtsModelConfi
 export async function getSavedModelProvider(modelId: string): Promise<ModelProviderConfig | null> {  const id = sanitizeModelId(modelId) || "malg-ai";
   try {
     const rows = (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, price_in_usd, price_out_usd
       FROM ai_models
       WHERE id = ${id}
       LIMIT 1
@@ -520,6 +539,8 @@ function envFallback(): ProviderConfig {
     maxTokens: 128000,
     tier: "free",
     costMultiplier: 1,
+    priceInMicro: 0,
+    priceOutMicro: 0,
     supportsVideo: false,
     supportsMic: false,
     isActive: true,
@@ -560,6 +581,8 @@ export interface ProviderRow {
   protocol?: unknown;
   tier?: unknown;
   cost_multiplier?: unknown;
+  price_in_usd?: unknown;
+  price_out_usd?: unknown;
   supports_video?: unknown;
   supports_mic?: unknown;
 }
@@ -568,6 +591,13 @@ function clampCostMultiplier(v: unknown): number {
   const n = Number(v);
   if (!Number.isFinite(n)) return 1;
   return Math.min(Math.max(n, 1), 50);
+}
+
+/** سعر الموديل بالـµ$ لكل مليون وحدة — الأصفار/السوالب/اللابسكيب = مجاني؛ سقف أمان $1000/1M. */
+function clampPriceMicro(v: unknown): number {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(Math.round(n), 1_000_000_000);
 }
 
 export function rowToConfig(r: ProviderRow): ProviderConfig {
@@ -582,6 +612,8 @@ export function rowToConfig(r: ProviderRow): ProviderConfig {
     protocol,
     tier: r.tier === "paid" ? "paid" : "free",
     costMultiplier: clampCostMultiplier(r.cost_multiplier),
+    priceInMicro: clampPriceMicro((r as { price_in_usd?: unknown }).price_in_usd),
+    priceOutMicro: clampPriceMicro((r as { price_out_usd?: unknown }).price_out_usd),
     supportsVideo: r.supports_video === true,
     supportsMic: (r as { supports_mic?: unknown }).supports_mic === true,
     model: r.model,

@@ -21,9 +21,9 @@ export async function GET() {
            (SELECT COUNT(*)::int FROM chat_messages m
               JOIN chat_sessions s2 ON s2.id = m.session_id
              WHERE s2.user_id = u.id) AS messages_count,
-           q.used_tokens
+           c.used_micro
     FROM users u
-    LEFT JOIN user_quota q ON q.user_id = u.id
+    LEFT JOIN user_credits c ON c.user_id = u.id
     WHERE u.deletion_requested_at IS NOT NULL
     ORDER BY u.deletion_requested_at ASC
     LIMIT 200
@@ -36,7 +36,7 @@ export async function GET() {
     created_at: string;
     sessions_count: number;
     messages_count: number;
-    used_tokens: unknown;
+    used_micro: unknown;
   }[];
 
   return NextResponse.json({
@@ -49,7 +49,7 @@ export async function GET() {
       createdAt: r.created_at,
       sessionsCount: Number(r.sessions_count ?? 0),
       messagesCount: Number(r.messages_count ?? 0),
-      usedTokens: Number(r.used_tokens ?? 0),
+      usedMicro: Number(r.used_micro ?? 0),
     })),
   });
 }

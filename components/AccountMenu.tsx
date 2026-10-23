@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import type { SessionUser } from "@/lib/types";
 import type { SubscriptionInfo } from "@/lib/plans";
-import { formatTokens } from "@/lib/ai";
+import { formatBalance } from "@/lib/ai";
 import { Kbd, modKeyLabel } from "./ui/Controls";
 import { useSettings, type Theme } from "./SettingsContext";
 import { cn } from "@/lib/utils";
@@ -153,7 +153,7 @@ export default function AccountMenu({
                 {user.isAdmin
                   ? "∞"
                   : remaining !== null
-                    ? t("tokensLeft", { n: formatTokens(remaining) })
+                    ? t("tokensLeft", { n: formatBalance(remaining) })
                     : "—"}
               </span>
             </span>
@@ -264,9 +264,9 @@ export default function AccountMenu({
             {user.isAdmin
               ? t("planAdmin")
               : subscription?.isPaid
-                ? `${subscription.planName} ★${remaining !== null ? ` · ${t("tokensLeft", { n: formatTokens(remaining) })}` : ""}`
+                ? `${subscription.planName} ★${remaining !== null ? ` · ${t("tokensLeft", { n: formatBalance(remaining) })}` : ""}`
                 : remaining !== null
-                  ? `${t("planFree")} · ${t("tokensLeft", { n: formatTokens(remaining) })}`
+                  ? `${t("planFree")} · ${t("tokensLeft", { n: formatBalance(remaining) })}`
                   : t("planFree")}
           </span>
         </span>

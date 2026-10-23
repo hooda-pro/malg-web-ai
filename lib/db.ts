@@ -65,8 +65,8 @@ async function seedDefaultAdmin() {
       ON CONFLICT (email) DO UPDATE SET is_admin = TRUE
     `;
     await sql`
-      INSERT INTO user_quota (user_id, total_allocated_tokens, used_tokens)
-      VALUES (${id}, 99000000, 0)
+      INSERT INTO user_credits (user_id, total_micro, used_micro)
+      VALUES (${id}, 999000000, 0)
       ON CONFLICT (user_id) DO NOTHING
     `;
     console.log(`[seed] تم إنشاء حساب الأدمن الافتراضي: ${email}`);
@@ -234,6 +234,31 @@ export function ensureSchema(): Promise<void> {
       // حجز «رد واحد شغال في نفس الوقت» لكل مستخدم (lib/usageGuard.ts)
       await sql`ALTER TABLE user_quota ADD COLUMN IF NOT EXISTS busy_until TIMESTAMPTZ`;
       await sql`ALTER TABLE user_quota ADD COLUMN IF NOT EXISTS busy_token TEXT`;
+
+      // ——— تحديث ١٩: نظام الرصيد بالدولار — التوكنز إتقفلوا، والرصيد دلوقتي بالدولار ———
+      // الوحدة الداخلية: micro-dollar (µ$) — 1$ = 1,000,000 µ$ (عدد صحيح بدون كسور).
+      // total_micro = إجمالي الرصيد المخصص، used_micro = المصعرف منه. جدول user_quota
+      // القديم بيفضل موجود كأرشيف تاريخي بس مش بيتكتب فيه تاني.
+      await sql`
+        CREATE TABLE IF NOT EXISTS user_credits (
+          user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          total_micro BIGINT NOT NULL DEFAULT 0,
+          used_micro BIGINT NOT NULL DEFAULT 0,
+          exhausted_at TIMESTAMPTZ,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `;
+      // نفس أعمدة الـlease بتاعة «رد واحد شغال» — بنفس منطق usageGuard بس على الجدول الجديد
+      await sql`ALTER TABLE user_credits ADD COLUMN IF NOT EXISTS busy_until TIMESTAMPTZ`;
+      await sql`ALTER TABLE user_credits ADD COLUMN IF NOT EXISTS busy_token TEXT`;
+
+      // ——— التسعير لكل موديل (نمط OpenRouter): سعر الإدخال/الإخراج بالدولار لكل مليون وحدة ———
+      // الأصفار = موديل مجاني (الخصم عليه صفر). القيم محفوظة بالـmicro-dollar لكل مليون وحدة.
+      await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS price_in_usd BIGINT NOT NULL DEFAULT 0`;
+      await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS price_out_usd BIGINT NOT NULL DEFAULT 0`;
+      // ملاحظة السياق المعروضة (مثال: "1.0M") — تعريفية فقط
+      await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS context_note TEXT NOT NULL DEFAULT ''`;
+
       // فهرس لحساب حد الرسايل في الدقيقة/الساعة بسرعة
       await sql`CREATE INDEX IF NOT EXISTS idx_messages_created ON chat_messages(created_at)`;
 
@@ -284,6 +309,18 @@ export function ensureSchema(): Promise<void> {
           used_tokens BIGINT NOT NULL DEFAULT 0,
           updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )
+      `;
+
+      // رصيد الـAPI دلوقتي بالـmicro-dollar كذلك + ترحيل لمرة واحدة للرصيد القديم:
+      // توكِن → micro-dollar بمعدل تجسيري 2µ$/توكن (≈ $2 لكل مليون توكن).
+      await sql`ALTER TABLE user_api_quota ADD COLUMN IF NOT EXISTS total_micro BIGINT NOT NULL DEFAULT 0`;
+      await sql`ALTER TABLE user_api_quota ADD COLUMN IF NOT EXISTS used_micro BIGINT NOT NULL DEFAULT 0`;
+      await sql`ALTER TABLE user_api_quota ADD COLUMN IF NOT EXISTS micro_migrated BOOLEAN NOT NULL DEFAULT FALSE`;
+      await sql`
+        UPDATE user_api_quota
+        SET total_micro = GREATEST(0, (total_allocated_tokens - used_tokens) * 2),
+            micro_migrated = TRUE
+        WHERE micro_migrated = FALSE
       `;
 
       await sql`

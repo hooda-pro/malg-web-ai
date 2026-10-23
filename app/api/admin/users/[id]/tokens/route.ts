@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureSchema } from "@/lib/db";
 import { requireAdmin, logAdminAction } from "@/lib/adminGuard";
-import { ensureUserQuota } from "@/lib/quota";
+import { ensureUserCredits } from "@/lib/quota";
+import { formatBalance } from "@/lib/ai";
 
 export const dynamic = "force-dynamic";
 
 /**
- * إدارة رصيد توكنز مستخدم:
+ * إدارة رصيد مستخدم (تحديث ١٩ — الرصيد بالدولار):
  * - add   : شحن مبلغ إضافي فوق الرصيد الحالي
  * - set   : تعيين الرصيد الكلي لقيمة محددة
  * - reset : تصفير الاستهلاك (المستخدم يرجع رصيده كامل من غير تغيير التخصيص)
+ * المبلغ القادم من الواجهة بالدولار (يقبل عشري، مثل 2.5) — يتخزن بالـmicro-dollar.
  */
 export async function POST(req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
   const params = await paramsPromise;
@@ -20,16 +22,17 @@ export async function POST(req: NextRequest, { params: paramsPromise }: { params
 
   const body = await req.json().catch(() => ({}));
   const mode = String(body?.mode || "");
-  const amount = Math.floor(Number(body?.amount ?? 0));
+  const amountUsd = Number(body?.amount ?? 0);
+  const amountMicro = Math.round(amountUsd * 1_000_000);
 
   if (!["add", "set", "reset"].includes(mode)) {
     return NextResponse.json({ error: "نوع العملية غير معروف" }, { status: 400 });
   }
-  if (mode !== "reset" && (!Number.isFinite(amount) || amount < 0)) {
-    return NextResponse.json({ error: "أدخل رقم توكنز صحيح (0 أو أكثر)" }, { status: 400 });
+  if (mode !== "reset" && (!Number.isFinite(amountUsd) || amountUsd < 0)) {
+    return NextResponse.json({ error: "أدخل مبلغ بالدولار صحيح (0 أو أكثر، يقبل عشري)" }, { status: 400 });
   }
-  if (mode === "add" && amount <= 0) {
-    return NextResponse.json({ error: "كمية الشحن لازم تكون أكبر من صفر" }, { status: 400 });
+  if (mode === "add" && amountMicro <= 0) {
+    return NextResponse.json({ error: "مبلغ الشحن لازم يكون أكبر من صفر" }, { status: 400 });
   }
 
   const targetRows = (await sql`
@@ -40,50 +43,50 @@ export async function POST(req: NextRequest, { params: paramsPromise }: { params
     return NextResponse.json({ error: "المستخدم غير موجود" }, { status: 404 });
   }
 
-  await ensureUserQuota(target.id);
+  await ensureUserCredits(target.id);
 
   if (mode === "add") {
     await sql`
-      UPDATE user_quota
-      SET total_allocated_tokens = total_allocated_tokens + ${amount},
-          quota_exhausted_at = NULL,
+      UPDATE user_credits
+      SET total_micro = total_micro + ${amountMicro},
+          exhausted_at = NULL,
           updated_at = now()
       WHERE user_id = ${target.id}
     `;
   } else if (mode === "set") {
     await sql`
-      UPDATE user_quota
-      SET total_allocated_tokens = ${amount},
-          quota_exhausted_at = NULL,
+      UPDATE user_credits
+      SET total_micro = ${amountMicro},
+          exhausted_at = NULL,
           updated_at = now()
       WHERE user_id = ${target.id}
     `;
   } else {
     await sql`
-      UPDATE user_quota
-      SET used_tokens = 0,
-          quota_exhausted_at = NULL,
+      UPDATE user_credits
+      SET used_micro = 0,
+          exhausted_at = NULL,
           updated_at = now()
       WHERE user_id = ${target.id}
     `;
   }
 
   const quotaRows = (await sql`
-    SELECT total_allocated_tokens, used_tokens, quota_exhausted_at
-    FROM user_quota WHERE user_id = ${target.id}
+    SELECT total_micro, used_micro, exhausted_at
+    FROM user_credits WHERE user_id = ${target.id}
   `)[0] as {
-    total_allocated_tokens: unknown;
-    used_tokens: unknown;
-    quota_exhausted_at: string | null;
+    total_micro: unknown;
+    used_micro: unknown;
+    exhausted_at: string | null;
   };
 
   const action =
-    mode === "add" ? "recharge_tokens" : mode === "set" ? "set_tokens" : "reset_usage";
+    mode === "add" ? "recharge_balance" : mode === "set" ? "set_balance" : "reset_usage";
   const details =
     mode === "add"
-      ? `شحن ${amount} توكنز لـ ${target.display_name}`
+      ? `شحن ${formatBalance(amountMicro)} لـ ${target.display_name}`
       : mode === "set"
-        ? `تعيين رصيد ${target.display_name} إلى ${amount} توكنز`
+        ? `تعيين رصيد ${target.display_name} إلى ${formatBalance(amountMicro)}`
         : `تصفير استهلاك ${target.display_name}`;
 
   await logAdminAction(guard.admin, action, target.id, target.email, details);
@@ -91,9 +94,9 @@ export async function POST(req: NextRequest, { params: paramsPromise }: { params
   return NextResponse.json({
     ok: true,
     quota: {
-      totalAllocatedTokens: Number(quotaRows?.total_allocated_tokens ?? 0),
-      usedTokens: Number(quotaRows?.used_tokens ?? 0),
-      quotaExhaustedAt: quotaRows?.quota_exhausted_at ?? null,
+      totalMicro: Number(quotaRows?.total_micro ?? 0),
+      usedMicro: Number(quotaRows?.used_micro ?? 0),
+      exhaustedAt: quotaRows?.exhausted_at ?? null,
     },
   });
 }

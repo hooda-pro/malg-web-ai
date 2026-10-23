@@ -1,12 +1,8 @@
 import { Check } from "lucide-react";
 import { FREE_PLAN, PRO_PLAN, formatUSD } from "@/lib/plans";
+import { formatBalance } from "@/lib/ai";
 import Reveal from "../Reveal";
 import SectionHeading from "./SectionHeading";
-
-function fmtTokens(n: number): string {
-  if (n >= 1_000_000) return `${new Intl.NumberFormat("en-US").format(n / 1_000_000)} مليون توكن`;
-  return `${new Intl.NumberFormat("en-US").format(n)} توكن`;
-}
 
 function Feature({ children }: { children: React.ReactNode }) {
   return (
@@ -44,7 +40,7 @@ export default function PricingSection() {
             <span className="text-[14px] text-ink-3">مجانًا دائمًا</span>
           </p>
           <ul className="mt-8 flex-1 space-y-3 text-[14.5px] leading-6 text-ink-2">
-            <Feature>{fmtTokens(FREE_PLAN.monthlyTokens)} تتجدد تلقائيًا</Feature>
+            <Feature>{formatBalance(FREE_PLAN.monthlyBalanceMicro)} رصيد متجدد تلقائيًا</Feature>
             <Feature>الوصول إلى الموديلات المجانية</Feature>
             <Feature>بحث في الويب ومعاينة حيّة</Feature>
             <Feature>محادثات محفوظة في حسابك</Feature>
@@ -80,7 +76,7 @@ export default function PricingSection() {
             </p>
           )}
           <ul className="relative mt-8 flex-1 space-y-3 text-[14.5px] leading-6 opacity-90">
-            <Feature>{fmtTokens(PRO_PLAN.monthlyTokens)} شهريًا</Feature>
+            <Feature>تسعير بالدولار لكل موديل (In/Out)</Feature>
             <Feature>كل الموديلات، بما فيها الأقوى</Feature>
             <Feature>شحن رصيد إضافي في أي وقت</Feature>
             <Feature>كل مميزات الباقة المجانية</Feature>

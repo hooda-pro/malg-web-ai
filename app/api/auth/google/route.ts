@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { sql, ensureSchema } from "@/lib/db";
 import { COOKIE_NAME, SESSION_COOKIE_MAX_AGE, signSession } from "@/lib/auth";
 import { verifyGoogleIdToken, saveProfileToFirestore } from "@/lib/firebaseAdmin";
-import { REGISTERED_TOKEN_QUOTA } from "@/lib/systemPrompt";
+import { REGISTERED_BALANCE_MICRO } from "@/lib/systemPrompt";
 import {
   DELETION_ACCOUNT_EXPIRED_MESSAGE,
   cancelAccountDeletion,
@@ -89,8 +89,8 @@ export async function POST(req: NextRequest) {
         VALUES (${id}, ${identity.email}, NULL, ${placeholderName}, FALSE, ${identity.uid}, NULL, FALSE)
       `;
       await sql`
-        INSERT INTO user_quota (user_id, total_allocated_tokens, used_tokens)
-        VALUES (${id}, ${REGISTERED_TOKEN_QUOTA}, 0)
+        INSERT INTO user_credits (user_id, total_micro, used_micro)
+        VALUES (${id}, ${REGISTERED_BALANCE_MICRO}, 0)
         ON CONFLICT (user_id) DO NOTHING
       `;
       row = {

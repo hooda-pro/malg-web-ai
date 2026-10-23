@@ -92,7 +92,7 @@ export async function POST(
   const sub = await activateSubscription(target.id, plan.id, period);
   await logAdminAction(
     guard.admin, "activate_subscription", target.id, target.email,
-    `تفعيل ${plan.name} (${period === "yearly" ? "سنوي" : "شهري"} — ${formatUSD(planPrice(plan, period))}) لـ ${target.display_name} + ${plan.monthlyTokens.toLocaleString("en-US")} توكنز`
+    `تفعيل ${plan.name} (${period === "yearly" ? "سنوي" : "شهري"} — ${formatUSD(planPrice(plan, period))}) لـ ${target.display_name}`
   );
   return NextResponse.json({ ok: true, current: sub });
 }

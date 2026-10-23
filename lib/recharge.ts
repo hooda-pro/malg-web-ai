@@ -1,4 +1,4 @@
-import { formatTokens } from "./ai";
+import { formatBalance } from "./ai";
 
 /**
  * إعدادات الشحن — يوزر واتساب الدعم اللي بيتحول عليه زرار الشحن.
@@ -11,7 +11,8 @@ export const WHATSAPP_USERNAME = process.env.NEXT_PUBLIC_WHATSAPP_USERNAME || "x
 
 export interface RechargePackage {
   id: string;
-  tokens: number;
+  /** الرصيد الممنوح — بالـmicro-dollar (µ$؛ $1 = 1,000,000 µ$) */
+  balanceMicro: number;
   /** السعر بالجنيه المصري */
   price: number;
   emoji: string;
@@ -20,40 +21,43 @@ export interface RechargePackage {
   badge?: string;
 }
 
-/** باقات شحن التوكنز — كل مليون توكنز = 120 جنيه بالظبط */
+/**
+ * باقات شحن الرصيد (تحديث ١٩) — الرصيد بيتشترى بالدولار ويتحسب على حسب
+ * تسعيرة كل موديل بالظبط. الأرقام هنا قابلة للتعديل من غير أي مكان تاني.
+ */
 export const RECHARGE_PACKAGES: RechargePackage[] = [
   {
     id: "starter",
-    tokens: 250_000,
+    balanceMicro: 2_000_000,
     price: 30,
     emoji: "🌱",
     label: "باقة البداية",
-    hint: "250 ألف توكنز — تكفي تجارب واستخدام خفيف",
+    hint: "رصيد $2 — تكفي تجارب واستخدام خفيف",
   },
   {
     id: "plus",
-    tokens: 500_000,
+    balanceMicro: 4_000_000,
     price: 60,
     emoji: "⚡",
     label: "باقة بلس",
-    hint: "نص مليون توكنز — رصيد أساسي قوي",
+    hint: "رصيد $4 — استعمال أوسع وموديلات أقوى",
   },
   {
     id: "pro",
-    tokens: 1_000_000,
+    balanceMicro: 8_000_000,
     price: 120,
     emoji: "🔥",
     label: "باقة برو",
-    hint: "مليون توكنز كاملة — استخدم براحتك",
+    hint: "رصيد $8 — استخدم براحتك",
     badge: "الأكثر طلبًا",
   },
   {
     id: "legend",
-    tokens: 2_500_000,
+    balanceMicro: 20_000_000,
     price: 300,
     emoji: "👑",
     label: "باقة الأسطورة",
-    hint: "2.5 مليون توكنز — أكبر رصيد دفعة واحدة",
+    hint: "رصيد $20 — أكبر رصيد دفعة واحدة",
     badge: "أكبر باقة",
   },
 ];
@@ -68,17 +72,17 @@ export function buildRechargeMessage(
   pkg: RechargePackage | null,
   user?: { displayName?: string | null; email?: string | null } | null
 ): string {
-  const lines = ["مرحباً 👋", "عايز أشحن رصيد توكنز في موقع MALG AI:"];
+  const lines = ["مرحباً 👋", "عايز أشحن رصيدي في موقع MALG AI:"];
 
   if (pkg) {
     lines.push(
       "",
       `📦 الباقة: ${pkg.emoji} ${pkg.label}`,
-      `🔢 التوكنز: +${formatTokens(pkg.tokens)} توكنز`,
+      `💵 الرصيد: +${formatBalance(pkg.balanceMicro)}`,
       `💰 السعر: ${pkg.price} جنيه`
     );
   } else {
-    lines.push("", "🛒 عايز أستفسر عن باقات الشحن أو كمية مخصصة");
+    lines.push("", "🛒 عايز أستفسر عن باقات شحن الرصيد أو كمية مخصصة");
   }
 
   if (user?.displayName || user?.email) {
@@ -89,26 +93,22 @@ export function buildRechargeMessage(
   return lines.join("\n");
 }
 
-/** السعر المرجعي لرصيد الـ API: 1,000,000 توكن = 90 جنيه مصري */
-export const API_TOKEN_PRICE_PER_MILLION = 90;
-
 /**
  * رسالة واتساب جاهزة لطلب شحن رصيد الـ API (رصيد المطورين) — منفصلة تمامًا
  * عن buildRechargeMessage الخاصة برصيد الشات، وبتوضح للدعم إن الطلب لرصيد
  * API مش شات عادي، عشان مايتلخبطش في مصدر الرصيد اللي هيتم شحنه.
  */
 export function buildApiRechargeMessage(
-  tokens: number | null,
+  balanceMicro: number | null,
   user?: { displayName?: string | null; email?: string | null } | null
 ): string {
   const lines = ["مرحباً 👋", "عايز أشحن رصيد الـ API (رصيد المطورين) في موقع MALG AI:"];
 
-  if (tokens && tokens > 0) {
-    const price = Math.round((tokens / 1_000_000) * API_TOKEN_PRICE_PER_MILLION);
+  if (balanceMicro && balanceMicro > 0) {
     lines.push(
       "",
-      `🔢 الكمية: ${formatTokens(tokens)} توكن`,
-      `💰 السعر التقريبي: ${formatTokens(price)} جنيه (بسعر ${API_TOKEN_PRICE_PER_MILLION} جنيه/مليون توكن)`
+      `💵 رصيد API: +${formatBalance(balanceMicro)}`,
+      `💰 عايز أعرف السعر بالجنيه`
     );
   } else {
     lines.push("", "🛒 عايز أستفسر عن كمية مخصصة لرصيد الـ API");

@@ -9,7 +9,7 @@ import {
   RefreshCw,
   Search,
 } from "lucide-react";
-import { formatTokens } from "@/lib/ai";
+import { formatBalance, formatTokens } from "@/lib/ai";
 import type { AdminUserRow } from "./adminTypes";
 import { formatDate, initialOf, usagePercent } from "./helpers";
 
@@ -88,7 +88,7 @@ export default function UsersList({ onSelect }: { onSelect: (id: string) => void
         )}
         <div className="divide-y divide-hair">
           {users.map((u) => {
-            const pct = usagePercent(u.usedTokens, u.totalAllocatedTokens);
+            const pct = usagePercent(u.usedMicro, u.totalMicro);
             return (
               <button
                 key={u.id}
@@ -126,7 +126,7 @@ export default function UsersList({ onSelect }: { onSelect: (id: string) => void
                 {/* الرصيد */}
                 <span className="hidden w-36 shrink-0 sm:block">
                   <span className="tnum mb-1 flex items-center justify-between text-[11px] text-ink-3">
-                    <span className="text-warn">{formatTokens(u.usedTokens)} مستخدم</span>
+                    <span className="text-warn">{formatBalance(u.usedMicro)} مستخدم</span>
                     <span>{pct}%</span>
                   </span>
                   <span className="block h-1.5 overflow-hidden rounded-full bg-surface-3">

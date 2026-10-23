@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Coins, Crown, Lock, PanelLeft, Share2, SquarePen } from "lucide-react";
-import { formatTokens } from "@/lib/ai";
+import { formatBalance } from "@/lib/ai";
 import { IconButton, Segmented } from "./ui/Controls";
 import { useSettings, type ModelId } from "./SettingsContext";
 import { cn } from "@/lib/utils";
@@ -191,7 +191,7 @@ function TokensBadge({
           <div className="flex items-center justify-between gap-2">
             <span className="text-[12px] font-medium text-ink-2">{t("usageTitle")}</span>
             <span className="tnum text-[13px] font-semibold text-ink">
-              {t("tokensLeft", { n: formatTokens(remainingTokens) })}
+              {t("tokensLeft", { n: formatBalance(remainingTokens) })}
             </span>
           </div>
 
@@ -207,7 +207,7 @@ function TokensBadge({
                 />
               </span>
               <p className="tnum mt-1.5 text-[11.5px] text-ink-3">
-                {t("tokensOutOf", { used: formatTokens(total - remainingTokens), total: formatTokens(total) })}
+                {t("tokensOutOf", { used: formatBalance(total - remainingTokens), total: formatBalance(total) })}
               </p>
             </>
           )}

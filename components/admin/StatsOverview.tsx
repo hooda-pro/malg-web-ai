@@ -13,7 +13,7 @@ import {
   UserPlus,
   Users as UsersIcon,
 } from "lucide-react";
-import { formatTokens } from "@/lib/ai";
+import { formatBalance, formatTokens } from "@/lib/ai";
 import type { AdminStats } from "./adminTypes";
 import { formatDate, initialOf, usagePercent } from "./helpers";
 
@@ -88,7 +88,7 @@ export default function StatsOverview({ onSelectUser }: { onSelectUser: (id: str
     );
   }
 
-  const usedPct = usagePercent(stats.totalUsed, stats.totalAllocated);
+  const usedPct = usagePercent(stats.totalUsedMicro, stats.totalBalanceMicro);
 
   return (
     <div className="space-y-6">
@@ -105,21 +105,21 @@ export default function StatsOverview({ onSelectUser }: { onSelectUser: (id: str
         <StatCard icon={Hash} label="الرسائل" value={formatTokens(stats.totalMessages)} />
         <StatCard
           icon={Activity}
-          label="التوكنز المستهلكة"
-          value={formatTokens(stats.totalUsed)}
-          sub={`من ${formatTokens(stats.totalAllocated)} مخصصة (${usedPct}%)`}
+          label="الرصيد المستهلك"
+          value={formatBalance(stats.totalUsedMicro)}
+          sub={`من ${formatBalance(stats.totalBalanceMicro)} مخصصة (${usedPct}%)`}
         />
       </div>
 
-      {/* استهلاك التوكنز الإجمالي */}
+      {/* استهلاك الرصيد الإجمالي */}
       <div className="rounded-lg border border-hair bg-surface p-4 shadow-1">
         <div className="mb-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <TrendingUp size={15} className="text-accent" />
-            <span className="text-[12.5px] font-medium text-ink">نسبة استهلاك التوكنز الكلية</span>
+            <span className="text-[12.5px] font-medium text-ink">نسبة استهلاك الرصيد الكلية</span>
           </div>
           <span className="tnum text-[11.5px] text-ink-2">
-            {formatTokens(stats.totalUsed)} / {formatTokens(stats.totalAllocated)}
+            {formatBalance(stats.totalUsedMicro)} / {formatBalance(stats.totalBalanceMicro)}
           </span>
         </div>
         <div className="h-2.5 overflow-hidden rounded-full bg-surface-3">
@@ -136,7 +136,7 @@ export default function StatsOverview({ onSelectUser }: { onSelectUser: (id: str
           <div className="flex items-center justify-between border-b border-hair px-4 py-3">
             <div className="flex items-center gap-2">
               <TrendingUp size={14} className="text-accent" />
-              <h2 className="text-[12.5px] font-medium text-ink">أكبر 5 مستهلكين للتوكنز</h2>
+              <h2 className="text-[12.5px] font-medium text-ink">أكبر 5 مستهلكين للرصيد</h2>
             </div>
             <button onClick={load} title="تحديث" className="text-ink-3 transition-colors duration-1 hover:text-ink">
               <RefreshCw size={13} />
@@ -147,7 +147,7 @@ export default function StatsOverview({ onSelectUser }: { onSelectUser: (id: str
               <p className="px-4 py-4 text-[11.5px] text-ink-3">مفيش بيانات لسه</p>
             )}
             {stats.topUsers.map((u, i) => {
-              const pct = usagePercent(u.usedTokens, u.totalAllocatedTokens);
+              const pct = usagePercent(u.usedMicro, u.totalMicro);
               return (
                 <button
                   key={u.id}
@@ -166,7 +166,7 @@ export default function StatsOverview({ onSelectUser }: { onSelectUser: (id: str
                   </span>
                   <span className="shrink-0 text-left">
                     <span className="tnum block text-[11.5px] text-warn">
-                      {formatTokens(u.usedTokens)}
+                      {formatBalance(u.usedMicro)}
                     </span>
                     <span className="tnum block text-[10px] text-ink-3">{pct}%</span>
                   </span>

@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { sql } from "./db";
 import { getPlan, type BillingPeriod } from "./plans";
-import { ensureUserQuota } from "./quota";
+import { ensureUserCredits } from "./quota";
 import { getModelProvider } from "./provider";
 
 export interface ActiveSubscription {
@@ -68,8 +68,9 @@ export async function isModelPaid(modelId: string): Promise<boolean> {
 /**
  * تفعيل اشتراك (بواسطة الأدمن بعد تأكيد الدفع عبر واتساب):
  * - ينهي أي اشتراك نشط سابق، ويبدأ الجديد (30 يوم / 365 يوم).
- * - يمنح توكنز الباقة فورًا على رصيد الشات ويفك علامة النفاد.
- * التجديد = تفعيل جديد (يمنح التوكنز من جديد).
+ * - بيفك علامة النفاد على رصيد الشات، ولو الباقة عندها منحة رصيد شهري
+ *   (plan.monthlyBalanceMicro) بتضاف فورًا — الباقات الحالية من غير منحة.
+ * التجديد = تفعيل جديد.
  */
 export async function activateSubscription(
   userId: string,
@@ -80,7 +81,7 @@ export async function activateSubscription(
   if (!plan || plan.id === "free") throw new Error("خطة غير صالحة للتفعيل اليدوي");
   if (period !== "monthly" && period !== "yearly") throw new Error("مدة غير صالحة");
   const days = period === "yearly" ? 365 : 30;
-  await ensureUserQuota(userId);
+  await ensureUserCredits(userId);
   await sql`UPDATE user_subscriptions SET status = 'expired', updated_at = now()
     WHERE user_id = ${userId} AND status = 'active'`;
   const id = randomUUID();
@@ -89,9 +90,9 @@ export async function activateSubscription(
     VALUES (${id}, ${userId}, ${plan.id}, ${period}, 'active', now(), now() + (${days} * INTERVAL '1 day'))
   `;
   await sql`
-    UPDATE user_quota
-    SET total_allocated_tokens = total_allocated_tokens + ${plan.monthlyTokens},
-        quota_exhausted_at = NULL, updated_at = now()
+    UPDATE user_credits
+    SET total_micro = total_micro + ${plan.monthlyBalanceMicro},
+        exhausted_at = NULL, updated_at = now()
     WHERE user_id = ${userId}
   `;
   const sub = await getActiveSubscription(userId);

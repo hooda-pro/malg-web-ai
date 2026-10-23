@@ -1,14 +1,11 @@
 import { FREE_PLAN, PRO_PLAN, formatUSD } from "@/lib/plans";
 import { RECHARGE_PACKAGES } from "@/lib/recharge";
+import { formatBalance } from "@/lib/ai";
 
 export const metadata = {
   title: "الباقات والأسعار",
   description: "باقات MALG AI وأسعارها: الباقة المجانية، باقة Pro، وباقات شحن الرصيد الإضافي.",
 };
-
-function fmtTokens(n: number): string {
-  return `${new Intl.NumberFormat("en-US").format(n)} توكن`;
-}
 
 // رابط واتساب للدعم — يطابق WHATSAPP_USERNAME الافتراضي في lib/recharge.ts.
 function waLink(msg: string): string {
@@ -17,7 +14,7 @@ function waLink(msg: string): string {
 
 export default function PricingPage() {
   const subscribeLink = waLink(`مرحباً، أرغب في الاشتراك في باقة ${PRO_PLAN.name} في موقع MALG AI`);
-  const topupLink = waLink("مرحباً، أرغب في شحن رصيد توكنز في موقع MALG AI");
+  const topupLink = waLink("مرحباً، أرغب في شحن رصيد في موقع MALG AI");
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-12 text-ink">
@@ -43,7 +40,7 @@ export default function PricingPage() {
             <span className="text-[14px] text-ink-3"> / للأبد</span>
           </p>
           <ul className="mt-4 space-y-2 text-[14.5px] leading-7 text-ink-2">
-            <li>✓ {fmtTokens(FREE_PLAN.monthlyTokens)} للتجربة</li>
+            <li>✓ {formatBalance(FREE_PLAN.monthlyBalanceMicro)} رصيد متجدد</li>
             <li>✓ الموديلات المجانية</li>
             <li>✓ تجديد تلقائي للرصيد الأساسي</li>
           </ul>
@@ -76,7 +73,7 @@ export default function PricingPage() {
             سنويًا
           </p>
           <ul className="mt-4 space-y-2 text-[14.5px] leading-7 text-ink-2">
-            <li>✓ {fmtTokens(PRO_PLAN.monthlyTokens)} شهريًا</li>
+            <li>✓ تسعير بالدولار لكل موديل (In/Out)</li>
             <li>✓ كل الموديلات بما فيها المدفوعة</li>
             <li>✓ شحن إضافي في أي وقت</li>
           </ul>
@@ -108,7 +105,7 @@ export default function PricingPage() {
                 )}
               </h3>
               <p className="tnum mt-2 text-[14px] text-ink-2">
-                {fmtTokens(pkg.tokens)} — {pkg.price} جنيه
+                {formatBalance(pkg.balanceMicro)} — {pkg.price} جنيه
               </p>
               <p className="mt-1 text-[13px] leading-6 text-ink-3">{pkg.hint}</p>
             </div>

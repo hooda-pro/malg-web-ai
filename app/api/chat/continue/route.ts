@@ -9,7 +9,7 @@ import {
   ACCOUNT_CHECK_UNAVAILABLE_MESSAGE,
   type GenerationLease,
 } from "@/lib/usageGuard";
-import { checkAndMaybeRenewQuota, deductTokens } from "@/lib/quota";
+import { checkAndMaybeRenewCredits, costMicroFor, deductBalance } from "@/lib/quota";
 import { getCostMultiplier, hasPaidSubscription, isModelPaid } from "@/lib/subscription";
 import { getMemory } from "@/lib/memory";
 import { getModelProvider } from "@/lib/provider";
@@ -115,11 +115,11 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
     );
   }
 
-  const quotaCheck = await checkAndMaybeRenewQuota(user.id, isAdmin);
+  const quotaCheck = await checkAndMaybeRenewCredits(user.id, isAdmin);
   if (quotaCheck.blocked) {
     return NextResponse.json({ error: quotaCheck.message, quotaExhausted: true }, { status: 403 });
   }
-  const quotaRemaining = quotaCheck.remaining;
+  const quotaRemaining = quotaCheck.remainingMicro;
 
   // موديلات الباقات المدفوعة: محجوبة عن الخطة المجانية (الأدمن والمشتركون فقط)
   if (!isAdmin && (await isModelPaid(model).catch(() => false)) && !(await hasPaidSubscription(user.id).catch(() => false))) {
@@ -169,6 +169,9 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
   // اسم الموديل المعروض للهوية — من إعداد الموديل نفسه
   const costMult = await getCostMultiplier(model).catch(() => 1);
   const continueCfg = await getModelProvider(model).catch(() => null);
+  // تسعيرة الموديل بالـmicro-dollar لكل مليون وحدة (تحديث ١٩) — الصفر يعني موديل مجاني بلا خصم.
+  const priceInMicro = continueCfg?.priceInMicro ?? 0;
+  const priceOutMicro = continueCfg?.priceOutMicro ?? 0;
   const modelDisplayName = continueCfg?.displayName ?? "MALG AI";
   const videoNative = continueCfg?.supportsVideo === true;
   const audioNative = continueCfg?.supportsMic === true;
@@ -257,18 +260,20 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
         }
       };
 
-      // قطع الرد في نصه لو رصيد المستخدم خلص (نفس منطق /api/chat)
+      // قطع الرد في نصه لو رصيد المستخدم خلص (نفس منطق /api/chat — بالـmicro-dollar حسب تسعيرة الموديل)
       let emittedChars = 0;
       const emitCounted: typeof emit = (kind, text) => {
         emittedChars += text.length;
         emit(kind, text);
       };
-      const overBudget = () => quotaRemaining !== null && Math.floor(emittedChars / 3) + 10 >= quotaRemaining;
+      const overBudget = () =>
+        quotaRemaining !== null &&
+        costMicroFor(0, Math.floor(emittedChars / 3) + 10, priceInMicro, priceOutMicro) >= quotaRemaining;
 
       let result = await readUpstreamStream(upstreamResponse, req.signal, emitCounted, overBudget, negotiated.protocol);
       let quotaCutOff = !!result.stoppedByLimit;
       if (quotaCutOff) {
-        emit("content", "\n\n⚠️ رصيد التوكنز بتاعك خلص فوقفت الرد هنا. اشحن رصيدك أو استنى التجديد التلقائي، وبعدها ابعت «كمّل» تاني.");
+        emit("content", "\n\n⚠️ رصيدك خلص فوقفت الرد هنا. اشحن رصيدك أو استنى التجديد التلقائي، وبعدها ابعت «كمّل» تاني.");
       }
 
       // نفس إصلاح /api/chat: لو الموديل رجّع استجابة فاضية (مشكلة معروفة في
@@ -329,7 +334,7 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
         if (!contResult) break;
         if (contResult.stoppedByLimit) {
           quotaCutOff = true;
-          emit("content", "\n\n⚠️ رصيد التوكنز بتاعك خلص فوقفت الرد هنا. اشحن رصيدك أو استنى التجديد التلقائي، وبعدها ابعت «كمّل» تاني.");
+          emit("content", "\n\n⚠️ رصيدك خلص فوقفت الرد هنا. اشحن رصيدك أو استنى التجديد التلقائي، وبعدها ابعت «كمّل» تاني.");
           result = { ...result, stoppedByLimit: true };
           break;
         }
@@ -360,7 +365,7 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
 
       if (result.content.trim() || result.reasoning.trim() || usedFallback) {
         const cutNote = quotaCutOff
-          ? "\n\n⚠️ رصيد التوكنز بتاعك خلص فوقفت الرد هنا. اشحن رصيدك أو استنى التجديد التلقائي، وبعدها ابعت «كمّل» تاني."
+          ? "\n\n⚠️ رصيدك خلص فوقفت الرد هنا. اشحن رصيدك أو استنى التجديد التلقائي، وبعدها ابعت «كمّل» تاني."
           : "";
         const addedContent = (usedFallback ? EMPTY_RESPONSE_FALLBACK_MESSAGE : result.content) + cutNote;
         const mergedContent = existing.content + addedContent;
@@ -369,7 +374,9 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
             ? existing.reasoning + "\n\n" + result.reasoning
             : existing.reasoning
           : result.reasoning || null;
-        const addedTokens = usedFallback ? 0 : Math.max(1, Math.round(estimateTokens(result.content, result.reasoning) * costMult));
+        const outEstimate = estimateTokens(result.content, result.reasoning);
+        // توكنات حقيقية عند الإضافة (من غير معامل الهامش — الهامش بيروح على الخصم بالدولار)
+        const addedTokens = usedFallback ? 0 : Math.max(1, outEstimate);
         const newTokensUsed = existing.tokens_used + addedTokens;
         const isTruncated = !usedFallback && !result.stoppedByUser && (result.finishReason === "length" || quotaCutOff);
 
@@ -383,11 +390,15 @@ async function handleContinue(req: NextRequest, guard: { lease: GenerationLease 
         } catch (e) {
           console.error("failed to persist continued message", e);
         }
-        if (addedTokens > 0) {
+        // الخصم بالدولار من تسعيرة الموديل (تكملة = إخراج خالص) — بعد الحفظ فورًا.
+        const chargeMicro = usedFallback
+          ? 0
+          : Math.round(costMicroFor(0, outEstimate, priceInMicro, priceOutMicro) * costMult);
+        if (chargeMicro > 0) {
           try {
-            await deductTokens(user.id, addedTokens, isAdmin);
+            await deductBalance(user.id, chargeMicro, isAdmin);
           } catch (e) {
-            console.error("failed to deduct tokens", e);
+            console.error("failed to deduct balance", e);
           }
         }
       }

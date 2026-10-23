@@ -51,6 +51,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
         supports_multiple_audio_references?: unknown;
         supports_image_reference?: unknown;
         supports_diarization?: unknown;
+        pricing?: { prompt?: unknown; completion?: unknown };
+        context_length?: unknown;
       }[];
     } | null;
   }
@@ -98,14 +100,35 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   // صيغ الصوت: بتتخزن لصفوف توليد الصوت بس (الترميزات المتاحة على OpenRouter: mp3/pcm)
   const audioFormatsCsv = speechOutput ? "mp3,pcm" : "";
 
-  await sql`UPDATE ai_models SET capabilities = ${capabilitiesCsv}, audio_formats = ${audioFormatsCsv}, updated_at = now() WHERE id = ${id}`;
+  // ===== التسعير التلقائي (تحديث ١٩) =====
+  // OpenRouter بيرجّع pricing.prompt/completion كدولار لكل توكن واحد (وسالب -1 =
+  // تسعير ديناميكي غير معلن). بنحوّله لـmicro-dollar لكل مليون وحدة:
+  // $/token × 1,000,000 توكن/مليون × 1,000,000 µ$/دولار = القيمة × 1e12.
+  const priceFromOpenRouter = (v: unknown): number => {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < 0) return 0; // -1 أو مفقود → من غير سعر معلن
+    return Math.min(Math.round(n * 1_000_000_000_000), 1_000_000_000); // سقف $1000/1M
+  };
+  const priceInMicro = priceFromOpenRouter((ep as { pricing?: { prompt?: unknown } }).pricing?.prompt);
+  const priceOutMicro = priceFromOpenRouter((ep as { pricing?: { completion?: unknown } }).pricing?.completion);
+  const pricingKnown = priceInMicro > 0 || priceOutMicro > 0;
+  // ملاحظة السياق من context_length (مثال: 1,056,736 → "1.1M") — تعريفية للعرض
+  const ctxLen = Number((ep as { context_length?: unknown }).context_length);
+  const contextNote =
+    Number.isFinite(ctxLen) && ctxLen > 0
+      ? ctxLen >= 1_000_000
+        ? `${(ctxLen / 1_000_000).toFixed(1)}M`
+        : `${Math.round(ctxLen / 1000)}K`
+      : "";
+
+  await sql`UPDATE ai_models SET capabilities = ${capabilitiesCsv}, audio_formats = ${audioFormatsCsv}, price_in_usd = ${priceInMicro}, price_out_usd = ${priceOutMicro}, context_note = ${contextNote}, updated_at = now() WHERE id = ${id}`;
   invalidateProviderCache();
   await logAdminAction(
     guard.admin,
     "update_model",
     null,
     null,
-    `سحب قدرات ${id} من OpenRouter: ${capabilitiesCsv || "فاضي"} / صيغ: ${audioFormatsCsv || "فاضي"}`
+    `سحب قدرات ${id} من OpenRouter: ${capabilitiesCsv || "فاضي"} / صيغ: ${audioFormatsCsv || "فاضي"} / سعر: ${pricingKnown ? `In $${(priceInMicro / 1e6)} × Out $${(priceOutMicro / 1e6)} لكل مليون` : "مفيش سعر معلن — سعّره يدويًا"}`
   );
 
   return NextResponse.json({
@@ -113,6 +136,12 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     capabilities: capabilitiesCsv ? capabilitiesCsv.split(",") : [],
     audioFormats: audioFormatsCsv ? audioFormatsCsv.split(",") : [],
     audio_formats: audioFormatsCsv,
+    pricing: {
+      known: pricingKnown,
+      priceInUsd: priceInMicro / 1e6,
+      priceOutUsd: priceOutMicro / 1e6,
+      contextNote,
+    },
     meta: {
       provider: typeof ep.provider_name === "string" ? ep.provider_name : "",
       inputModalities: inputMods,

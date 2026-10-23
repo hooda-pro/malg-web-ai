@@ -22,7 +22,7 @@ import {
   UserX,
   Zap,
 } from "lucide-react";
-import { formatTokens } from "@/lib/ai";
+import { formatBalance, formatTokens } from "@/lib/ai";
 import type { AdminMessageRow, AdminSessionRow, AdminUserDetail } from "./adminTypes";
 import { formatDateTime, initialOf, timeAgo, truncate, usagePercent } from "./helpers";
 import ConfirmModal from "./ConfirmModal";
@@ -168,9 +168,9 @@ export default function UserDetail({
     );
   }
 
-  const remaining = Math.max(user.totalAllocatedTokens - user.usedTokens, 0);
-  const pct = usagePercent(user.usedTokens, user.totalAllocatedTokens);
-  const apiRemaining = Math.max(user.apiTotalAllocatedTokens - user.apiUsedTokens, 0);
+  const remaining = Math.max(user.totalMicro - user.usedMicro, 0);
+  const pct = usagePercent(user.usedMicro, user.totalMicro);
+  const apiRemaining = Math.max(user.apiTotalMicro - user.apiUsedMicro, 0);
 
   return (
     <div className="space-y-4">
@@ -249,14 +249,14 @@ export default function UserDetail({
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Coins size={15} className="text-warn" />
-            <h3 className="text-[13px] font-semibold text-ink">رصيد التوكنز</h3>
+            <h3 className="text-[13px] font-semibold text-ink">رصيد الشات</h3>
           </div>
           <span
             className={`tnum rounded px-2 py-0.5 text-[12px] font-semibold ${
               remaining === 0 ? "bg-danger-soft text-danger" : "bg-accent-soft text-accent"
             }`}
           >
-            متبقي: {formatTokens(remaining)}
+            متبقي: {formatBalance(remaining)}
           </span>
         </div>
 
@@ -271,11 +271,11 @@ export default function UserDetail({
 
         <div className="grid grid-cols-3 gap-2 text-center">
           <div className="rounded-md border border-hair bg-surface-2 px-2 py-2">
-            <p className="tnum text-[13px] font-semibold text-warn">{formatTokens(user.usedTokens)}</p>
+            <p className="tnum text-[13px] font-semibold text-warn">{formatBalance(user.usedMicro)}</p>
             <p className="text-[11px] text-ink-3">مستهلك</p>
           </div>
           <div className="rounded-md border border-hair bg-surface-2 px-2 py-2">
-            <p className="tnum text-[13px] font-semibold text-accent">{formatTokens(user.totalAllocatedTokens)}</p>
+            <p className="tnum text-[13px] font-semibold text-accent">{formatBalance(user.totalMicro)}</p>
             <p className="text-[11px] text-ink-3">إجمالي الرصيد</p>
           </div>
           <div className="rounded-md border border-hair bg-surface-2 px-2 py-2">
@@ -284,9 +284,9 @@ export default function UserDetail({
           </div>
         </div>
 
-        {user.quotaExhaustedAt && (
+        {user.exhaustedAt && (
           <p className="mt-2 rounded-md border border-hair bg-warn-soft px-3 py-1.5 text-[12px] text-warn">
-            نفد رصيده واتسجل نفاد التوكنز في {formatDateTime(user.quotaExhaustedAt)}
+            نفد رصيده واتسجل النفاد في {formatDateTime(user.exhaustedAt)}
           </p>
         )}
       </div>
@@ -304,23 +304,23 @@ export default function UserDetail({
               apiRemaining === 0 ? "bg-danger-soft text-danger" : "bg-accent-soft text-accent"
             }`}
           >
-            متبقي: {formatTokens(apiRemaining)}
+            متبقي: {formatBalance(apiRemaining)}
           </span>
         </div>
 
         <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-3">
           <div className="rounded-md border border-hair bg-surface-2 px-2 py-2">
-            <p className="tnum text-[13px] font-semibold text-warn">{formatTokens(user.apiUsedTokens)}</p>
+            <p className="tnum text-[13px] font-semibold text-warn">{formatBalance(user.apiUsedMicro)}</p>
             <p className="text-[11px] text-ink-3">مستهلك</p>
           </div>
           <div className="rounded-md border border-hair bg-surface-2 px-2 py-2">
             <p className="tnum text-[13px] font-semibold text-accent">
-              {formatTokens(user.apiTotalAllocatedTokens)}
+              {formatBalance(user.apiTotalMicro)}
             </p>
             <p className="text-[11px] text-ink-3">إجمالي الرصيد</p>
           </div>
           <div className="rounded-md border border-hair bg-surface-2 px-2 py-2 sm:block">
-            <p className="tnum text-[13px] font-semibold text-accent">{formatTokens(apiRemaining)}</p>
+            <p className="tnum text-[13px] font-semibold text-accent">{formatBalance(apiRemaining)}</p>
             <p className="text-[11px] text-ink-3">متبقي</p>
           </div>
         </div>
@@ -336,7 +336,7 @@ export default function UserDetail({
           className="flex items-center gap-1.5 rounded-md bg-accent-soft px-3.5 py-2.5 text-[13px] font-semibold text-accent transition-colors hover:bg-accent-soft"
         >
           <Zap size={14} />
-          شحن توكنز
+          شحن رصيد
         </button>
 
         <button
@@ -463,7 +463,7 @@ export default function UserDetail({
           onClose={() => setShowRechargeModal(false)}
           onDone={() => {
             setShowRechargeModal(false);
-            notify("ok", "تم تحديث رصيد التوكنز بنجاح ✓");
+            notify("ok", "تم تحديث رصيد الشات بنجاح ✓");
             load();
           }}
         />

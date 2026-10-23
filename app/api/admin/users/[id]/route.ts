@@ -14,10 +14,10 @@ export async function GET(_req: NextRequest, { params: paramsPromise }: { params
 
   const userRows = (await sql`
     SELECT u.id, u.email, u.display_name, u.is_admin, u.is_banned, u.banned_at, u.created_at,
-           q.total_allocated_tokens, q.used_tokens, q.quota_exhausted_at, q.updated_at AS quota_updated_at,
-           aq.total_allocated_tokens AS api_total_allocated_tokens, aq.used_tokens AS api_used_tokens
+           c.total_micro, c.used_micro, c.exhausted_at, c.updated_at AS quota_updated_at,
+           aq.total_micro AS api_total_micro, aq.used_micro AS api_used_micro
     FROM users u
-    LEFT JOIN user_quota q ON q.user_id = u.id
+    LEFT JOIN user_credits c ON c.user_id = u.id
     LEFT JOIN user_api_quota aq ON aq.user_id = u.id
     WHERE u.id = ${params.id}
   `) as {
@@ -28,12 +28,12 @@ export async function GET(_req: NextRequest, { params: paramsPromise }: { params
     is_banned: boolean;
     banned_at: string | null;
     created_at: string;
-    total_allocated_tokens: unknown;
-    used_tokens: unknown;
-    quota_exhausted_at: string | null;
+    total_micro: unknown;
+    used_micro: unknown;
+    exhausted_at: string | null;
     quota_updated_at: string | null;
-    api_total_allocated_tokens: unknown;
-    api_used_tokens: unknown;
+    api_total_micro: unknown;
+    api_used_micro: unknown;
   }[];
 
   const row = userRows[0];
@@ -90,12 +90,12 @@ export async function GET(_req: NextRequest, { params: paramsPromise }: { params
       isBanned: row.is_banned,
       bannedAt: row.banned_at,
       createdAt: row.created_at,
-      totalAllocatedTokens: Number(row.total_allocated_tokens ?? 0),
-      usedTokens: Number(row.used_tokens ?? 0),
-      quotaExhaustedAt: row.quota_exhausted_at,
+      totalMicro: Number(row.total_micro ?? 0),
+      usedMicro: Number(row.used_micro ?? 0),
+      exhaustedAt: row.exhausted_at,
       quotaUpdatedAt: row.quota_updated_at,
-      apiTotalAllocatedTokens: Number(row.api_total_allocated_tokens ?? 0),
-      apiUsedTokens: Number(row.api_used_tokens ?? 0),
+      apiTotalMicro: Number(row.api_total_micro ?? 0),
+      apiUsedMicro: Number(row.api_used_micro ?? 0),
       sessionsCount: Number(totals?.sessions_count ?? 0),
       messagesCount: Number(totals?.messages_count ?? 0),
     },

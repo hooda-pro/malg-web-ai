@@ -39,7 +39,15 @@ export async function POST(req: NextRequest) {
 
   await ensureSchema();
 
-  const body = (await req.json().catch(() => ({}))) as { id?: unknown; name?: unknown; description?: unknown; modality?: unknown };
+  const body = (await req.json().catch(() => ({}))) as {
+    id?: unknown;
+    name?: unknown;
+    description?: unknown;
+    modality?: unknown;
+    price_in_usd?: unknown;
+    price_out_usd?: unknown;
+    context_note?: unknown;
+  };
   const checked = validateModelInput(body ?? {});
   if (!checked.ok) {
     return NextResponse.json({ error: checked.error }, { status: 400 });
@@ -67,9 +75,18 @@ export async function POST(req: NextRequest) {
   // لو الأدمن مبعتش قدرات — النموذج بيتولد بقدرته الأساسية (stt أو tts) صريحة
   const capabilitiesFinal =
     capabilitiesCsv || (modality === "stt" ? "stt" : modality === "tts" ? "tts" : "");
+  // تسعير مبدئي اختياري بالدولار لكل مليون وحدة (تحديث ١٩) — يتعدل لاحقًا من شريحة الأدمن
+  const priceUsdToMicro = (raw: unknown): number => {
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? Math.min(Math.round(n * 1_000_000), 1_000_000_000) : 0;
+  };
+  const priceInMicro = priceUsdToMicro((body as { price_in_usd?: unknown }).price_in_usd);
+  const priceOutMicro = priceUsdToMicro((body as { price_out_usd?: unknown }).price_out_usd);
+  const contextNoteRaw = (body as { context_note?: unknown }).context_note;
+  const contextNote = typeof contextNoteRaw === "string" ? contextNoteRaw.trim().slice(0, 40) : "";
   await sql`
-    INSERT INTO ai_models (id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, sort_order, modality, capabilities, audio_formats)
-    VALUES (${v.id}, ${v.name}, ${v.description}, 'https://api.openai.com/v1', 'chat_completions', ${v.id}, '{}', 0.4, 128000, TRUE, ${isFirst}, ${nextOrder}, ${modality}, ${capabilitiesFinal}, ${audioFormatsCsv})
+    INSERT INTO ai_models (id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, sort_order, modality, capabilities, audio_formats, price_in_usd, price_out_usd, context_note)
+    VALUES (${v.id}, ${v.name}, ${v.description}, 'https://api.openai.com/v1', 'chat_completions', ${v.id}, '{}', 0.4, 128000, TRUE, ${isFirst}, ${nextOrder}, ${modality}, ${capabilitiesFinal}, ${audioFormatsCsv}, ${priceInMicro}, ${priceOutMicro}, ${contextNote})
   `;
   invalidateProviderCache();
 

@@ -16,13 +16,13 @@ export async function GET(req: NextRequest) {
   const rows = (await sql`
     SELECT u.id, u.email, u.display_name, u.is_admin, u.is_banned, u.banned_at, u.created_at,
            u.deletion_requested_at,
-           q.total_allocated_tokens, q.used_tokens, q.quota_exhausted_at,
+           c.total_micro, c.used_micro, c.exhausted_at,
            (SELECT COUNT(*)::int FROM chat_sessions s WHERE s.user_id = u.id) AS sessions_count,
            (SELECT COUNT(*)::int FROM chat_messages m
               JOIN chat_sessions s2 ON s2.id = m.session_id
              WHERE s2.user_id = u.id) AS messages_count
     FROM users u
-    LEFT JOIN user_quota q ON q.user_id = u.id
+    LEFT JOIN user_credits c ON c.user_id = u.id
     WHERE u.email ILIKE ${like} OR u.display_name ILIKE ${like}
     ORDER BY u.created_at DESC
     LIMIT 300
@@ -35,9 +35,9 @@ export async function GET(req: NextRequest) {
     banned_at: string | null;
     created_at: string;
     deletion_requested_at: string | null;
-    total_allocated_tokens: unknown;
-    used_tokens: unknown;
-    quota_exhausted_at: string | null;
+    total_micro: unknown;
+    used_micro: unknown;
+    exhausted_at: string | null;
     sessions_count: number;
     messages_count: number;
   }[];
@@ -52,9 +52,9 @@ export async function GET(req: NextRequest) {
       bannedAt: r.banned_at,
       createdAt: r.created_at,
       deletionRequestedAt: r.deletion_requested_at,
-      totalAllocatedTokens: Number(r.total_allocated_tokens ?? 0),
-      usedTokens: Number(r.used_tokens ?? 0),
-      quotaExhaustedAt: r.quota_exhausted_at,
+      totalMicro: Number(r.total_micro ?? 0),
+      usedMicro: Number(r.used_micro ?? 0),
+      exhaustedAt: r.exhausted_at,
       sessionsCount: Number(r.sessions_count ?? 0),
       messagesCount: Number(r.messages_count ?? 0),
     })),

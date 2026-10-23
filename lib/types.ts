@@ -51,8 +51,9 @@ export function isLocalMessageId(id: string): boolean {
 }
 
 export interface UserQuota {
-  totalAllocatedTokens: number;
-  usedTokens: number;
-  quotaExhaustedAt: string | null;
+  /** رصيد الشات بالـmicro-dollar (تحديث ١٩) */
+  totalMicro: number;
+  usedMicro: number;
+  exhaustedAt: string | null;
   isAdmin: boolean;
 }

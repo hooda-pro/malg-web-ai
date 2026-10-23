@@ -3,13 +3,13 @@
  * (نفس جدول ai_models — modality='tts' — بنفس فكرة مفاتيح الدوران).
  *
  * - للمشتركين (Pro) والأدمن فقط — يتحقق منه الراوت قبل النداء.
- * - الخصم من رصيد التوكنز بعدد الحروف (حماية تكلفة)، والحد الأقصى للنص
- *   يحمي من فواتير ضخمة في الطلب الواحد.
+ * - الخصم من الرصيد حسب سعر الموديل لكل مليون حرف (موديل من غير سعر = مجاني)،
+ *   والحد الأقصى للنص يحمي من فواتير ضخمة في الطلب الواحد.
  */
 
 import { sql, ensureSchema } from "./db";
 import { cleanBaseUrl, getTtsModelConfig, parseCapabilities, resolveTtsEndpoint } from "./provider";
-import { checkAndMaybeRenewQuota, deductTokens } from "./quota";
+import { checkAndMaybeRenewCredits, deductBalance } from "./quota";
 import { hasPaidSubscription } from "./subscription";
 
 export const TTS_TEXT_MAX_CHARS = 2000;
@@ -193,8 +193,8 @@ export async function synthesizeSpeech(opts: SynthesizeOptions): Promise<Synthes
 
   await ensureSchema();
 
-  // رصيد التوكنز يحمي من إساءة الاستخدام حتى للمشتركين (يتجدد مع الباقة)
-  const quotaCheck = await checkAndMaybeRenewQuota(opts.userId, opts.isAdmin);
+  // الرصيد يحمي من إساءة الاستخدام حتى للمشتركين (بيتجدد مع الباقة / بالإضافة اليدوية)
+  const quotaCheck = await checkAndMaybeRenewCredits(opts.userId, opts.isAdmin);
   if (quotaCheck.blocked) throw new Error(quotaCheck.message);
 
   let resolved: Awaited<ReturnType<typeof getTtsModelConfig>>;
@@ -292,8 +292,9 @@ export async function synthesizeSpeech(opts: SynthesizeOptions): Promise<Synthes
       }
       const buf = new Uint8Array(await res.arrayBuffer());
       if (buf.length === 0) throw new Error("المزوّد رجّع صوتًا فارغًا — حاول مجددًا");
-      // الخصم بعد النجاح فقط — بعدد الحروف (تسعير الصوت بالحرف)
-      await deductTokens(opts.userId, text.length, opts.isAdmin).catch(() => {});
+      // الخصم بعد النجاح فقط — حسب سعر الموديل لكل مليون حرف (موديل من غير سعر = بلا خصم)
+      const chargeMicro = Math.round((text.length * (resolved.config.priceInMicro ?? 0)) / 1_000_000);
+      if (chargeMicro > 0) await deductBalance(opts.userId, chargeMicro, opts.isAdmin).catch(() => {});
       return { audio: buf, contentType, modelName: resolved.config.displayName, chars: text.length };
     }
   }

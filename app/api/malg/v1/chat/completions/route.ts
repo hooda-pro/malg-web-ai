@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID, createHash } from "crypto";
 import { sql, ensureSchema } from "@/lib/db";
-import { checkApiBalance, deductApiTokens } from "@/lib/apiQuota";
+import { checkApiBalance, deductApiBalance } from "@/lib/apiQuota";
+import { costMicroFor } from "@/lib/quota";
 import { checkRateLimitShared } from "@/lib/rateLimit";
 import {
   negotiateUpstream,
@@ -15,7 +16,7 @@ import {
 import { API_IDENTITY_SYSTEM_PROMPT } from "@/lib/systemPrompt";
 import { getCostMultiplier, hasPaidSubscription } from "@/lib/subscription";
 import { getUserFlags } from "@/lib/usageGuard";
-import { isVoiceModelActive } from "@/lib/provider";
+import { getModelProvider, isVoiceModelActive } from "@/lib/provider";
 
 export const dynamic = "force-dynamic";
 // سقف Hobby = 300 (قيمة أكبر بتكسر الـ Deploy على Hobby). على Pro ارفعها لـ 800.
@@ -132,15 +133,17 @@ interface ApiKeyLookupRow {
   is_banned: boolean;
 }
 
-/** بعد أي رد (streaming أو لأ): خصم التوكنز، تحديث آخر استخدام، تسجيل اللوج. */
+/** بعد أي رد (streaming أو لأ): خصم الرصيد بالدولار، تحديث آخر استخدام، تسجيل اللوج. */
 async function recordUsage(params: {
   keyId: string;
   userId: string;
   modelId: string;
   totalTokens: number;
+  chargeMicro: number;
 }) {
-  const { keyId, userId, modelId, totalTokens } = params;
-  await deductApiTokens(userId, totalTokens);
+  const { keyId, userId, modelId, totalTokens, chargeMicro } = params;
+  // الخصم على رصيد الـ API المنفصل بالـmicro-dollar حسب تسعيرة الموديل × الهامش
+  await deductApiBalance(userId, chargeMicro);
   try {
     await sql`
       INSERT INTO api_usage_logs (id, api_key_id, user_id, model_id, tokens_used)
@@ -307,6 +310,11 @@ export async function POST(req: NextRequest) {
   }
 
   const costMult = await getCostMultiplier(modelId).catch(() => 1);
+  // تسعيرة الموديل بالـmicro-dollar لكل مليون وحدة (تحديث ١٩) — الصفر يعني مجاني.
+  // الدايم أول مرة موديلات الـ API بتتمنت حسب السعر فعليًا بدل عدد التوكنات.
+  const extModelCfg = await getModelProvider(modelId).catch(() => null);
+  const extPriceInMicro = extModelCfg?.priceInMicro ?? 0;
+  const extPriceOutMicro = extModelCfg?.priceOutMicro ?? 0;
 
   if (rawMessages.length > MAX_MESSAGES) {
     return NextResponse.json(
@@ -549,8 +557,14 @@ export async function POST(req: NextRequest) {
 
         const billableCompletionText = finalContent + toolCallsBillableText(toolCalls);
         const promptText = messagesForUpstream.map((m) => m.content).join("\n");
-        const totalTokens = Math.max(1, Math.round(estimateTokensPrecise(promptText, billableCompletionText) * costMult));
-        await recordUsage({ keyId: keyRow.id, userId: keyRow.user_id, modelId, totalTokens });
+        // usage بتوكنات حقيقية (من غير معامل الهامش — تحديث ١٩) + الخصم بتكلفة حسب تسعيرة الموديل × الهامش
+        const promptTokensEst = estimateTokensPrecise(promptText);
+        const totalTokens = Math.max(1, estimateTokensPrecise(promptText, billableCompletionText));
+        const completionTokens = Math.max(totalTokens - promptTokensEst, 0);
+        const chargeMicro = Math.round(
+          costMicroFor(promptTokensEst, completionTokens, extPriceInMicro, extPriceOutMicro) * costMult
+        );
+        await recordUsage({ keyId: keyRow.id, userId: keyRow.user_id, modelId, totalTokens, chargeMicro });
 
         send({
           ...chunkBase,
@@ -622,11 +636,15 @@ export async function POST(req: NextRequest) {
 
   const billableCompletionText = finalContent + toolCallsBillableText(toolCalls);
   const promptText = messagesForUpstream.map((m) => m.content).join("\n");
+  // usage بتوكنات حقيقية (من غير معامل الهامش — تحديث ١٩) + الخصم بتكلفة حسب تسعيرة الموديل × الهامش
   const promptTokens = estimateTokensPrecise(promptText);
-  const totalTokens = Math.max(1, Math.round(estimateTokensPrecise(promptText, billableCompletionText) * costMult));
+  const totalTokens = Math.max(1, estimateTokensPrecise(promptText, billableCompletionText));
   const completionTokens = Math.max(totalTokens - promptTokens, 0);
+  const chargeMicro = Math.round(
+    costMicroFor(promptTokens, completionTokens, extPriceInMicro, extPriceOutMicro) * costMult
+  );
 
-  await recordUsage({ keyId: keyRow.id, userId: keyRow.user_id, modelId, totalTokens });
+  await recordUsage({ keyId: keyRow.id, userId: keyRow.user_id, modelId, totalTokens, chargeMicro });
 
   // تشخيص: زمن الاستجابة الكلي للوضع غير البثي — لو تصنيف الأمان بينتهي
   // مهلته عند العميل، الرقم ده هو الدليل (متوقع يكون كبير لو الموديل بطيء).

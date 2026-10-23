@@ -1,0 +1,56 @@
+# تحديث ١٩ — قتل نظام التوكنز لصالح رصيد بالدولار (USD balance)
+
+تاريخ: 2026-10-23
+
+## الفكرة
+نظام « التوكنز» اتنقل من الفاتورة للمستخدم تمامًا. الحساب بقى **رصيد بالدولار** بيتحسب على نمط
+OpenRouter: لكل موديل سعر **In** و**Out** بالدولار لكل مليون وحدة (مثال: In $4 / Out $20 per 1M)،
+والخصم بيكون الرصيد سالبًا من رصيد المستخدم بتاعه. كلمة «توكنز» اختفت من كل نصوص المستخدم —
+بقت رصيد مُعروض بصيغة دولار (formatBalance).
+
+## الوحدة والتخزين
+- الرصيد بيُخزّن في **micro-dollar (µ$)** صحيح: $1 = 1,000,000 µ$ — الحسابات كلها أعداد صحيحة بلا كسور عائمة.
+- جدول جديد `user_credits(user_id PK→users, total_micro, used_micro, exhausted_at, busy_until, busy_token, updated_at)`.
+  جدول `user_quota` القديم اتساب أرشيفه على قرار مسبق — **صفر كتابات عليه** (اتأكد بالفحص).
+- `user_api_quota` (رصيد المطورين للـ API) بقى له `total_micro/used_micro` + هجرة bridge مرة واحدة.
+- المصافحة عند التسجيل: أدمن = $999، الخطة المجانية = متغير `FREE_BALANCE_USD` (افتراضي $0.50)، تجديد كل 30 يوم زي ما هو.
+
+## التسعير والحساب
+- `ai_models` بقى له `price_in_usd / price_out_usd` (µ$/1M، صفر = مجاني) + `context_note` (نص عرض زي «1.0M»).
+- `costMicroFor(in, out, priceIn, priceOut) = clamp(round((in×pin + out×pout)/1e6), 0, $999.99)` ثم × `cost_multiplier`
+  عند الاستدعاء — المعامل بقى **هامش ربح** (1..50) مش مضخّم توكنز.
+- قطع الرد (`overBudget`) في الشات والاستكمال بقى بالدولار: بتقدير التكلفة اللحظية من تسعيرة الموديل نفسه.
+  موديل من غير سعر = مجاني مبيقطعش أبدًا.
+- الاستهلاك المسجّل (`chat_messages.tokens_used` وusage الـ API) بقى **أعداد توكنز حقيقية** — دليل شفاف،
+  والتكلفة بالدولار بتتسجل منفصلة. TTS بيحاسب بالحرف (السعر In لكل مليون حرف).
+
+## واجهة الأدمن
+- شريحة «تسعير الموديل المحدد» في نموذج المزوّد: أسعار In/Out بالدولار (نَهي عشري) + ملاحظة سياق + حفظ فوري.
+- شارة سعر على كل موديل في القايمة: `$4 / $20` مع tooltip «التسعير بالدولار لكل مليون وحدة — In/Out».
+- زرار **سحب القدرات** من OpenRouter بقى يسحب التسعير تلقائيًا (`endpoints[0].pricing.prompt/completion` → µ$/1M
+  + `context_length` → ملاحظة السياق). لو مفيش سعر معلن بيسيب اللي بيحب بسالم واكتب «سعّره يدويًا».
+- شحن رصيد المستخدم بقى بالدولار (يقبل عشري مش «2.5») إما شحن إضافي أو تعيين رصيد أو تصفير استهلاك —
+  للشات وللـ API منفصلين. اللوج كل عملياته بأسماء جديدة (`recharge_balance/set_balance/recharge_api_balance/set_api_balance`).
+- صفحة المستخدم والقايمة والإحصائيات كلها بالدولار (formatBalance): المتبقي/النسبة/أكبر 5 مستهلكين/الرصيد الكلي.
+
+## واجهة المستخدم
+- نافذة الاستخدام (لر ring) والقائمة والإعدادات وصفحة المستخدم: كلهم بصيغة دولار.
+- باقات الشحن: `lib/recharge.ts` — البداية $2/30ج، بلس $4/60ج، برو $8/120ج، الأسطورة $20/300ج،
+  ورسالة واتساب جاهزة بتكتب الرصيد بالدولار.
+- شحن رصيد الـ API من صفحة المفاتيح: شرائح $2/$5/$20 ورسالة واتساب مخصصة لرصيد الـ API المنفصل.
+- صفحات الباقات (الأرضية + /pricing): العرض المجاني «رصيد متجدد»، وPro بتميّز التسعير بالدولار لكل موديل.
+- i18n ×٤: `quotaOutTitle/quotaOutBody` بلا «توكنز»، مفاتيح `planBalanceMonthly` و`planRenews` الجديدة
+  (عربي/إنجليزي/فرنسي/إسباني)، ومفتاح `akTopupHint` اتعاد صياغته + `akBalanceUnit`.
+
+## ملفات: lib/{db,quota,apiQuota,provider,usageGuard,plans,recharge,tts,subscription,systemPrompt,i18n}.ts ·
+app/api/{chat,chat/continue,malg/v1/chat/completions,quota,api-keys,auth/google}/route.ts ·
+app/api/admin/{users,users/[id],users/[id]/tokens,users/[id]/api-tokens,users/[id]/subscription,stats,deletions,models,models/[id],models/[id]/pull}/route.ts ·
+components/admin/{adminTypes,AdminProvider,UserDetail,UsersList,StatsOverview,TokenRechargeModal,ApiTokenRechargeModal}.tsx ·
+components/{ChatShell,TopBar,AccountMenu,RechargeModal,PlansModal,SettingsModal,ApiKeysPage,landing/PricingSection}.tsx ·
+app/{pricing,privacy,refund}/page.tsx
+
+## التحقق
+- `tsc --noEmit` صفر أخطاء.
+- بناء production كامل ناجح.
+- فحص CJK-garble بعد كل تعديلات العربي: نظيف.
+- صفر كتابات على `user_quota` وصفر مراجع للأسماء القديمة (`REGISTERED_TOKEN_QUOTA/deductTokens/…`).

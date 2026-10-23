@@ -2,17 +2,19 @@
 
 import { useState } from "react";
 import { Coins, KeyRound, Loader2, X } from "lucide-react";
-import { formatTokens } from "@/lib/ai";
+import { formatBalance } from "@/lib/ai";
 import type { AdminUserDetail } from "./adminTypes";
 
 type Mode = "add" | "set" | "reset";
 
-const QUICK_ADD = [1_000_000, 5_000_000, 10_000_000, 20_000_000];
-const QUICK_SET = [1_000_000, 5_000_000, 10_000_000];
+/** المبالغ السريعة بالدولار */
+const QUICK_ADD = [2, 5, 10, 20];
+const QUICK_SET = [5, 10, 20, 50];
 
 /**
  * نافذة إدارة رصيد الـ API لمستخدم — نسخة من TokenRechargeModal.tsx لكن
  * لرصيد الـ API المنفصل تمامًا عن رصيد الشات العادي (user_api_quota).
+ * المبالغ بالدولار (تحديث ١٩).
  */
 export default function ApiTokenRechargeModal({
   user,
@@ -24,19 +26,19 @@ export default function ApiTokenRechargeModal({
   onDone: () => void;
 }) {
   const [mode, setMode] = useState<Mode>("add");
-  const [amount, setAmount] = useState("1000000");
+  const [amount, setAmount] = useState("5");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const submit = async () => {
     setError(null);
-    const parsed = Math.floor(Number(amount));
+    const parsed = Number(String(amount).replace(",", "."));
     if (mode !== "reset" && (!Number.isFinite(parsed) || parsed < 0)) {
-      setError("أدخل رقم توكنز صحيح");
+      setError("أدخل مبلغ بالدولار صحيح (مثال: 5)");
       return;
     }
     if (mode === "add" && parsed <= 0) {
-      setError("كمية الشحن لازم تكون أكبر من صفر");
+      setError("مبلغ الشحن لازم يكون أكبر من صفر");
       return;
     }
 
@@ -81,13 +83,13 @@ export default function ApiTokenRechargeModal({
             <div className="tnum flex items-center justify-between text-[12px]">
               <span className="text-ink-3">رصيد API الحالي</span>
               <span className="text-ink">
-                {formatTokens(user.apiUsedTokens)} / {formatTokens(user.apiTotalAllocatedTokens)}
+                {formatBalance(user.apiUsedMicro)} / {formatBalance(user.apiTotalMicro)}
               </span>
             </div>
             <div className="tnum mt-1 flex items-center justify-between text-[12px]">
               <span className="text-ink-3">المتبقي</span>
               <span className="text-accent">
-                {formatTokens(Math.max(user.apiTotalAllocatedTokens - user.apiUsedTokens, 0))}
+                {formatBalance(Math.max(user.apiTotalMicro - user.apiUsedMicro, 0))}
               </span>
             </div>
           </div>
@@ -124,12 +126,12 @@ export default function ApiTokenRechargeModal({
                 <Coins size={14} className="shrink-0 text-ink-3" />
                 <input
                   value={amount}
-                  onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ""))}
-                  inputMode="numeric"
+                  onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))}
+                  inputMode="decimal"
                   dir="ltr"
                   autoFocus
                   className="w-full bg-transparent text-[13.5px] text-ink focus:outline-none"
-                  placeholder="عدد التوكنز"
+                  placeholder="مبلغ بالدولار (مثال: 5)"
                   onKeyDown={(e) => e.key === "Enter" && submit()}
                 />
               </div>
@@ -141,7 +143,7 @@ export default function ApiTokenRechargeModal({
                     className="tnum rounded border border-hair px-2 py-1 text-[11.5px] text-ink-2 transition-colors hover:border-accent-line hover:text-accent"
                   >
                     {mode === "add" ? "+" : "="}
-                    {formatTokens(v)}
+                    {formatBalance(Math.round(v * 1_000_000))}
                   </button>
                 ))}
               </div>

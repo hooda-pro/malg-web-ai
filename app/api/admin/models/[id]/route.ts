@@ -45,6 +45,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     is_active?: unknown;
     tier?: unknown;
     cost_multiplier?: unknown;
+    price_in_usd?: unknown;
+    price_out_usd?: unknown;
+    context_note?: unknown;
     supports_video?: unknown;
     supports_mic?: unknown;
     modality?: unknown;
@@ -82,8 +85,28 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   if (typeof body.cost_multiplier === "number" && Number.isFinite(body.cost_multiplier)) {
     const mult = Math.min(Math.max(body.cost_multiplier, 1), 50);
-    sets.push(`معامل التكلفة ×${mult}`);
+    sets.push(`هامش الربح ×${mult}`);
     await sql`UPDATE ai_models SET cost_multiplier = ${mult}, updated_at = now() WHERE id = ${id}`;
+  }
+  // التسعير (تحديث ١٩): In/Out بالدولار لكل مليون وحدة — القادم من الواجهة أرقام بالدولار
+  // (مثال: 4 و 20 عليه نمط OpenRouter "In $4 / Out $20")، يتخزن بالـmicro-dollar. 0 = مجاني.
+  if (body.price_in_usd !== undefined && Number.isFinite(Number(body.price_in_usd)) && Number(body.price_in_usd) >= 0) {
+    const usd = Math.min(Number(body.price_in_usd), 1000);
+    const micro = Math.round(usd * 1_000_000);
+    sets.push(usd > 0 ? `سعر الإدخال $${usd}/1M` : "بدون سعر إدخال (مجاني)");
+    await sql`UPDATE ai_models SET price_in_usd = ${micro}, updated_at = now() WHERE id = ${id}`;
+  }
+  if (body.price_out_usd !== undefined && Number.isFinite(Number(body.price_out_usd)) && Number(body.price_out_usd) >= 0) {
+    const usd = Math.min(Number(body.price_out_usd), 1000);
+    const micro = Math.round(usd * 1_000_000);
+    sets.push(usd > 0 ? `سعر الإخراج $${usd}/1M` : "بدون سعر إخراج (مجاني)");
+    await sql`UPDATE ai_models SET price_out_usd = ${micro}, updated_at = now() WHERE id = ${id}`;
+  }
+  // ملاحظة السياق المعروضة (مثال: "1.0M") — تعريفية فقط
+  if (typeof body.context_note === "string") {
+    const note = body.context_note.trim().slice(0, 40);
+    sets.push(note ? `السياق: ${note}` : "مسح ملاحظة السياق");
+    await sql`UPDATE ai_models SET context_note = ${note}, updated_at = now() WHERE id = ${id}`;
   }
   if (body.supports_video === true || body.supports_video === false) {
     sets.push("native video " + (body.supports_video ? "ON" : "OFF"));

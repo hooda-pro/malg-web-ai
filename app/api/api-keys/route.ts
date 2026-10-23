@@ -56,16 +56,16 @@ export async function GET() {
   `) as ApiKeyRowRaw[];
 
   const quotaRows = (await sql`
-    SELECT total_allocated_tokens, used_tokens
+    SELECT total_micro, used_micro
     FROM user_api_quota WHERE user_id = ${user.id}
-  `) as { total_allocated_tokens: number; used_tokens: number }[];
+  `) as { total_micro: number; used_micro: number }[];
   const quota = quotaRows[0];
 
   return NextResponse.json({
     keys: keyRows.map(serializeKey),
     quota: {
-      totalAllocatedTokens: Number(quota?.total_allocated_tokens ?? 0),
-      usedTokens: Number(quota?.used_tokens ?? 0),
+      totalMicro: Number(quota?.total_micro ?? 0),
+      usedMicro: Number(quota?.used_micro ?? 0),
     },
   });
 }

@@ -1,4 +1,4 @@
-import { REGISTERED_TOKEN_QUOTA } from "./systemPrompt";
+import { REGISTERED_BALANCE_MICRO } from "./systemPrompt";
 
 export type PlanId = "free" | "pro";
 export type BillingPeriod = "monthly" | "yearly";
@@ -8,8 +8,8 @@ export interface SubscriptionPlan {
   /** الاسم المعروض */
   name: string;
   tagline: string;
-  /** توكنز تُمنح مع كل تفعيل/تجديد */
-  monthlyTokens: number;
+  /** رصيد التجديد الشهري بالـmicro-dollar (0 = بدون منحة مضافة — الرصيد الأساسي بيتجدد لوحده) */
+  monthlyBalanceMicro: number;
   /** هل تفتح الموديلات المدفوعة */
   paidModels: boolean;
   /** هل يسمح بشراء توكنز إضافية أثناء الاشتراك */
@@ -24,7 +24,7 @@ export const FREE_PLAN: SubscriptionPlan = {
   id: "free",
   name: "Free",
   tagline: "رصيد شهري أساسي والموديلات المجانية",
-  monthlyTokens: REGISTERED_TOKEN_QUOTA,
+  monthlyBalanceMicro: REGISTERED_BALANCE_MICRO,
   paidModels: false,
   topUpAllowed: false,
   monthlyUSD: 0,
@@ -33,18 +33,15 @@ export const FREE_PLAN: SubscriptionPlan = {
 };
 
 /**
- * اقتصاديات الهامش (claude-sonnet-5.5 عبر Token Harbor: $2 دخول / $10 خروج):
- * استهلاك الشات input-heavy (سياق + هيستوري) فالمتوسط المرجح ≈ $4 لكل مليون حقيقي.
- * معامل التكلفة ×4 على موديل كلود يعني: 20M رصيد Pro ≈ 5M حقيقي ≈ $20 تكلفة
- * مقابل $25 سعر → ≈ $5 ربح لكل مشترك نشط، قبل الشحن الإضافي.
- * الشحن الإضافي المحروق على الموديل الرخيص تكلفته ≈ صفر (تهجين متقاطع يغطي
- * حرق كلود). لو تغيّرت أسعار المزوّد، عدّل cost_multiplier من عمود ai_models.
+ * اقتصاديات الهامش (تحديث ١٩): كل موديل دلوقتي عامله سعر إدخال/إخراج بالدولار لكل
+ * مليون وحدة (ai_models.price_in_usd / price_out_usd) + معامل هامش (cost_multiplier)
+ * بيتضرب في التكلفة المحسوبة قبل الخصم. الموديل المجاني (من غير سعر) بلا خصم خالص.
  */
 export const PRO_PLAN: SubscriptionPlan = {
   id: "pro",
   name: "Pro",
   tagline: "كل الموديلات + رصيد شهري ضخم + شحن إضافي بحرية",
-  monthlyTokens: 20_000_000,
+  monthlyBalanceMicro: 0,
   paidModels: true,
   topUpAllowed: true,
   monthlyUSD: 25,

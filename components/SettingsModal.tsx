@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import type { ChatMessage, ChatSession, SessionUser } from "@/lib/types";
 import { LANGUAGES, type Lang } from "@/lib/i18n";
-import { formatTokens } from "@/lib/ai";
+import { formatBalance } from "@/lib/ai";
 import type { SubscriptionInfo } from "@/lib/plans";
 import { Button, Dialog, Panel, Switch } from "./ui/Controls";
 import { Avatar, ThemeSwitch, type SettingsTab } from "./AccountMenu";
@@ -520,7 +520,7 @@ function BillingTab({
               <div>
                 <p className="text-[12.5px] text-ink-3">{t("usageRemaining")}</p>
                 <p className="tnum mt-1 text-[30px] font-semibold leading-none tracking-display text-ink">
-                  {quota ? formatTokens(remaining) : "—"}
+                  {quota ? formatBalance(remaining) : "—"}
                 </p>
               </div>
               <Button variant="primary" size="sm" onClick={onOpenRecharge}>
@@ -542,7 +542,7 @@ function BillingTab({
             </div>
             <p className="tnum mt-2 text-[12.5px] text-ink-3">
               {quota
-                ? t("usageUsed", { used: formatTokens(quota.used), total: formatTokens(quota.total) })
+                ? t("usageUsed", { used: formatBalance(quota.used), total: formatBalance(quota.total) })
                 : "…"}
             </p>
             <p className="mt-4 border-t border-hair pt-3 text-pretty text-[12.5px] leading-5 text-ink-2">

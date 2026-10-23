@@ -756,6 +756,16 @@ export function formatTokens(n: number): string {
   return new Intl.NumberFormat("en-US").format(n);
 }
 
+/** تنسيق رصيد بالدولار: micro-dollar → "$4.20". أقل من سنت يظهر بـ3 خانات عشان مايطلعش "$0.00". */
+export function formatBalance(micro: number): string {
+  const usd = Math.max(Number(micro) || 0, 0) / 1_000_000;
+  if (usd === 0) return "$0.00";
+  if (usd >= 0.01) {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(usd);
+  }
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(usd);
+}
+
 export type NegotiationResult =
   | { ok: true; response: Response; protocol: ProviderProtocol; endpoint: string; providerName: string; model: string }
   | { ok: false; errorMessage: string };

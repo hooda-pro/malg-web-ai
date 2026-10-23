@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Check, Crown, MessageCircle } from "lucide-react";
-import { formatTokens } from "@/lib/ai";
+import { formatBalance } from "@/lib/ai";
 import type { SessionUser } from "@/lib/types";
 import { WHATSAPP_USERNAME, buildWhatsAppLink } from "@/lib/recharge";
 import {
@@ -94,7 +94,7 @@ export default function PlansModal({
           </p>
           <p className="mt-1 text-[12px] text-ink-3">{t("planFreeDesc")}</p>
           <p className="mt-3 border-t border-hair pt-3 text-[12px] leading-6 text-ink-2">
-            {t("planTokensPerMonth", { n: formatTokens(FREE_PLAN.monthlyTokens) })}
+            {t("planBalanceMonthly", { n: formatBalance(FREE_PLAN.monthlyBalanceMicro) })}
           </p>
           {!isPro && (
             <span className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-medium text-accent">
@@ -118,7 +118,7 @@ export default function PlansModal({
           <ul className="mt-3 flex flex-col gap-1.5 border-t border-hair pt-3 text-[12px] leading-6 text-ink-2">
             <li className="flex items-center gap-1.5">
               <Check size={13} className="shrink-0 text-live" />
-              {t("planTokensPerMonth", { n: formatTokens(PRO_PLAN.monthlyTokens) })}
+              {t("planRenews")}
             </li>
             <li className="flex items-center gap-1.5">
               <Check size={13} className="shrink-0 text-live" />

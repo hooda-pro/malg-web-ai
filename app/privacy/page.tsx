@@ -20,7 +20,7 @@ export default function PrivacyPage() {
         <ul className="mt-3 list-disc space-y-2 ps-5 text-[15px] leading-8 text-ink-2">
           <li>بيانات حساب Google عند التسجيل: الاسم وعنوان البريد الإلكتروني فقط.</li>
           <li>محادثاتك ورسائلك، محفوظة على قاعدة بيانات Neon Postgres الخاصة بنا.</li>
-          <li>إعدادات حسابك (اللغة، الموديل المفضل، الثيم) ورصيد التوكنز واشتراكك.</li>
+          <li>إعدادات حسابك (اللغة، الموديل المفضل، الثيم) ورصيدك واشتراكك.</li>
         </ul>
       </section>
 

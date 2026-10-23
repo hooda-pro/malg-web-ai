@@ -10,7 +10,7 @@ import {
   ACCOUNT_CHECK_UNAVAILABLE_MESSAGE,
   type GenerationLease,
 } from "@/lib/usageGuard";
-import { checkAndMaybeRenewQuota, deductTokens } from "@/lib/quota";
+import { checkAndMaybeRenewCredits, costMicroFor, deductBalance } from "@/lib/quota";
 import { getCostMultiplier, hasPaidSubscription, isModelPaid } from "@/lib/subscription";
 import { getMemory, maybeRefreshMemory } from "@/lib/memory";
 import { callMcpTool, getMcpTools } from "@/lib/mcp";
@@ -28,7 +28,7 @@ import {
 import {
   buildPersonalizationBlock,
   buildSystemPrompt,
-  REGISTERED_TOKEN_QUOTA,
+  REGISTERED_BALANCE_MICRO,
 } from "@/lib/systemPrompt";
 import { isDeepSearchEnabled, runDeepSearch, runToolSearch } from "@/lib/webSearch";
 import { extractDeliverableFiles } from "@/lib/parseContent";
@@ -96,9 +96,9 @@ const SANDBOX_ON = isSandboxConfigured();
 // عشان الموديل يكتب خلاصة (شوف تحت).
 const MAX_TOOL_ROUNDS = 30;
 
-/** بتتضاف لآخر الرد لو رصيد التوكنز خلص وانت لسه بتكتب. */
+/** بتتضاف لآخر الرد لو الرصيد خلص وانت لسه بتكتب. */
 const QUOTA_CUTOFF_NOTE =
-  "\n\n⚠️ رصيد التوكنز بتاعك خلص فوقفت الرد هنا. اشحن رصيدك أو استنى التجديد التلقائي، وبعدها ابعت «كمّل» وأكمل من نفس النقطة.";
+  "\n\n⚠️ رصيدك خلص فوقفت الرد هنا. اشحن رصيدك أو استنى التجديد التلقائي، وبعدها ابعت «كمّل» وأكمل من نفس النقطة.";
 // أقصى عدد استدعاءات أدوات في الجولة الواحدة.
 const MAX_CALLS_PER_ROUND = 6;
 // أقصى عدد جولات تكملة تلقائية داخلية عند الانقطاع بطول المخرجات — بعدها
@@ -230,13 +230,13 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   // الموديل سأل المستخدم في ردّه السابق عن تأكيد قفل الشات؟ (صالح للرسالة دي بس — بنصفّره بعد ما الاتصال بالموديل ينجح)
   const closePendingAtStart = !!sessionRows[0].close_pending;
 
-  const quotaCheck = await checkAndMaybeRenewQuota(user.id, isAdmin);
+  const quotaCheck = await checkAndMaybeRenewCredits(user.id, isAdmin);
   if (quotaCheck.blocked) {
     console.warn("[chat-reject] quota user=", user.id);
     return NextResponse.json({ error: quotaCheck.message, quotaExhausted: true }, { status: 403 });
   }
-  // التوكنز المتبقية للمستخدم قبل الرد ده (null = أدمن، مفيش حد) — بنقطع الرد في نصه لو خلصت.
-  const quotaRemaining = quotaCheck.remaining;
+  // الرصيد المتبقي قبل الرد ده بالـmicro-dollar (null = أدمن، مفيش حد) — بنقطع الرد في نصه لو خلص.
+  const quotaRemaining = quotaCheck.remainingMicro;
 
   // نموذج الصوت: مقفول لغير الأدمن — واجهة الصوت منفصلة "قريبًا"، وموديلات الإدخال
   // الصوتي (stt) هي بنية تحتية للترجمة — الفحص هنا بقاعدة الداتابيز (modality) مش
@@ -344,11 +344,11 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   }
 
   // 2) جهّز الرسائل المرسلة للموديل: system prompt ديناميكي (اسم اليوزر + الرصيد + معرفة المنصة) + آخر 10 رسائل
-  const quotaRows = (await sql`
-    SELECT total_allocated_tokens, used_tokens FROM user_quota WHERE user_id = ${user.id}
-  `) as { total_allocated_tokens: number; used_tokens: number }[];
-  const totalAllocated = Number(quotaRows[0]?.total_allocated_tokens ?? REGISTERED_TOKEN_QUOTA);
-  const usedTokensCount = Number(quotaRows[0]?.used_tokens ?? 0);
+  const creditRows = (await sql`
+    SELECT total_micro, used_micro FROM user_credits WHERE user_id = ${user.id}
+  `) as { total_micro: number; used_micro: number }[];
+  const totalBalanceMicro = Number(creditRows[0]?.total_micro ?? REGISTERED_BALANCE_MICRO);
+  const usedMicro = Number(creditRows[0]?.used_micro ?? 0);
 
   // 2.5) بحث تلقائي احتياطي (fallback): لو الرسالة واضح إنها محتاجة معلومة
   // حديثة، بنجهز نتايج مبدئية في السياق — لكن الأولوية لأداة web_search اللي
@@ -369,6 +369,9 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
   const modelCfg = await getModelProvider(model).catch(() => null);
   const modelDisplayName = modelCfg?.displayName ?? "MALG AI";
   const costMult = modelCfg && Number.isFinite(modelCfg.costMultiplier) && modelCfg.costMultiplier > 0 ? modelCfg.costMultiplier : 1;
+  // تسعيرة الموديل بالـmicro-dollar لكل مليون وحدة (تحديث ١٩) — الصفر يعني موديل مجاني بلا خصم.
+  const priceInMicro = modelCfg?.priceInMicro ?? 0;
+  const priceOutMicro = modelCfg?.priceOutMicro ?? 0;
   const videoNative = modelCfg?.supportsVideo === true;
   // الصوت الحقيقي (input_audio) مربوط بنفس علم «المايك» اللي بيزوده الأدمن لموديل معين:
   // لو الموديل بيدعم المايك، يبقى بيدعم سماع التسجيلات الصوتية كذلك.
@@ -396,8 +399,8 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
     buildSystemPrompt({
       userName: user.displayName,
       modelName: modelDisplayName,
-      totalTokens: totalAllocated,
-      remainingTokens: Math.max(totalAllocated - usedTokensCount, 0),
+      totalBalanceMicro,
+      remainingBalanceMicro: Math.max(totalBalanceMicro - usedMicro, 0),
       uiLanguage,
       tone,
       webSearchAvailable: SEARCH_ON,
@@ -537,14 +540,15 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
       let contentStartTime: number | null = null;
 
       // عدّاد لحظي لاستهلاك الرد ده: لو الرصيد خلص وانت لسه بتكتب، بنوقف الموديل فورًا.
-      // (نفس تقدير estimateTokens: حرف/3، + برومبت المستخدم + مخرجات الأدوات)
+      // (تحديث ١٩: التقدير بالـmicro-dollar من تسعيرة الموديل نفسها — تقدير الإدخال/المخرجات
+      // كتوكنات وبعدين تكلفة حسب سعر الإدخال/الإخراج. موديل من غير سعر = مبيقطعش)
       let emittedChars = 0;
       let toolTokens = 0;
       let quotaCutOff = false;
       let timeCutOff = false;
-      const overBudget = () =>
-        quotaRemaining !== null &&
-        promptTokens + Math.floor(emittedChars / 3) + toolTokens >= quotaRemaining;
+      const costSoFarMicro = () =>
+        costMicroFor(promptTokens + toolTokens, Math.floor(emittedChars / 3), priceInMicro, priceOutMicro);
+      const overBudget = () => quotaRemaining !== null && costSoFarMicro() >= quotaRemaining;
       const overTime = () => Date.now() - requestStart > HARD_STOP_MS;
       const pastRoundDeadline = () => Date.now() - requestStart > NO_NEW_ROUND_AFTER_MS;
       // بنوقف قراءة الموديل لو الرصيد خلص أو الوقت خلص، وبنفرّق بينهم عشان الرسالة الصح تظهر.
@@ -1479,12 +1483,16 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
       const placeholderIfEmpty = result.stoppedByUser ? "تم إيقاف الرد بواسطتك." : "";
 
       if (finalContent || finalReasoning || result.stoppedByUser) {
-        // الحسبة: اللي اتبعت للموديل فعلًا من رسالة المستخدم (نص + قايمة/ملفات صغيرة، والصورة
-        // بتقدير ثابت — مش Base64) + الرد + التفكير + جولات الأدوات. محتوى zip الكامل
-        // مبيتحسبش لأنه مبيتبعتش.
-        const totalTokens = usedFallback
+        // الحسبة (تحديث ١٩): عدد التوكنات الحقيقي المتوقع (للتخزين في tokens_used)
+        // + التكلفة بالدولار من تسعيرة الموديل: المدخلات (نص المستخدم + الصور + جولات
+        // الأدوات) × سعر الإدخال، والمخرجات (الرد + التفكير) × سعر الإخراج، وبعدين
+        // × معامل الهامش (cost_multiplier). الموديل من غير سعر = صفر.
+        const inEstimate = promptTokens + extraTokens;
+        const outEstimate = estimateTokens(finalContent, finalReasoning ?? "");
+        const totalTokens = usedFallback ? 0 : Math.max(1, inEstimate + outEstimate);
+        const chargeMicro = usedFallback
           ? 0
-          : Math.max(1, Math.round((promptTokens + estimateTokens(finalContent, finalReasoning ?? "") + extraTokens) * costMult));
+          : Math.round(costMicroFor(inEstimate, outEstimate, priceInMicro, priceOutMicro) * costMult);
         const assistantId = randomUUID();
 
         // بناء خطوات الـAgent الحقيقية اللي حصلت في الرد ده (بحث فعلي تم +
@@ -1530,11 +1538,11 @@ async function handleChat(req: NextRequest, guard: { lease: GenerationLease | nu
           console.error("failed to persist assistant message", e);
         }
         // الخصم مستقل عن حفظ الرسالة: الرد وصل للمستخدم فعلًا والتكلفة اتحملت، فلو الحفظ فشل مانسيبوش ببلاش.
-        if (totalTokens > 0) {
+        if (chargeMicro > 0) {
           try {
-            await deductTokens(user.id, totalTokens, isAdmin);
+            await deductBalance(user.id, chargeMicro, isAdmin);
           } catch (e) {
-            console.error("failed to deduct tokens", e);
+            console.error("failed to deduct balance", e);
           }
         }
       }

@@ -1,8 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AudioLines, Check, ChevronDown, ChevronUp, Copy, Crown, FlaskConical, GripVertical, KeyRound, Layers, Loader2, Mic, Pencil, PlugZap, Plus, RefreshCw, Save, Star, Trash2, X } from "lucide-react";
+import { AudioLines, Check, ChevronDown, ChevronUp, Copy, Crown, DollarSign, FlaskConical, GripVertical, KeyRound, Layers, Loader2, Mic, Pencil, PlugZap, Plus, RefreshCw, Save, Star, Trash2, X } from "lucide-react";
 import type { ModelSummary, ProviderConfigPublic, ProviderProtocol } from "@/lib/provider";
+
+/** عرض سعر بالدولار من micro-dollar: 4 → "4"، 150000 → "0.15" (من غير أصفار زيادة) */
+function fmtPrice(micro: number | null | undefined): string {
+  const usd = Math.max(Number(micro) || 0, 0) / 1_000_000;
+  if (usd === 0) return "0";
+  return usd >= 0.01 ? String(Math.round(usd * 100) / 100) : String(Math.round(usd * 1000) / 1000);
+}
 
 interface Loaded {
   active: ProviderConfigPublic;
@@ -84,6 +91,18 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
+  // شريحة التسعير (تحديث ١٩): In/Out بالدولار لكل مليون وحدة + ملاحظة السياق للعرض
+  const [priceIn, setPriceIn] = useState("");
+  const [priceOut, setPriceOut] = useState("");
+  const [ctxNote, setCtxNote] = useState("");
+  const [priceSaving, setPriceSaving] = useState(false);
+  useEffect(() => {
+    setPriceIn(selectedSummary?.priceInMicro ? String(selectedSummary.priceInMicro / 1_000_000) : "");
+    setPriceOut(selectedSummary?.priceOutMicro ? String(selectedSummary.priceOutMicro / 1_000_000) : "");
+    setCtxNote(selectedSummary?.contextNote || "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, selectedSummary?.priceInMicro, selectedSummary?.priceOutMicro, selectedSummary?.contextNote]);
+
   const loadModels = async (keepId?: string | null): Promise<ModelSummary[]> => {
     const res = await fetch("/api/admin/models");
     const data = await res.json();
@@ -91,6 +110,30 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
     const list = (data.models ?? []) as ModelSummary[];
     setModels(list);
     return list;
+  };
+
+  const savePricing = async () => {
+    if (!selectedId) return;
+    setPriceSaving(true);
+    try {
+      const res = await fetch(`/api/admin/models/${encodeURIComponent(selectedId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          price_in_usd: Number(priceIn.replace(",", ".")) || 0,
+          price_out_usd: Number(priceOut.replace(",", ".")) || 0,
+          context_note: ctxNote,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "فشل حفظ التسعير");
+      await loadModels(selectedId);
+      notify("ok", "التسعير اتحدّث ✓");
+    } catch (e) {
+      notify("err", e instanceof Error ? e.message : "فشل حفظ التسعير");
+    } finally {
+      setPriceSaving(false);
+    }
   };
 
   const pickSelection = (list: ModelSummary[], keepId?: string | null): string | null => {
@@ -566,6 +609,84 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
+      {/* تسعير الموديل المحدد (تحديث ١٩) — In/Out بالدولار لكل مليون وحدة على نمط OpenRouter */}
+      <div className="rounded-lg border border-hair bg-surface p-4 shadow-1">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <DollarSign size={15} className="text-warn" />
+            <h2 className="text-[13px] font-semibold text-ink">تسعير الموديل المحدد</h2>
+          </div>
+          {selectedSummary && (
+            <span
+              className="tnum max-w-[190px] truncate rounded-full bg-surface-3 px-2 py-0.5 text-[11px] text-ink-2"
+              dir="ltr"
+            >
+              {selectedSummary.id}
+            </span>
+          )}
+        </div>
+        {selectedSummary ? (
+          <div className="space-y-2.5">
+            <div className="grid grid-cols-2 gap-2.5">
+              <div>
+                <label className="mb-1 block text-[12px] text-ink-2">
+                  سعر الإدخال ($ لكل مليون) — In
+                </label>
+                <input
+                  value={priceIn}
+                  onChange={(e) => setPriceIn(e.target.value.replace(/[^\d.]/g, ""))}
+                  inputMode="decimal"
+                  dir="ltr"
+                  placeholder="مثال: 4"
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[12px] text-ink-2">
+                  سعر الإخراج ($ لكل مليون) — Out
+                </label>
+                <input
+                  value={priceOut}
+                  onChange={(e) => setPriceOut(e.target.value.replace(/[^\d.]/g, ""))}
+                  inputMode="decimal"
+                  dir="ltr"
+                  placeholder="مثال: 20"
+                  className={inputCls}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-[12px] text-ink-2">
+                ملاحظة السياق (للعرض — مثال: 1.0M)
+              </label>
+              <input
+                value={ctxNote}
+                onChange={(e) => setCtxNote(e.target.value)}
+                dir="ltr"
+                placeholder="مثال: 1.0M"
+                className={inputCls}
+              />
+            </div>
+            <p className="text-[11.5px] leading-5 text-ink-3">
+              سيبهم فاضيين لو الموديل مجاني. زرار «سحب القدرات» بيكتب التسعير تلقائيًا من OpenRouter
+              لو الموديل عليه سعر معلن.
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={savePricing}
+                disabled={priceSaving || busy}
+                className="flex items-center gap-2 rounded-md bg-accent-soft px-3.5 py-2 text-[12.5px] font-semibold text-accent transition-colors hover:bg-accent-hover disabled:opacity-40"
+              >
+                {priceSaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                {priceSaving ? "جاري الحفظ…" : "حفظ التسعير"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-[12px] text-ink-3">اختار موديل من القايمة تحت عشان تسعّره.</p>
+        )}
+      </div>
+
       <div className="rounded-lg border border-hair bg-surface p-4 shadow-1">
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -760,6 +881,14 @@ export default function AdminProvider({ notify }: { notify: (type: "ok" | "err",
                           ×{m.costMultiplier}
                         </span>
                       )}
+                      {(m.priceInMicro ?? 0) > 0 || (m.priceOutMicro ?? 0) > 0 ? (
+                        <span
+                          className="shrink-0 truncate rounded-full bg-surface-3 px-1.5 py-px text-[10.5px] font-medium text-ink-2"
+                          title="التسعير بالدولار لكل مليون وحدة — In/Out"
+                        >
+                          ${fmtPrice(m.priceInMicro)} / ${fmtPrice(m.priceOutMicro)}
+                        </span>
+                      ) : null}
                       {m.modality === "tts" ? (
                         <span className="flex shrink-0 items-center gap-1 rounded-full bg-accent-soft px-1.5 py-px text-[10.5px] font-medium text-accent">
                           <AudioLines size={10} />

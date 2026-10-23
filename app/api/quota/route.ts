@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ensureSchema } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
-import { getQuotaSnapshot } from "@/lib/quota";
+import { getCreditSnapshot } from "@/lib/quota";
 import { getActiveSubscription } from "@/lib/subscription";
 import { getUserFlags, ACCOUNT_CHECK_UNAVAILABLE_MESSAGE } from "@/lib/usageGuard";
 
@@ -18,14 +18,14 @@ export async function GET() {
     );
   }
   const { isAdmin } = flags;
-  const snap = await getQuotaSnapshot(user.id, isAdmin);
+  const snap = await getCreditSnapshot(user.id, isAdmin);
   const sub = await getActiveSubscription(user.id).catch(() => null);
 
   return NextResponse.json({
     quota: {
-      totalAllocatedTokens: snap.totalAllocatedTokens,
-      usedTokens: snap.usedTokens,
-      quotaExhaustedAt: snap.quotaExhaustedAt,
+      totalMicro: snap.totalMicro,
+      usedMicro: snap.usedMicro,
+      exhaustedAt: snap.exhaustedAt,
       renewsAt: snap.renewsAt,
       isAdmin,
       subscription: isAdmin

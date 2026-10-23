@@ -1,19 +1,18 @@
+import { formatBalance } from "./ai";
+
 export const APP_VERSION = "2.3";
 
-export const GUEST_TOKEN_QUOTA = 1_000;
 /**
- * الرصيد المجاني للحساب الجديد (وبيتجدد بنفس القيمة كل 30 يوم بعد النفاد).
- * ممكن تغيّره من غير تعديل كود: ضيف FREE_TOKEN_QUOTA في متغيرات البيئة على السيرفر.
- * الوحدة هنا «توكنز المحادثة» (حرف÷3 لرسالتك + الرد + مخرجات الأدوات) — مش توكنز الموديل الخام،
- * والـsystem prompt وتاريخ المحادثة مش بيتحسبوا. فالرد العادي ≈ 600–1,500 توكن، وبناء موقع كامل ≈ 8–15 ألف.
- * 25 ألف = حوالي 15–35 رد، أو مشروعين — كفاية تجرّب المنتج، وأقل بكتير من أصغر باقة مدفوعة (250 ألف).
+ * الرصيد المجاني للحساب الجديد (وبيتجدد بنفس القيمة كل 30 يوم بعد النفاد) — بالدولار.
+ * الوحدة الداخلية: micro-dollar (µ$) — 1$ = 1,000,000 µ$ (عدد صحيح، بدون كسور).
+ * ممكن تغيّره من غير تعديل كود: ضيف FREE_BALANCE_USD في متغيرات البيئة (قيمة بالدولار، مثال: 0.5).
  */
-function envTokens(name: string, fallback: number): number {
-  const n = Number(process.env[name]);
-  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback;
+function envFreeBalanceMicro(fallbackUsd: number): number {
+  const usd = Number(process.env.FREE_BALANCE_USD);
+  const chosen = Number.isFinite(usd) && usd >= 0 ? usd : fallbackUsd;
+  return Math.round(chosen * 1_000_000);
 }
-export const REGISTERED_TOKEN_QUOTA = envTokens("FREE_TOKEN_QUOTA", 25_000);
-export const DEFAULT_TOKEN_QUOTA = REGISTERED_TOKEN_QUOTA;
+export const REGISTERED_BALANCE_MICRO = envFreeBalanceMicro(0.5);
 export const QUOTA_RENEWAL_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000; // شهر كامل (30 يوم)
 
 export const MODEL_GLM_47_FLASH = "glm-4.7-flash";
@@ -26,8 +25,10 @@ export interface SystemPromptOptions {
   /** الاسم المعروض للموديل المستخدم في هذه المحادثة (لهوية "ما هو الموديل؟").
    * الافتراضي "MALG AI" للتوافق الخلفي. */
   modelName?: string | null;
-  totalTokens?: number | null;
-  remainingTokens?: number | null;
+  /** إجمالي رصيد المستخدم (micro-dollar) — للتعريف في الـsystem prompt */
+  totalBalanceMicro?: number | null;
+  /** المتبقي من الرصيد (micro-dollar) */
+  remainingBalanceMicro?: number | null;
   uiLanguage?: string | null;
   /** أسلوب الرد على العربي: "msa" (افتراضي) أو "egyptian" — من إعدادات المستخدم. */
   tone?: string | null;
@@ -62,10 +63,10 @@ export interface SystemPromptOptions {
 export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
   const userName = (opts.userName || "").trim();
   const modelName = (opts.modelName || "").trim() || "MALG AI";
-  const totalTokens =
-    opts.totalTokens && opts.totalTokens > 0 ? Math.floor(opts.totalTokens) : REGISTERED_TOKEN_QUOTA;
-  const remainingTokens =
-    typeof opts.remainingTokens === "number" ? Math.max(Math.floor(opts.remainingTokens), 0) : null;
+  const totalBalance =
+    opts.totalBalanceMicro && opts.totalBalanceMicro > 0 ? Math.floor(opts.totalBalanceMicro) : REGISTERED_BALANCE_MICRO;
+  const remainingBalance =
+    typeof opts.remainingBalanceMicro === "number" ? Math.max(Math.floor(opts.remainingBalanceMicro), 0) : null;
 
   const egyptianTone = (opts.tone || "").trim().toLowerCase() === "egyptian";
   const uiLanguageName =
@@ -83,11 +84,10 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
     ? `   - The app interface the user is browsing right now is displayed in: ${uiLanguageName}. Unless the user writes in a different language, match this interface language naturally by default.\n`
     : "";
 
-  const freeQuota = REGISTERED_TOKEN_QUOTA.toLocaleString("en-US");
   const tokensLine =
-    remainingTokens !== null
-      ? `الرصيد المتبقي لديه الآن حوالي ${remainingTokens} توكنز من أصل ${totalTokens}.`
-      : `إجمالي رصيده ${totalTokens} توكنز.`;
+    remainingBalance !== null
+      ? `الرصيد المتبقي لديه الآن حوالي ${formatBalance(remainingBalance)} من أصل ${formatBalance(totalBalance)}.`
+      : `إجمالي رصيده ${formatBalance(totalBalance)}.`;
 
   const fileToolsSection = opts.fileToolsAvailable
     ? `\n11. Project files (list_files / read_file / edit_file):
@@ -249,7 +249,7 @@ ${userSection}
    - أنت داري بكل مميزات المنصة وتقدر تشرحها أو تساعد أي حد يستخدمها:
      • شات فوري بالبث الحي، مع مؤشر «يفكر» صغير بيظهر لحظة تفكيري قبل الرد (يقدر يضغط عليه يشوف التفكير كامل).
      • محادثات محفوظة على السيرفر في قايمة جانبية: يقدر يفتح محادثة قديمة، يعمل محادثة جديدة، يمسح محادثة، أو يمسح الكل.
-     • نظام رصيد توكنز: رصيد المستخدم الحالي ${totalTokens} توكنز. ${tokensLine} كل رسالة بتستهلك توكنز على حسب طولها (الرد العادي حوالي ألف توكن أو أقل)، ولما الرصيد يخلص بيرجع له رصيد مجاني أساسي (${freeQuota} توكنز) تلقائياً بعد شهر كامل (30 يوم) من لحظة النفاد، أو يقدر يشحن فورًا من «شراء توكنز» في قايمة حسابه (تحت في القايمة الجانبية) بتواصل واتساب. الرصيد المتبقي بيظهر كدائرة صغيرة (progress ring) فوق يمين/شمال الشات بتتلوّن على حسب نسبة الاستهلاك، وبالضغط عليها أو تمرير الماوس عليها بتفتح تفاصيل الاستخدام كاملة.
+     • نظام الرصيد: رصيد المستخدم الحالي ${formatBalance(totalBalance)}. ${tokensLine} كل موديل ليه سعر إدخال وإخراج بالدولار لكل مليون وحدة، والخصم بيحصل على حسب سعر الموديل اللي المستخدم اختاره وكم استخدم منه. ولما الرصيد يخلص بيرجع له الرصيد المجاني الأساسي (${formatBalance(REGISTERED_BALANCE_MICRO)}) تلقائياً بعد شهر كامل (30 يوم) من لحظة النفاد، أو يقدر يشحن فورًا من «شحن الرصيد» في قايمة حسابه (تحت في القايمة الجانبية) بتواصل واتساب. الرصيد المتبقي بيظهر كدائرة صغيرة (progress ring) فوق يمين/شمال الشات بتتلوّن على حسب نسبة الاستهلاك، وبالضغط عليها أو تمرير الماوس عليها بتفتح تفاصيل الاستخدام كاملة.
      • أكواد التسليم بتوصله كملفات جاهزة (كروت ملفات فيها نسخ وتحميل لكل ملف، وتحميل المشروع كله zip)، وأمثلة الشرح القصيرة بتظهر inline في النص.
      • بيئة تشغيل كود حية (HTML/CSS/JS) جوا المنصة.
      • لوحة معاينة جانبية (Artifact panel) جنب الشات بيعرض صفحات الويب اللي بنيته معاينة حية + الكود جنب بعض، بتتفتح لوحده أول ما تكتب ملفات، وفيها زر ملء شاشة.

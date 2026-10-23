@@ -287,7 +287,7 @@ export default function ChatShell() {
       const res = await fetch("/api/quota");
       const data = await res.json();
       if (data.quota) {
-        setQuota({ total: data.quota.totalAllocatedTokens, used: data.quota.usedTokens });
+        setQuota({ total: data.quota.totalMicro, used: data.quota.usedMicro });
         setQuotaRenewsAt(data.quota.renewsAt ?? null);
         setSubscription((data.quota.subscription ?? null) as SubscriptionInfo | null);
       } else {

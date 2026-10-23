@@ -145,7 +145,7 @@ export async function acquireGenerationLease(userId: string): Promise<Generation
   const token = randomUUID();
   try {
     const rows = await sql`
-      UPDATE user_quota
+      UPDATE user_credits
       SET busy_until = now() + make_interval(secs => ${LEASE_SECONDS}::float8), busy_token = ${token}
       WHERE user_id = ${userId} AND (busy_until IS NULL OR busy_until < now())
       RETURNING user_id
@@ -162,7 +162,7 @@ export async function acquireGenerationLease(userId: string): Promise<Generation
       if (released) return;
       released = true;
       try {
-        await sql`UPDATE user_quota SET busy_until = NULL, busy_token = NULL WHERE user_id = ${userId} AND busy_token = ${token}`;
+        await sql`UPDATE user_credits SET busy_until = NULL, busy_token = NULL WHERE user_id = ${userId} AND busy_token = ${token}`;
       } catch (e) {
         console.error("releaseGenerationLease failed", e);
       }
