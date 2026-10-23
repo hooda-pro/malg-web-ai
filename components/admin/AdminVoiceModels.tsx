@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, Info, Loader2, Mic, Plus, Trash2 } from "lucide-react";
+import { AudioLines, Check, Info, Loader2, Mic, Plus, Trash2 } from "lucide-react";
 
 interface Row {
   id: string;
@@ -9,7 +9,9 @@ interface Row {
   description: string;
   isActive: boolean;
   keysCount: number;
-  /** القدرات المحفوظة (وسوم CSV محلولة) — فاضية = توافق قديم بيتعامل كـ stt */
+  /** الصنف: stt = أذن المنصة (ترجمة التسجيلات)، tts = استوديو الصوت (توليد صوت) */
+  modality: string;
+  /** القدرات المحفوظة (وسوم CSV محلولة) — فاضية = توافق قديم بيتعامل كـ stt لأذن المنصة */
   capabilities: string[];
   /** صيغ الصوت المدعومة (CSV محلولة — مثال: mp3,pcm) */
   audioFormats: string[];
@@ -55,6 +57,8 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [creating, setCreating] = useState(false);
+  /** صنف الموديل الجديد: stt = أذن المنصة، tts = استوديو الصوت (توليد صوت) */
+  const [kind, setKind] = useState<"stt" | "tts">("stt");
   const [actingId, setActingId] = useState<string | null>(null);
   const [capsBusy, setCapsBusy] = useState<string | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
@@ -69,12 +73,14 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
       const all = (Array.isArray(data.models) ? data.models : []) as (Row & { modality?: unknown })[];
       setRows(
         all
-          .filter((m) => m.modality === "stt")
+          .filter((m) => m.modality === "stt" || m.modality === "tts")
           .map((m) => ({
             ...m,
+            modality: m.modality === "tts" ? "tts" : "stt",
             capabilities: Array.isArray(m.capabilities) ? m.capabilities.filter((t) => typeof t === "string") : [],
             audioFormats: Array.isArray(m.audioFormats) ? m.audioFormats.filter((t) => typeof t === "string") : [],
           }))
+          .sort((a, b) => (a.modality === b.modality ? 0 : a.modality === "stt" ? -1 : 1))
       );
     } catch (e) {
       notify("err", e instanceof Error ? e.message : "فشل التحميل");
@@ -91,7 +97,8 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
     if (!name.trim() || creating) return;
     setCreating(true);
     try {
-      const body: Record<string, unknown> = { name: name.trim(), modality: "stt", capabilities: ["stt"] };
+      // النموذج بيتولد بقدرته الأساسية مفعّلة (stt للأذن / tts للاستوديو)
+      const body: Record<string, unknown> = { name: name.trim(), modality: kind, capabilities: [kind] };
       const s = slug.trim();
       if (s) body.id = s;
       const res = await fetch("/api/admin/models", {
@@ -101,13 +108,18 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "فشل الإنشاء");
-      notify("ok", "الموديل اتعمل بقدرة «قراءة صوت» — كمّل ضبط الرابط والموديل والمفتاح من «الموديلات والمزوّدون»");
+      notify(
+        "ok",
+        kind === "stt"
+          ? "الموديل اتعمل بقدرة «قراءة صوت» — كمّل ضبط الرابط والموديل والمفتاح من «الموديلات والمزوّدون»"
+          : "الموديل اتعمل بقدرة «توليد صوت» — كمّل ضبط الرابط والموديل والمفتاح من «الموديلات والمزوّدون»"
+      );
       setName("");
       setSlug("");
       await load();
     } catch (e) {
       notify("err", e instanceof Error ? e.message : "فشل الإنشاء");
-    }finally {
+    } finally {
       setCreating(false);
     }
   };
@@ -148,8 +160,8 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
   };
 
   /** تحديث قدرات صف — البيعة بتبعت الوسوم الجديدة كاملة والسيرفر بيقبل المسموحة بس.
-   * السطر القديم (المحفوظ فاضي) بيتفك من الترْكُم الضمني: أول تعديل بتخزن الوسوم صريحة،
-   * والإزاحة اللي بتفضل القايمة فاضية بتتخزن «none» (فصل متعمد — مش القديم الفاضي). */
+   * الصف القديم لأذن المنصة (المحفوظ فاضي) بيبدا من غير وسوم ضمنية: أول تعديل
+   * بيخزن الوسوم صريحة، والإزاحة اللي بتفضل القايمة فاضية بتتخزن «none» (فصل متعمد). */
   const patchCaps = async (row: Row, tag?: string) => {
     const stored = row.capabilities.filter((t) => t !== "none");
     const next = tag
@@ -211,10 +223,11 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
     }
   };
 
-  /** القدرات الظاهرة على الشيب: المحفوظة صريحة، أو «قراءة صوت» للصف القديم الفاضي (توافق) */
-  const capsOf = (m: Row): string[] => (m.capabilities.length ? m.capabilities.filter((t) => t !== "none") : ["stt"]);
-  /** الصف القديم: قدراته المحفوظة فعلاً فاضية (مش none صريح) — أول تعديل هيعاد تخزينها */
-  const isLegacyRow = (m: Row): boolean => m.capabilities.length === 0;
+  /** القدرات الظاهرة على الشيب: المحفوظة صريحة، أو «قراءة صوت» للصف القديم الفاضي (توافق أذن المنصة بس) */
+  const capsOf = (m: Row): string[] =>
+    m.capabilities.length ? m.capabilities.filter((t) => t !== "none") : m.modality === "stt" ? ["stt"] : [];
+  /** الصف القديم (أذن المنصة بس): قدراته المحفوظة فعلاً فاضية (مش none صريح) — أول تعديل هيعاد تخزينها */
+  const isLegacyRow = (m: Row): boolean => m.modality === "stt" && m.capabilities.length === 0;
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -229,7 +242,8 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
               <span className="font-medium text-ink"> قراءة صوت</span> = مترجم الرسايل الصوتية لكل موديلات الشات،
               <span className="font-medium text-ink"> تفريغ صوتي</span> = نفس الشغل عبر endpoint التفريغ
               (موديلات whisper)،<span className="font-medium text-ink"> توليد صوت</span> = بيظهر في استوديو الصوت
-              (نص ← صوت)، ونسخ صوتي = بيسمح بعينة مرجعية لتقليد الصوت في الاستوديو.
+              (نص ← صوت)، ونسخ صوتي = بيسمح بعينة مرجعية لتقليد الصوت في الاستوديو. الصفوف من نوع «استوديو
+              الصوت» (توليد صوت) بتظهر هنا كمان وبتسحب قدراتها (النسخ + الصيغ) بنفس الطريقة.
             </p>
             <p className="text-ink-3">
               فعّل اللي النموذج بيدعمه فعلاً حسب صفحته على OpenRouter — واللي مش مدعوم سيبه مطفي.
@@ -251,7 +265,7 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
           <div className="space-y-1 text-[12px] leading-relaxed text-ink-2">
             <p className="font-medium text-ink">الإعداد بنقطة واحدة</p>
             <p>
-              1. أضف موديل هنا (اسم يوصفه، الـid بيتولد لوحد).
+              1. أضف موديل هنا بعد اختيار صنفه (أذن = ترجمة التسجيلات، استوديو = توليد صوت — الـid بيتولد لوحد).
               <br />
               2. افتح تبويب «الموديلات والمزوّدون» واختار الصف، وبنموذج المزوّد حط قيم OpenRouter:
               <br />
@@ -276,11 +290,33 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
       {/* ——— نموذج الإضافة ——— */}
       <div className="rounded-lg border border-hair bg-surface p-4">
         <p className="mb-3 text-[13px] font-semibold">أضف نموذج صوتي جديد</p>
+        <div className="mb-2.5 flex items-center gap-1.5">
+          {(
+            [
+              { v: "stt", label: "أذن المنصة", hint: "مترجم التسجيلات الصوتية" },
+              { v: "tts", label: "استوديو الصوت", hint: "توليد صوت (نص → صوت) مع النسخ الصوتي" },
+            ] as const
+          ).map((o) => (
+            <button
+              key={o.v}
+              type="button"
+              onClick={() => setKind(o.v)}
+              title={o.hint}
+              aria-pressed={kind === o.v}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px] font-medium transition-colors ${
+                kind === o.v ? "bg-accent text-accent-ink" : "bg-surface-3 text-ink-3 hover:text-ink-2"
+              }`}
+            >
+              {o.v === "stt" ? <Mic size={12} /> : <AudioLines size={12} />}
+              {o.label}
+            </button>
+          ))}
+        </div>
         <div className="flex flex-col gap-2 sm:flex-row">
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="الاسم (مثال: أذن fish-audio)"
+            placeholder={kind === "stt" ? "الاسم (مثال: أذن fish-audio)" : "الاسم (مثال: صوت fish-audio)"}
             maxLength={60}
             className="h-9 min-w-0 flex-1 rounded-md border border-hair bg-surface-2 px-3 text-[13px] text-ink placeholder:text-ink-3 focus:border-accent-line focus:outline-none"
           />
@@ -318,9 +354,22 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
           {rows.map((m) => (
             <div key={m.id} className="rounded-lg border border-hair bg-surface px-3.5 py-3">
               <div className="flex items-center gap-3">
-                <Mic size={14} className="shrink-0 text-accent" />
+                {m.modality === "tts" ? (
+                  <AudioLines size={14} className="shrink-0 text-accent" />
+                ) : (
+                  <Mic size={14} className="shrink-0 text-accent" />
+                )}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13px] font-semibold text-ink">{m.name}</p>
+                  <p className="flex items-center gap-1.5">
+                    <span className="truncate text-[13px] font-semibold text-ink">{m.name}</span>
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                        m.modality === "tts" ? "bg-accent-soft text-accent" : "bg-surface-3 text-ink-2"
+                      }`}
+                    >
+                      {m.modality === "tts" ? "استوديو الصوت" : "أذن المنصة"}
+                    </span>
+                  </p>
                   <p className="tnum mt-0.5 block truncate text-[11.5px] text-ink-3" dir="ltr">
                     {m.id} · {m.keysCount} {m.keysCount === 1 ? "مفتاح" : "مفاتيح"}
                   </p>
@@ -382,7 +431,17 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
               {/* ——— سطر القدرات + الصيغ ——— */}
               <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-hair pt-2.5">
                 <span className="text-[10.5px] font-medium text-ink-3">القدرات:</span>
-                {CAPS.map((c) => {
+                {/* صف الخدمة (tts): «توليد صوت» قدرته الأساسية المقفولة — والباقي نسخ صوتي */}
+                {m.modality === "tts" && (
+                  <span
+                    title="قدرته الأساسية — النموذج نفسه توليد صوت، وهو اللي داخله في الفلتر من الأساس"
+                    className="flex cursor-default items-center gap-1 rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-medium text-accent"
+                  >
+                    <Check size={11} strokeWidth={3} />
+                    توليد صوت
+                  </span>
+                )}
+                {(m.modality === "tts" ? CAPS.filter((c) => c.tag === "clone") : CAPS).map((c) => {
                   const on = capsOf(m).includes(c.tag);
                   return (
                     <button

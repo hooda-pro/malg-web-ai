@@ -64,9 +64,12 @@ export async function POST(req: NextRequest) {
   // الأدمن اختارها، وبتتحرر لاحقًا من واجهة «النماذج الصوتية».
   const capabilitiesCsv = parseAllowedCsv((body as { capabilities?: unknown }).capabilities, CAPABILITIES_ALLOWED);
   const audioFormatsCsv = parseAllowedCsv((body as { audio_formats?: unknown }).audio_formats, AUDIO_FORMATS_ALLOWED);
+  // لو الأدمن مبعتش قدرات — النموذج بيتولد بقدرته الأساسية (stt أو tts) صريحة
+  const capabilitiesFinal =
+    capabilitiesCsv || (modality === "stt" ? "stt" : modality === "tts" ? "tts" : "");
   await sql`
     INSERT INTO ai_models (id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, sort_order, modality, capabilities, audio_formats)
-    VALUES (${v.id}, ${v.name}, ${v.description}, 'https://api.openai.com/v1', 'chat_completions', ${v.id}, '{}', 0.4, 128000, TRUE, ${isFirst}, ${nextOrder}, ${modality}, ${capabilitiesCsv}, ${audioFormatsCsv})
+    VALUES (${v.id}, ${v.name}, ${v.description}, 'https://api.openai.com/v1', 'chat_completions', ${v.id}, '{}', 0.4, 128000, TRUE, ${isFirst}, ${nextOrder}, ${modality}, ${capabilitiesFinal}, ${audioFormatsCsv})
   `;
   invalidateProviderCache();
 
