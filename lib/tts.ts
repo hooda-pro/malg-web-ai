@@ -152,35 +152,29 @@ export interface SynthesizeResult {
 }
 
 function upstreamErrorMessage(status: number, bodyText: string): string {
+  // بنحاول ناخد رسالة مفهومة من جسم الخطأ، بس من غير ما نعرض تفاصيل المزوّد الخام
+  // (أسماء مزوّدين/مفاتيح/مسارات داخلية) — نفس فلسفة SAFE_MESSAGES في lib/ai.ts.
   let base = "";
-  let raw = "";
   try {
     const j = JSON.parse(bodyText) as {
-      error?:
-        | string
-        | { message?: unknown; metadata?: { raw?: unknown; raw_message?: unknown; provider_name?: unknown } | string };
+      error?: string | { message?: unknown };
     };
     const e = typeof j?.error === "string" ? { message: j.error } : j?.error;
     const m = typeof (e as { message?: unknown } | undefined)?.message === "string" ? (e as { message?: string }).message : undefined;
-    if (m?.trim()) base = m.trim().slice(0, 300);
-    // تفاصيل الخطأ الحقيقية من المزوّد — OpenRouter بيلفها في error.metadata
-    const md = (e as { metadata?: unknown } | undefined)?.metadata;
-    if (typeof md === "string") raw = md;
-    else if (md && typeof md === "object") {
-      const mdRaw = (md as { raw?: unknown }).raw;
-      const mdRawMessage = (md as { raw_message?: unknown }).raw_message;
-      if (typeof mdRaw === "string" && mdRaw.trim()) raw = mdRaw;
-      else if (typeof mdRawMessage === "string" && mdRawMessage.trim()) raw = mdRawMessage;
+    if (m?.trim()) {
+      // نفلتر الرسائل اللي فيها أسماء مزوّدين أو تفاصيل داخلية — نرجّع رسالة عامة بدلها
+      const suspicious = /openrouter|openai|fish|elevenlabs|azure|replicate|api[_ ]?key|token|endpoint|url|http/i;
+      base = suspicious.test(m) ? "" : m.trim().slice(0, 300);
     }
   } catch {
     // تجاهل — رسالة عامة تحت
   }
   if (!base) {
-    if (status === 401 || status === 403) base = "مفتاح المزوّد مرفوض — راجع مفاتيح موديل الصوت من لوحة الأدمن";
-    else if (status === 429) base = "المزوّد مضغوط حاليًا (rate limit) — حاول بعد دقيقة";
-    else base = "تعذّر توليد الصوت من المزوّد — حاول مجددًا";
+    if (status === 401 || status === 403) base = "تعذّر توليد الصوت حاليًا — حاول مجددًا بعد قليل";
+    else if (status === 429) base = "الخدمة مزدحمة حاليًا — حاول بعد دقيقة";
+    else base = "تعذّر توليد الصوت حاليًا — حاول مجددًا";
   }
-  return raw ? `${base} — تفاصيل المزوّد: ${raw.trim().slice(0, 220)}` : base;
+  return base;
 }
 
 /** يولّد الصوت ويرجع الباينري — يرمي أخطاء عربية جاهزة للعرض (err.message). */
@@ -201,23 +195,23 @@ export async function synthesizeSpeech(opts: SynthesizeOptions): Promise<Synthes
   try {
     resolved = await getTtsModelConfig(opts.modelId);
   } catch {
-    throw new Error("لا يوجد موديل صوتي نشط — أضف واحدًا من لوحة الأدمن (الموديلات) وحدد نوعه «صوت»");
+    throw new Error("لا يوجد موديل صوتي متاح حاليًا — جرّب مرة أخرى لاحقًا");
   }
   if (resolved.tier === "paid" && !opts.isAdmin && !(await hasPaidSubscription(opts.userId).catch(() => false))) {
     throw new Error("NEEDS_PRO");
   }
 
   const endpoint = resolveTtsEndpoint(resolved.config.baseUrl || cleanBaseUrl(""));
-  if (!endpoint) throw new Error("رابط مزوّد الصوت غير مكتمل — راجعه من لوحة الأدمن");
+  if (!endpoint) throw new Error("خدمة الصوت غير متاحة حاليًا — جرّب مرة أخرى لاحقًا");
   const keys = Array.isArray(resolved.config.apiKeys) ? resolved.config.apiKeys.filter(Boolean) : [];
-  if (keys.length === 0) throw new Error("موديل الصوت بلا مفاتيح — أضف مفتاحًا من لوحة الأدمن");
+  if (keys.length === 0) throw new Error("خدمة الصوت غير متاحة حاليًا — جرّب مرة أخرى لاحقًا");
 
   // عينة النسخ المرجعية (Voice cloning): عينة واحدة في الطلب، وشكلها data URI صوتي.
   const referenceAudio = typeof opts.referenceAudio === "string" ? opts.referenceAudio.trim() : "";
   let inputReferences: unknown[] | undefined;
   if (referenceAudio) {
     if (!resolved.canClone) {
-      throw new Error("النموذج المحدد لا يدعم نسخ الصوت — فعّل قدرة «النسخ» له من لوحة الأدمن");
+      throw new Error("النموذج الصوتي المحدد لا يدعم نسخ الصوت — اختر نموذجًا آخر");
     }
     if (!/^data:audio\//i.test(referenceAudio) || !referenceAudio.includes("base64,")) {
       throw new Error("عينة النسخ لازم تكون ملف صوتي — انظر الصيغ المدعومة: WAV/MP3/M4A/FLAC/OGG/WebM/AAC");
@@ -263,18 +257,16 @@ export async function synthesizeSpeech(opts: SynthesizeOptions): Promise<Synthes
           signal: AbortSignal.timeout(TTS_TIMEOUT_MS),
         });
       } catch {
-        lastError = "تعذّر الوصول لمزوّد الصوت — حاول مجددًا";
+        lastError = "تعذّر توليد الصوت — حاول مجددًا";
         continue outer; // الشبكة مقطوعة — جرّب المفتاح التالي
       }
       if (!res.ok) {
         const bodyText = await res.text().catch(() => "");
+        // التفاصيل الكاملة في الـ server logs بس — والمستخدم ياخد رسالة آمنة بدون أسرار المزوّد
+        console.error(`[MALG tts] ${res.status} من مزوّد الصوت (${modelVariant}):`, bodyText.slice(0, 500));
         const msg = upstreamErrorMessage(res.status, bodyText);
         if (res.status === 400 || res.status === 404) {
-          // 400/404 = مشكلة في الطلب نفسه (مش المفتاح) — سجّل التفاصيل وجرّب اسم النموذج التاني
-          console.error(
-            `[MALG tts] ${res.status} من مزوّد الصوت (${modelVariant}):`,
-            bodyText.slice(0, 500)
-          );
+          // 400/404 = مشكلة في الطلب نفسه (مش المفتاح) — جرّب اسم النموذج التاني
           lastError = msg;
           continue; // مسار الاسم البديل (بدون :free مثلاً)
         }
@@ -291,7 +283,7 @@ export async function synthesizeSpeech(opts: SynthesizeOptions): Promise<Synthes
         continue;
       }
       const buf = new Uint8Array(await res.arrayBuffer());
-      if (buf.length === 0) throw new Error("المزوّد رجّع صوتًا فارغًا — حاول مجددًا");
+      if (buf.length === 0) throw new Error("تعذّر توليد الصوت — حاول مجددًا");
       // الخصم بعد النجاح فقط — حسب سعر الموديل لكل مليون حرف (× الهامش + الربح الثابت)
       const chargeMicro = costWithProfitMicro(
         text.length,

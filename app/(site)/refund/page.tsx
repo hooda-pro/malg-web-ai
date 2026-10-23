@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "سياسة الاسترداد | MALG",
-  description: "سياسة استرداد المدفوعات في MALG: التوكنز مسبقة الدفع واشتراك Pro.",
+  description: "سياسة استرداد المدفوعات في MALG: الرصيد مسبق الدفع واشتراك Pro.",
 };
 
 export default function RefundPage() {
@@ -23,7 +23,7 @@ export default function RefundPage() {
       <section className="mt-6">
         <h2 className="text-lg font-semibold">1. المبدأ العام</h2>
         <p className="mt-2">
-          جميع عمليات الشراء في MALG مسبقة الدفع: تشحن رصيد توكنز أو تشترك
+          جميع عمليات الشراء في MALG مسبقة الدفع: تشحن رصيدًا أو تشترك
           في باقة Pro ثم تستخدم الرصيد. الرصيد الذي استُهلك فعليًا في
           المحادثات غير قابل للاسترداد.
         </p>

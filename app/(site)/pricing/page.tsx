@@ -26,7 +26,7 @@ export default function PricingPage() {
       </a>
       <h1 className="mt-6 text-[28px] font-semibold tracking-display">الباقات والأسعار</h1>
       <p className="mt-2 text-[15px] leading-8 text-ink-2">
-        ابدأ مجانًا، وانتقل إلى Pro عندما تحتاج المزيد. فريقنا يفعّل اشتراكك أو رصيدك
+        ابدأ مجانًا، وانتقل إلى Pro عندما تحتاج المزيد. يتم تفعيل اشتراكك أو رصيدك
         مباشرة عبر واتساب خلال وقت قصير.
       </p>
 

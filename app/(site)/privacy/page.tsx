@@ -19,8 +19,8 @@ export default function PrivacyPage() {
         <h2 className="text-[18px] font-semibold">ما البيانات التي نخزنها؟</h2>
         <ul className="mt-3 list-disc space-y-2 ps-5 text-[15px] leading-8 text-ink-2">
           <li>بيانات حساب Google عند التسجيل: الاسم وعنوان البريد الإلكتروني فقط.</li>
-          <li>محادثاتك ورسائلك، محفوظة على قاعدة بيانات Neon Postgres الخاصة بنا.</li>
-          <li>إعدادات حسابك (اللغة، الموديل المفضل، الثيم) ورصيدك واشتراكك.</li>
+          <li>محادثاتك ورسائلك — محفوظة بشكل آمن ومرتبطة بحسابك فقط.</li>
+          <li>إعدادات حسابك (اللغة، النموذج المفضل، المظهر) ورصيدك واشتراكك.</li>
         </ul>
       </section>
 
@@ -28,7 +28,7 @@ export default function PrivacyPage() {
         <h2 className="text-[18px] font-semibold">بيانات الدفع</h2>
         <p className="mt-3 text-[15px] leading-8 text-ink-2">
           لا نخزن أي بيانات بطاقات بنكية. الاشتراك وشحن الرصيد يتم حاليًا يدويًا عبر
-          واتساب، والدفع المباشر بالبطاقة عبر الموقع سيُتاح لاحقًا.
+          واتساب، والدفع المباشر عبر الموقع سيُتاح لاحقًا.
         </p>
       </section>
 
@@ -37,7 +37,7 @@ export default function PrivacyPage() {
         <ul className="mt-3 list-disc space-y-2 ps-5 text-[15px] leading-8 text-ink-2">
           <li>تشغيل الخدمة: عرض محادثاتك وحفظها ومزامنتها على حسابك.</li>
           <li>إدارة رصيدك واشتراكك وباقات الشحن.</li>
-          <li>تحسين الخدمة ومنع إساءة الاستخدام.</li>
+          <li>حماية الخدمة من إساءة الاستخدام.</li>
         </ul>
       </section>
 
