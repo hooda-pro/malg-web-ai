@@ -1,5 +1,5 @@
 import { FREE_PLAN, PRO_PLAN, formatUSD } from "@/lib/plans";
-import { RECHARGE_PACKAGES } from "@/lib/recharge";
+import { RECHARGE_PACKAGES, EGP_PER_USD } from "@/lib/recharge";
 import { formatBalance } from "@/lib/ai";
 
 export const metadata = {
@@ -91,7 +91,8 @@ export default function PricingPage() {
       <section className="mt-10">
         <h2 className="text-[19px] font-semibold">باقات الشحن الإضافي</h2>
         <p className="mt-2 text-[14.5px] leading-8 text-ink-2">
-          رصيد إضافي يُضاف على باقتك في أي وقت — الأسعار بالجنيه المصري.
+          رصيد إضافي يُضاف على باقتك في أي وقت — بيتشترى بالدولار وبيتدفع بالجنيه المصري بسعر
+          {" "}{EGP_PER_USD} جنيه لكل دولار (شامل الرسوم).
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {RECHARGE_PACKAGES.map((pkg) => (

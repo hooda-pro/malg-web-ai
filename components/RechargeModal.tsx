@@ -9,6 +9,7 @@ import {
   WHATSAPP_USERNAME,
   buildRechargeMessage,
   buildWhatsAppLink,
+  EGP_PER_USD,
   RECHARGE_PACKAGES,
   type RechargePackage,
 } from "@/lib/recharge";
@@ -167,6 +168,10 @@ export default function RechargeModal({
           );
         })}
       </div>
+
+      <p className="mb-3 text-[11.5px] leading-5 text-ink-3">
+        الرصيد بيتشترى بالدولار وبيتدفع بالجنيه المصري بسعر ثابت {EGP_PER_USD} جنيه لكل دولار.
+      </p>
 
       <div className="mb-4 rounded-lg border border-hair bg-surface-2 p-4">
         <p className="mb-3 text-[13px] font-semibold text-ink">إزاي الشحن بيتم؟</p>

@@ -13,7 +13,7 @@ export interface RechargePackage {
   id: string;
   /** الرصيد الممنوح — بالـmicro-dollar (µ$؛ $1 = 1,000,000 µ$) */
   balanceMicro: number;
-  /** السعر بالجنيه المصري */
+  /** السعر بالجنيه المصري — بيتحسب تلقائيًا من الرصيد وسعر الصرف (شوف egpPriceOf) */
   price: number;
   emoji: string;
   label: string;
@@ -22,14 +22,27 @@ export interface RechargePackage {
 }
 
 /**
+ * سعر الصرف المستخدم في تسعير الباقات (جنيه لكل دولار) — آخر تحديث: أكتوبر ٢٠٢٦
+ * (معدل البنوك ~54.5ج/$ + هامش أمان ~10% يغطي تحرك الدولار ورسوم التحصيل).
+ * لو الدولار تحرك: عدّل الرقم هنا وكل الباقات تتعدل لوحدها.
+ */
+export const EGP_PER_USD = 60;
+
+/** سعر باقة بالجنيه = مبلغ الرصيد بالدولار × سعر الصرف (تقريب لجنيه صحيح) */
+export function egpPriceOf(balanceMicro: number): number {
+  return Math.round((Number(balanceMicro) / 1_000_000) * EGP_PER_USD);
+}
+
+/**
  * باقات شحن الرصيد (تحديث ١٩) — الرصيد بيتشترى بالدولار ويتحسب على حسب
- * تسعيرة كل موديل بالظبط. الأرقام هنا قابلة للتعديل من غير أي مكان تاني.
+ * تسعيرة كل موديل بالظبط. الأسعار بالجنيه بتتحسب تلقائيًا من EGP_PER_USD —
+ * ماتكتبش جنيه يدوي والعربي يتفرج.
  */
 export const RECHARGE_PACKAGES: RechargePackage[] = [
   {
     id: "starter",
     balanceMicro: 2_000_000,
-    price: 30,
+    price: egpPriceOf(2_000_000),
     emoji: "🌱",
     label: "باقة البداية",
     hint: "رصيد $2 — تكفي تجارب واستخدام خفيف",
@@ -37,7 +50,7 @@ export const RECHARGE_PACKAGES: RechargePackage[] = [
   {
     id: "plus",
     balanceMicro: 4_000_000,
-    price: 60,
+    price: egpPriceOf(4_000_000),
     emoji: "⚡",
     label: "باقة بلس",
     hint: "رصيد $4 — استعمال أوسع وموديلات أقوى",
@@ -45,7 +58,7 @@ export const RECHARGE_PACKAGES: RechargePackage[] = [
   {
     id: "pro",
     balanceMicro: 8_000_000,
-    price: 120,
+    price: egpPriceOf(8_000_000),
     emoji: "🔥",
     label: "باقة برو",
     hint: "رصيد $8 — استخدم براحتك",
@@ -54,7 +67,7 @@ export const RECHARGE_PACKAGES: RechargePackage[] = [
   {
     id: "legend",
     balanceMicro: 20_000_000,
-    price: 300,
+    price: egpPriceOf(20_000_000),
     emoji: "👑",
     label: "باقة الأسطورة",
     hint: "رصيد $20 — أكبر رصيد دفعة واحدة",
