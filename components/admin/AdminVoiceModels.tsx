@@ -147,11 +147,21 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
     }
   };
 
-  /** تحديث قدرات صف — البيعة بتبعت الوسوم الجديدة كاملة والسيرفر بيقبل المسموحة بس */
-  const patchCaps = async (id: string, caps: string[]) => {
-    setCapsBusy(id);
+  /** تحديث قدرات صف — البيعة بتبعت الوسوم الجديدة كاملة والسيرفر بيقبل المسموحة بس.
+   * السطر القديم (المحفوظ فاضي) بيتفك من الترْكُم الضمني: أول تعديل بتخزن الوسوم صريحة،
+   * والإزاحة اللي بتفضل القايمة فاضية بتتخزن «none» (فصل متعمد — مش القديم الفاضي). */
+  const patchCaps = async (row: Row, tag?: string) => {
+    const stored = row.capabilities.filter((t) => t !== "none");
+    const next = tag
+      ? stored.includes(tag)
+        ? stored.filter((x) => x !== tag)
+        : [...stored, tag]
+      : stored;
+    const caps = next.length ? next : ["none"];
+    const legacyNote = row.capabilities.length === 0 ? " (اتخزنت صريحة بدل السلوك القديم)" : "";
+    setCapsBusy(row.id);
     try {
-      const res = await fetch(`/api/admin/models/${encodeURIComponent(id)}`, {
+      const res = await fetch(`/api/admin/models/${encodeURIComponent(row.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ capabilities: caps }),
@@ -160,9 +170,9 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
       if (!res.ok) throw new Error(data.error || "فشل التحديث");
       notify(
         "ok",
-        caps.length
-          ? `قدرات ${id}: ${caps.join(" · ")}`
-          : `مسحت كل قدرات ${id} — بيرجع للسلوك القديم (قراءة صوت عبر الشات)`
+        caps[0] === "none"
+          ? `مفيش قدرات ${row.id} — قراءة الصوت اتقفت عنده فعلًا${legacyNote}`
+          : `قدرات ${row.id}: ${caps.join(" · ")}${legacyNote}`
       );
       await load();
     } catch (e) {
@@ -201,8 +211,10 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
     }
   };
 
-  /** القدرات الظاهرة: محفوظة، أو «قراءة صوت» للصفوف القديمة الفاضية (توافق) */
-  const capsOf = (m: Row): string[] => (m.capabilities.length ? m.capabilities : ["stt"]);
+  /** القدرات الظاهرة على الشيب: المحفوظة صريحة، أو «قراءة صوت» للصف القديم الفاضي (توافق) */
+  const capsOf = (m: Row): string[] => (m.capabilities.length ? m.capabilities.filter((t) => t !== "none") : ["stt"]);
+  /** الصف القديم: قدراته المحفوظة فعلاً فاضية (مش none صريح) — أول تعديل هيعاد تخزينها */
+  const isLegacyRow = (m: Row): boolean => m.capabilities.length === 0;
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -221,7 +233,8 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
             </p>
             <p className="text-ink-3">
               فعّل اللي النموذج بيدعمه فعلاً حسب صفحته على OpenRouter — واللي مش مدعوم سيبه مطفي.
-              الصف اللي كل قدراته فاضية بيتعامل كأنه «قراءة صوت» — توافق مع الموديلات القديمة.
+              الصف اللي كل قدراته فاضية بيتعامل كأنه «قراءة صوت» — توافق مع الموديلات القديمة،
+              وأول تعديل على الوسوم بيخزنها صريحة (تتخزن «مفيش قدرات» لو قفلتها كلها).
             </p>
             <p className="text-ink-3">
               الخصوصية: النماذج دي مخفية تمامًا — مش بتظهر في API خارجي ولا قايمة شات الموقع، ومش ممكن أي حد
@@ -374,7 +387,7 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
                   return (
                     <button
                       key={c.tag}
-                      onClick={() => void patchCaps(m.id, on ? capsOf(m).filter((x) => x !== c.tag) : [...capsOf(m), c.tag])}
+                      onClick={() => void patchCaps(m, c.tag)}
                       disabled={actingId !== null || capsBusy !== null}
                       title={c.hint}
                       aria-pressed={on}
@@ -393,6 +406,11 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
                     </button>
                   );
                 })}
+                {isLegacyRow(m) && (
+                  <span className="text-[10.5px] text-ink-3" title="المحفوظ فاضي — بيتعامل كـ«قراءة صوت» للتوافق؛ أول تعديل بيخزن الوسوم صريحة">
+                    سلوك قديم — أول تعديل بيخزن صريح
+                  </span>
+                )}
                 <span className="ms-auto flex items-center gap-1.5">
                   <span className="text-[10.5px] text-ink-3">الصيغ:</span>
                   <input

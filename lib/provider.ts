@@ -255,8 +255,10 @@ export function isVoiceModelRow(id: string, modality?: string | null): boolean {
  * - stt: بقرا التسجيلات عبر chat_completions (input_audio) — موديلات audio-native.
  * - stt_transcriptions: بقرا الصوت عبر /audio/transcriptions (موديلات تفريغ خالصة مثل whisper).
  * - tts: بتولّد صوت من نص (بيظهر في استوديو الصوت سالب modality).
- * - clone: بيدعم نسخ الصوت بعينة مرجعية (input_references في طلب الـspeech). */
-export const CAPABILITIES_ALLOWED = ["stt", "stt_transcriptions", "tts", "clone"] as const;
+ * - clone: بيدعم نسخ الصوت بعينة مرجعية (input_references في طلب الـspeech).
+ * - none: «مفيش قدرات» صريح — بيفرّق السطر المتعمد من السطر القديم الفاضي
+ *   (القديم بيتعامل كـ stt للتوافق الخلفي؛ none معناه الفصل المتعمد). */
+export const CAPABILITIES_ALLOWED = ["stt", "stt_transcriptions", "tts", "clone", "none"] as const;
 
 /** صيغ الصوت المسموحة في العمود audio_formats (CSV) — ترشيح فورمات طلبات الصوت. */
 export const AUDIO_FORMATS_ALLOWED = ["mp3", "pcm", "wav", "opus", "m4a", "flac", "webm", "aac"] as const;
