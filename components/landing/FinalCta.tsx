@@ -17,7 +17,7 @@ export default function FinalCta() {
           فكرتك التالية تبدأ بسؤال واحد
         </h2>
         <p className="relative mx-auto mt-4 max-w-[46ch] text-[16px] leading-8 opacity-70">
-          انضم مجانًا خلال ثوانٍ بحساب Google، وابدأ أول محادثة الآن.
+          انضم مجانًا خلال ثوانٍ بحساب Google أو GitHub، وابدأ أول محادثة الآن.
         </p>
         <div className="relative mt-8 flex flex-wrap items-center justify-center gap-3">
           <a

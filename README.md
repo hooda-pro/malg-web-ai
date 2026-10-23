@@ -37,9 +37,10 @@
 | `UPSTREAM_IDLE_TIMEOUT_MS` | (اختياري) مهلة صمت المزود - الافتراضي 120,000 (دقيقتين). |
 | `TAVILY_API_KEY` | (اختياري — للإقلاع الأول بس) مفتاح [Tavily](https://tavily.com) للبحث الحقيقي — بعد التشغيل غيّره من لوحة الأدمن (قسم «البحث») من غير كود |
 
-> تسجيل حساب جديد للمستخدمين العاديين بقى عن طريق Google فقط (لازم تفعّل Google
-> Sign-In في Firebase Console > Authentication > Sign-in method). حساب الأدمن لوحده
-> بيسجل دخول بإيميل/باسورد عادي من `/#/admin`.
+> تسجيل حساب جديد للمستخدمين العاديين بقى عن طريق Google أو GitHub (لازم تفعّل
+> Google و GitHub من Firebase Console > Authentication > Sign-in method —
+> ولـ GitHub ضيف Client ID و Client Secret من GitHub Developer settings >
+> OAuth Apps). حساب الأدمن لوحده بيسجل دخول بإيميل/باسورد عادي من `/#/admin`.
 
 الجداول بتتنشئ تلقائيًا في أول طلب يوصل للسيرفر (مفيش سكريبت لازم تشغّله يدويًا).
 

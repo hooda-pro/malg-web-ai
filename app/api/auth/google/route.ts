@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { sql, ensureSchema } from "@/lib/db";
 import { COOKIE_NAME, SESSION_COOKIE_MAX_AGE, signSession } from "@/lib/auth";
-import { verifyGoogleIdToken, saveProfileToFirestore } from "@/lib/firebaseAdmin";
+import { verifyOAuthIdToken, saveProfileToFirestore } from "@/lib/firebaseAdmin";
 import { REGISTERED_BALANCE_MICRO } from "@/lib/systemPrompt";
 import {
   DELETION_ACCOUNT_EXPIRED_MESSAGE,
@@ -16,8 +16,8 @@ import {
 export const dynamic = "force-dynamic";
 
 /**
- * تسجيل الدخول / إنشاء حساب عن طريق جوجل (Firebase Auth).
- * البادي المتوقع: { idToken } — الـ ID Token اللي راجع من signInWithGoogle() في المتصفح.
+ * تسجيل الدخول / إنشاء حساب عن طريق مزوّد OAuth (Google أو GitHub — Firebase Auth).
+ * البادي المتوقع: { idToken } — الـ ID Token اللي راجع من signInWithGoogle/SignInWithGitHub في المتصفح.
  * لو الحساب جديد: بيتعمل بسجل ناقص (بدون اسم مخصص/عمر) وبيرجع needsProfile=true
  * عشان الواجهة تعرض خطوة "اكتب اسمك وعمرك".
  */
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "توكن الدخول مفقود" }, { status: 400 });
     }
 
-    const identity = await verifyGoogleIdToken(idToken);
+    const identity = await verifyOAuthIdToken(idToken);
     await ensureSchema();
 
     const rows = (await sql`
@@ -133,9 +133,9 @@ export async function POST(req: NextRequest) {
     if (e instanceof Error && e.name === "GoogleIdentityError") {
       return NextResponse.json({ error: e.message }, { status: 403 });
     }
-    console.error("google auth error", e);
+    console.error("oauth auth error", e);
     return NextResponse.json(
-      { error: "تعذر تسجيل الدخول بجوجل، حاول تاني" },
+      { error: "تعذر تسجيل الدخول، حاول تاني" },
       { status: 500 }
     );
   }

@@ -9,6 +9,8 @@ import {
   getGoogleRedirectToken,
   isInAppBrowser,
   isIOS,
+  signInWithGitHub,
+  signInWithGitHubRedirect,
   signInWithGoogle,
   signInWithGoogleRedirect,
 } from "@/lib/firebaseClient";
@@ -42,6 +44,18 @@ function GoogleIcon() {
   );
 }
 
+/** أيقونة GitHub الرسمية (SVG) */
+function GitHubIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"
+      />
+    </svg>
+  );
+}
+
 export default function AuthModal({
   onClose,
   onAuthenticated,
@@ -49,7 +63,7 @@ export default function AuthModal({
 }: {
   onClose: () => void;
   onAuthenticated: (user: SessionUser) => void;
-  /** لو موجود، معناه المستخدم عامل تسجيل دخول بجوجل خلاص وناقصه بس يكمل بياناته */
+  /** لو موجود، معناه المستخدم عامل تسجيل دخول (Google/GitHub) خلاص وناقصه بس يكمل بياناته */
   pendingUser?: SessionUser | null;
 }) {
   const { t } = useSettings();
@@ -66,8 +80,8 @@ export default function AuthModal({
 
   const [checkingRedirect, setCheckingRedirect] = useState(false);
 
-  // Shared Google-token finish step (popup path and redirect path)
-  const completeGoogleLogin = async (idToken: string) => {
+  // Shared OAuth-token finish step (popup path and redirect path — Google & GitHub)
+  const completeOAuthLogin = async (idToken: string) => {
     const res = await fetch("/api/auth/google", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -95,27 +109,28 @@ export default function AuthModal({
     }
   };
 
-  const reportGoogleError = (e: unknown) => {
+  const reportOAuthError = (e: unknown) => {
     const code = authErrorCode(e);
-    console.error("google sign-in failed", code || e);
-    if (code === "auth/popup-blocked") setError(t("errGooglePopup"));
-    else if (code === "auth/unauthorized-domain") setError(t("errGoogleDomain"));
+    console.error("oauth sign-in failed", code || e);
+    if (code === "auth/popup-blocked") setError(t("errOAuthPopup"));
+    else if (code === "auth/unauthorized-domain") setError(t("errOAuthDomain"));
     else if (code === "auth/network-request-failed") setError(t("errGoogleNetwork"));
+    else if (code === "auth/account-exists-with-different-credential") setError(t("errOAuthAccountExists"));
     else if (isInAppBrowser()) setError(t("errGoogleInApp"));
-    else setError(code ? `${t("errGoogle")} (${t("errGoogleCode")}: ${code})` : t("errGoogle"));
+    else setError(code ? `${t("errOAuth")} (${t("errGoogleCode")}: ${code})` : t("errOAuth"));
   };
 
   useEffect(() => {
-    // Back from a Google redirect (iOS path)? Finish the login automatically.
+    // Back from an OAuth redirect (iOS path)? Finish the login automatically.
     let cancelled = false;
     (async () => {
       try {
         const idToken = await getGoogleRedirectToken();
         if (!idToken || cancelled) return;
         setCheckingRedirect(true);
-        await completeGoogleLogin(idToken);
+        await completeOAuthLogin(idToken);
       } catch (e) {
-        if (!cancelled) reportGoogleError(e);
+        if (!cancelled) reportOAuthError(e);
       } finally {
         if (!cancelled) setCheckingRedirect(false);
       }
@@ -126,34 +141,32 @@ export default function AuthModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleGoogle = async () => {
+  const handleOAuth = async (provider: "google" | "github") => {
     setError(null);
-    if (isIOS()) {
+    const useRedirect = isIOS();
+    const signInPopup = provider === "google" ? signInWithGoogle : signInWithGitHub;
+    const signInRedirect = provider === "google" ? signInWithGoogleRedirect : signInWithGitHubRedirect;
+    if (useRedirect) {
       setLoading(true);
       try {
-        await signInWithGoogleRedirect();
+        await signInRedirect();
       } catch (e) {
-        reportGoogleError(e);
+        reportOAuthError(e);
         setLoading(false);
       }
       return;
     }
     setLoading(true);
     try {
-      const idToken = await signInWithGoogle();
-      await completeGoogleLogin(idToken);
+      const idToken = await signInPopup();
+      await completeOAuthLogin(idToken);
     } catch (e) {
       const code = authErrorCode(e);
       // المستخدم قفل النافذة بنفسه أو ضغط مرتين: مش خطأ نعرضه
       if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
         return;
       }
-      console.error("google sign-in failed", code || e);
-      if (code === "auth/popup-blocked") setError(t("errGooglePopup"));
-      else if (code === "auth/unauthorized-domain") setError(t("errGoogleDomain"));
-      else if (code === "auth/network-request-failed") setError(t("errGoogleNetwork"));
-      else if (isInAppBrowser()) setError(t("errGoogleInApp"));
-      else setError(code ? `${t("errGoogle")} (${t("errGoogleCode")}: ${code})` : t("errGoogle"));
+      reportOAuthError(e);
     } finally {
       setLoading(false);
     }
@@ -206,16 +219,28 @@ export default function AuthModal({
       subtitle={step === "google" ? t("authSubtitle") : t("authProfileHint")}
       footer={
         step === "google" ? (
-          <Button
-            variant="secondary"
-            size="lg"
-            onClick={handleGoogle}
-            disabled={loading || checkingRedirect}
-            className="w-full gap-2.5"
-          >
-            <GoogleIcon />
-            {loading ? t("working") : t("btnGoogle")}
-          </Button>
+          <div className="grid w-full gap-2">
+            <Button
+              variant="secondary"
+              size="lg"
+              onClick={() => handleOAuth("google")}
+              disabled={loading || checkingRedirect}
+              className="w-full gap-2.5"
+            >
+              <GoogleIcon />
+              {loading ? t("working") : t("btnGoogle")}
+            </Button>
+            <Button
+              variant="secondary"
+              size="lg"
+              onClick={() => handleOAuth("github")}
+              disabled={loading || checkingRedirect}
+              className="w-full gap-2.5"
+            >
+              <GitHubIcon />
+              {loading ? t("working") : t("btnGitHub")}
+            </Button>
+          </div>
         ) : (
           <Button
             variant="primary"
@@ -232,7 +257,7 @@ export default function AuthModal({
       <div className="space-y-4 pb-2">
         {step === "google" ? (
           <>
-            <p className="text-pretty text-[12.5px] leading-6 text-ink-3">{t("authGoogleHint")}</p>
+            <p className="text-pretty text-[12.5px] leading-6 text-ink-3">{t("authOAuthHint")}</p>
             {inApp && (
               <p
                 role="note"

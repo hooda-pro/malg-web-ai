@@ -18,7 +18,7 @@ export default function PrivacyPage() {
       <section className="mt-8">
         <h2 className="text-[18px] font-semibold">ما البيانات التي نخزنها؟</h2>
         <ul className="mt-3 list-disc space-y-2 ps-5 text-[15px] leading-8 text-ink-2">
-          <li>بيانات حساب Google عند التسجيل: الاسم وعنوان البريد الإلكتروني فقط.</li>
+          <li>بيانات حساب Google أو GitHub عند التسجيل: الاسم وعنوان البريد الإلكتروني فقط.</li>
           <li>محادثاتك ورسائلك — محفوظة بشكل آمن ومرتبطة بحسابك فقط.</li>
           <li>إعدادات حسابك (اللغة، النموذج المفضل، المظهر) ورصيدك واشتراكك.</li>
         </ul>

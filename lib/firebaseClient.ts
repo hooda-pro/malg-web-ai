@@ -4,6 +4,7 @@ import { initializeApp, getApps, getApp } from "firebase/app";
 import {
   getAuth,
   GoogleAuthProvider,
+  GithubAuthProvider,
   signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
@@ -31,6 +32,13 @@ function makeProvider(): GoogleAuthProvider {
   const provider = new GoogleAuthProvider();
   // Always show the account chooser instead of auto-picking one account
   provider.setCustomParameters({ prompt: "select_account" });
+  return provider;
+}
+
+function makeGitHubProvider(): GithubAuthProvider {
+  const provider = new GithubAuthProvider();
+  // طلب البريد الإلكتروني من GitHub (user:email) — لازم يكون ظاهر عشان نربط الحساب
+  provider.addScope("user:email");
   return provider;
 }
 
@@ -72,12 +80,30 @@ export async function signInWithGoogle(): Promise<string> {
 }
 
 /**
+ * نفس فكرة Google بس بحساب GitHub — popup على الديسكتوب.
+ * بيرجع Firebase ID token موحّد بيتحقق منه في السيرفر بنفس الطريقة.
+ */
+export async function signInWithGitHub(): Promise<string> {
+  const auth = getAuth(getFirebaseApp());
+  const result = await signInWithPopup(auth, makeGitHubProvider());
+  return result.user.getIdToken();
+}
+
+/**
  * iOS path: navigates the whole tab to Google and back (no popup involved).
  * After returning, call getGoogleRedirectToken() to finish.
  */
 export async function signInWithGoogleRedirect(): Promise<void> {
   const auth = getAuth(getFirebaseApp());
   await signInWithRedirect(auth, makeProvider());
+}
+
+/**
+ * iOS path لـ GitHub: نفس آلية الـ redirect عشان الـ popups مش موثوقة على iOS.
+ */
+export async function signInWithGitHubRedirect(): Promise<void> {
+  const auth = getAuth(getFirebaseApp());
+  await signInWithRedirect(auth, makeGitHubProvider());
 }
 
 /**

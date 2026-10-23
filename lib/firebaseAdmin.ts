@@ -34,24 +34,30 @@ function getAdminApp(): App {
   return _app;
 }
 
-export interface GoogleIdentity {
+export interface OAuthIdentity {
   uid: string;
   email: string;
   name: string | null;
   picture: string | null;
+  /** المزوّد الفعلي لتسجيل الدخول: "google.com" أو "github.com" */
+  provider: string;
 }
 
-/** بيتحقق من ID Token اللي جاي من تسجيل الدخول بجوجل في المتصفح (lib/firebaseClient.ts). */
-export async function verifyGoogleIdToken(idToken: string): Promise<GoogleIdentity> {
+/**
+ * بيتحقق من ID Token اللي جاي من تسجيل الدخول (Google أو GitHub) في المتصفح
+ * (lib/firebaseClient.ts) — Firebase بيبعت نفس شكل التوكن للمزوّدين الاتنين.
+ */
+export async function verifyOAuthIdToken(idToken: string): Promise<OAuthIdentity> {
   const decoded = await getAuth(getAdminApp()).verifyIdToken(idToken);
   if (!decoded.email) {
-    throw new Error("حساب جوجل ده مفيهوش بريد إلكتروني ظاهر");
+    throw new Error("حساب الدخول ده مفيهوش بريد إلكتروني ظاهر");
   }
-  // ربط الحساب بيتم على الإيميل، فلازم يكون مؤكَّد ومن جوجل فعلًا. من غير الفحص ده لو اتفعّلت
+  // ربط الحساب بيتم على الإيميل، فلازم يكون مؤكَّد ومن مزوّد موثوق فعلًا. من غير الفحص ده لو اتفعّلت
   // طريقة تسجيل تانية في Firebase، حد يقدر يسجّل بإيميل مش بتاعه ويدخل على حساب حد تاني.
   const provider = (decoded.firebase as { sign_in_provider?: string } | undefined)?.sign_in_provider;
-  if (provider !== "google.com" || decoded.email_verified !== true) {
-    const err = new Error("لازم تسجّل الدخول بحساب جوجل بريده الإلكتروني مؤكَّد");
+  const allowed = provider === "google.com" || provider === "github.com";
+  if (!allowed || decoded.email_verified !== true) {
+    const err = new Error("لازم تسجّل الدخول بحساب Google أو GitHub ببريد إلكتروني مؤكَّد");
     err.name = "GoogleIdentityError";
     throw err;
   }
@@ -60,8 +66,12 @@ export async function verifyGoogleIdToken(idToken: string): Promise<GoogleIdenti
     email: decoded.email.trim().toLowerCase(),
     name: (decoded.name as string | undefined) || null,
     picture: (decoded.picture as string | undefined) || null,
+    provider: provider as string,
   };
 }
+
+/** اسم قديم للتوافق — نفس دالة verifyOAuthIdToken (كانت خاصة بجوجل). */
+export const verifyGoogleIdToken = verifyOAuthIdToken;
 
 /**
  * بيخزن/يحدّث نسخة من بيانات البروفايل في Firestore (users/{uid}) —
