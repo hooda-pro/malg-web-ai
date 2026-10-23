@@ -17,6 +17,8 @@ interface TtsModel {
   locked: boolean;
   voice: string;
   isDefault: boolean;
+  /** النموذج بيدعم نسخ الصوت بعينة مرجعية (وسم clone في قدراته) */
+  canClone?: boolean;
 }
 
 interface Clip {
@@ -26,6 +28,9 @@ interface Clip {
   modelName: string;
   at: number;
 }
+
+/** حد العينة المرجعية للنسخ الصوتي — لازم يطابق حد السيرفر (~15MB فك ضغط من 20MB base64) */
+const TTS_REF_MAX_BYTES = 15 * 1024 * 1024;
 
 /**
  * استوديو الصوت كصفحة كاملة (مش popup): نص → صوت عبر أي موديل صوتي
@@ -42,6 +47,9 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [clips, setClips] = useState<Clip[]>([]);
+  /** العينة المرجعية لنسخ الصوت (data URL) — بتظهر مع موديلات canClone */
+  const [refClip, setRefClip] = useState<{ name: string; dataUrl: string } | null>(null);
+  const refInputRef = useRef<HTMLInputElement>(null);
   const urlsRef = useRef<string[]>([]);
   const clipSeq = useRef(0);
 
@@ -98,6 +106,21 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
     });
   }
 
+  /** اختيار العينة المرجعية — عمرة كحد أقصى 15MB وتتحول data URL */
+  function pickClip(f: File | null) {
+    if (!f) return;
+    if (f.size > TTS_REF_MAX_BYTES) {
+      setError(t("ttsCloneTooBig"));
+      return;
+    }
+    const fr = new FileReader();
+    fr.onload = () => {
+      if (typeof fr.result === "string") setRefClip({ name: f.name, dataUrl: fr.result });
+    };
+    fr.onerror = () => setError(t("ttsCloneTooBig"));
+    fr.readAsDataURL(f);
+  }
+
   async function generate() {
     const value = text.trim();
     if (!value || value.length > TTS_TEXT_MAX_CHARS || busy) return;
@@ -107,7 +130,7 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
       const r = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: value, modelId: modelId || undefined }),
+        body: JSON.stringify({ text: value, modelId: modelId || undefined, referenceAudio: refClip?.dataUrl }),
       });
       if (!r.ok) {
         const j = await r.json().catch(() => null);
@@ -296,6 +319,50 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
                       className="min-h-[150px] w-full resize-y rounded-2xl border border-hair bg-surface px-4 py-3 text-[15px] leading-8 text-ink shadow-1 placeholder:text-ink-3 focus:outline-none"
                     />
                   </label>
+
+                  {/* ——— عينة النسخ المرجعية (لوحدها مع موديلات canClone) ——— */}
+                  {!!selected?.canClone && (
+                    <div className="mt-3">
+                      <span className="mb-1.5 block text-[12.5px] font-medium text-ink-2">
+                        {t("ttsCloneLabel")}
+                      </span>
+                      {refClip ? (
+                        <div className="flex items-center gap-2 rounded-2xl border border-accent-line bg-accent-soft/40 px-3.5 py-2.5">
+                          <AudioLines size={14} className="shrink-0 text-accent" aria-hidden="true" />
+                          <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink" dir="auto">
+                            {refClip.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setRefClip(null)}
+                            aria-label={t("deleteBtn")}
+                            className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-ink-3 hover:bg-surface-3 hover:text-ink"
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => refInputRef.current?.click()}
+                          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-hair-2 px-3 py-3.5 text-[12px] text-ink-3 transition-colors hover:border-accent-line hover:text-ink-2"
+                        >
+                          <AudioLines size={15} aria-hidden="true" />
+                          {t("ttsCloneHint")}
+                        </button>
+                      )}
+                      <input
+                        ref={refInputRef}
+                        type="file"
+                        accept=".wav,.mp3,.m4a,.flac,.ogg,.webm,.aac,audio/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          pickClip(e.target.files?.[0] ?? null);
+                          e.target.value = "";
+                        }}
+                      />
+                    </div>
+                  )}
 
                   <Button
                     variant="primary"

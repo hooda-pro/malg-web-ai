@@ -376,6 +376,12 @@ export function ensureSchema(): Promise<void> {
       // ——— موديلات الصوت (TTS): نفس جدول ai_models — modality يفرّق (chat افتراضيًا) ———
       await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS modality TEXT NOT NULL DEFAULT 'chat'`;
       await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS tts_voice TEXT NOT NULL DEFAULT ''`;
+      // ——— قدرات النموذج الصوتي (CSV tags): stt (أذن عبر chat multimodal) /
+      // stt_transcriptions (تفريغ عبر /audio/transcriptions) / tts (توليد صوت) /
+      // clone (نسخ صوتي بعينة مرجعية) — فارغ = توافق قديم (يُعامَل كـ stt) ———
+      await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS capabilities TEXT NOT NULL DEFAULT ''`;
+      // صيغ الصوت المدعومة للنموذج (CSV — مثال: mp3,pcm للـ response_format في TTS)
+      await sql`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS audio_formats TEXT NOT NULL DEFAULT ''`;
 
 /**
  * إعادة تسمية الموديل الافتراضي malg-a3 → malg-ai (مرة واحدة، آمنة للتكرار):

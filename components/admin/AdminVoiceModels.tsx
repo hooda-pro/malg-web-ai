@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Info, Loader2, Mic, Plus, Trash2 } from "lucide-react";
+import { Check, Info, Loader2, Mic, Plus, Trash2 } from "lucide-react";
 
 interface Row {
   id: string;
@@ -9,14 +9,45 @@ interface Row {
   description: string;
   isActive: boolean;
   keysCount: number;
+  /** القدرات المحفوظة (وسوم CSV محلولة) — فاضية = توافق قديم بيتعامل كـ stt */
+  capabilities: string[];
+  /** صيغ الصوت المدعومة (CSV محلولة — مثال: mp3,pcm) */
+  audioFormats: string[];
 }
 
+/** قدرات النموذج الصوتي — فعّل اللي النموذج بيدعمه فعلاً حسب صفحته على المزوّد */
+const CAPS: { tag: string; label: string; hint: string }[] = [
+  {
+    tag: "stt",
+    label: "قراءة صوت",
+    hint: "ترجمة الرسايل الصوتية عبر مدخل audio في الشات (موديلات audio-native)",
+  },
+  {
+    tag: "stt_transcriptions",
+    label: "تفريغ صوتي",
+    hint: "التفريغ عبر /audio/transcriptions — موديلات تفريغ خالصة زي whisper",
+  },
+  {
+    tag: "tts",
+    label: "توليد صوت",
+    hint: "يظهر في استوديو الصوت كمحرك تحويل نص إلى صوت",
+  },
+  {
+    tag: "clone",
+    label: "نسخ صوتي",
+    hint: "بيسمح بإرفاق عينة صوتية في الاستوديو لتقليد الصوت (لازم النموذج يدعمها)",
+  },
+];
+
+/** صيغ الصوت المسموحة — نسخة من AUDIO_FORMATS_ALLOWED (lib/provider.ts) بدون استيراد شات سيرفر */
+const FORMATS_ALLOWED = ["mp3", "pcm", "wav", "opus", "m4a", "flac", "webm", "aac"];
+
 /**
- * إدارة «النماذج الصوتية» (صفوف modality=stt) — أذن المنصة.
- * النموذج هنا بيقري تسجيلات المستخدمين الصوتية ويرجّعها نص لكل موديلات الشات
- * (مترجم فوق in /api/chat) — مخفي تمامًا: مش في الـAPI الخارجي ولا انتقاء الشات
- * ومش ممكن حد يناديه مباشرة (403). الرابط/الموديل/المفاتيح بتعدل من صفه في
- * تبويب «الموديلات والمزوّدون» زي أي موديل تاني.
+ * إدارة «النماذج الصوتية» — أذن المنصة + استوديو الصوت.
+ * النموذج الصوتي بيسحب قدراته كوسوم مستقلة: قراءة صوت (STT) /
+ * تفريغ (transcriptions) / توليد صوت (TTS) / نسخ صوتي (clone) —
+ * كل قدرة بتشتغل لوحدها، والقدرات اللي مش مدعومة من النموذج متتفعلش.
+ * الرابط/الموديل/المفاتيح بتتعدل من صفه في تبويب «الموديلات والمزوّدون».
  */
 export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "err", text: string) => void }) {
   const [rows, setRows] = useState<Row[]>([]);
@@ -25,7 +56,9 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
   const [slug, setSlug] = useState("");
   const [creating, setCreating] = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
+  const [capsBusy, setCapsBusy] = useState<string | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  const [formatsDraft, setFormatsDraft] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -34,7 +67,15 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "فشل تحميل القايمة");
       const all = (Array.isArray(data.models) ? data.models : []) as (Row & { modality?: unknown })[];
-      setRows(all.filter((m) => m.modality === "stt"));
+      setRows(
+        all
+          .filter((m) => m.modality === "stt")
+          .map((m) => ({
+            ...m,
+            capabilities: Array.isArray(m.capabilities) ? m.capabilities.filter((t) => typeof t === "string") : [],
+            audioFormats: Array.isArray(m.audioFormats) ? m.audioFormats.filter((t) => typeof t === "string") : [],
+          }))
+      );
     } catch (e) {
       notify("err", e instanceof Error ? e.message : "فشل التحميل");
     } finally {
@@ -50,7 +91,7 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
     if (!name.trim() || creating) return;
     setCreating(true);
     try {
-      const body: Record<string, unknown> = { name: name.trim(), modality: "stt" };
+      const body: Record<string, unknown> = { name: name.trim(), modality: "stt", capabilities: ["stt"] };
       const s = slug.trim();
       if (s) body.id = s;
       const res = await fetch("/api/admin/models", {
@@ -60,13 +101,13 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "فشل الإنشاء");
-      notify("ok", "الموديل اتعمل — كمّل ضبط الرابط والموديل والمفتاح من «الموديلات والمزوّدون»");
+      notify("ok", "الموديل اتعمل بقدرة «قراءة صوت» — كمّل ضبط الرابط والموديل والمفتاح من «الموديلات والمزوّدون»");
       setName("");
       setSlug("");
       await load();
     } catch (e) {
       notify("err", e instanceof Error ? e.message : "فشل الإنشاء");
-    } finally {
+    }finally {
       setCreating(false);
     }
   };
@@ -106,6 +147,63 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
     }
   };
 
+  /** تحديث قدرات صف — البيعة بتبعت الوسوم الجديدة كاملة والسيرفر بيقبل المسموحة بس */
+  const patchCaps = async (id: string, caps: string[]) => {
+    setCapsBusy(id);
+    try {
+      const res = await fetch(`/api/admin/models/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ capabilities: caps }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "فشل التحديث");
+      notify(
+        "ok",
+        caps.length
+          ? `قدرات ${id}: ${caps.join(" · ")}`
+          : `مسحت كل قدرات ${id} — بيرجع للسلوك القديم (قراءة صوت عبر الشات)`
+      );
+      await load();
+    } catch (e) {
+      notify("err", e instanceof Error ? e.message : "فشل التحديث");
+    } finally {
+      setCapsBusy(null);
+    }
+  };
+
+  const applyFormats = async (row: Row) => {
+    const raw = formatsDraft[row.id] ?? row.audioFormats.join(",");
+    const list = [
+      ...new Set(
+        raw
+          .split(",")
+          .map((t) => t.trim().toLowerCase())
+          .filter((t) => t && FORMATS_ALLOWED.includes(t))
+      ),
+    ];
+    if (list.join(",") === row.audioFormats.join(",")) return;
+    setCapsBusy(row.id);
+    try {
+      const res = await fetch(`/api/admin/models/${encodeURIComponent(row.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audio_formats: list }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "فشل التحديث");
+      notify("ok", list.length ? `صيغ صوت ${row.id}: ${list.join(", ")}` : `مسحت صيغ صوت ${row.id}`);
+      await load();
+    } catch (e) {
+      notify("err", e instanceof Error ? e.message : "فشل التحديث");
+    } finally {
+      setCapsBusy(null);
+    }
+  };
+
+  /** القدرات الظاهرة: محفوظة، أو «قراءة صوت» للصفوف القديمة الفاضية (توافق) */
+  const capsOf = (m: Row): string[] => (m.capabilities.length ? m.capabilities : ["stt"]);
+
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       {/* ——— شرح الفكرة ——— */}
@@ -113,10 +211,17 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
         <div className="flex items-start gap-2.5">
           <Mic size={16} className="mt-0.5 shrink-0 text-accent" />
           <div className="space-y-1.5 text-[12.5px] leading-relaxed text-ink-2">
-            <p className="font-semibold text-ink">النماذج الصوتية — «أذن المنصة»</p>
+            <p className="font-semibold text-ink">النماذج الصوتية — كل نموذج بيسحب قدراته</p>
             <p>
-              النموذج اللي هتضيفه بيتحول لمترجم التسجيلات الصوتية لجميع موديلات الشات: أي مستخدم يبعت رسالة
-              صوتية لأي موديل، ده يقراها ويحولها نص، والنص يروح للموديل المختار عشان يرد كأن المستخدم كتبه.
+              كل نموذج صوتي بيتضيفه الأدمن بيسحب قدراته كوسوم مستقلة، وكل قدرة بتشتغل لوحدها:
+              <span className="font-medium text-ink"> قراءة صوت</span> = مترجم الرسايل الصوتية لكل موديلات الشات،
+              <span className="font-medium text-ink"> تفريغ صوتي</span> = نفس الشغل عبر endpoint التفريغ
+              (موديلات whisper)،<span className="font-medium text-ink"> توليد صوت</span> = بيظهر في استوديو الصوت
+              (نص ← صوت)، ونسخ صوتي = بيسمح بعينة مرجعية لتقليد الصوت في الاستوديو.
+            </p>
+            <p className="text-ink-3">
+              فعّل اللي النموذج بيدعمه فعلاً حسب صفحته على OpenRouter — واللي مش مدعوم سيبه مطفي.
+              الصف اللي كل قدراته فاضية بيتعامل كأنه «قراءة صوت» — توافق مع الموديلات القديمة.
             </p>
             <p className="text-ink-3">
               الخصوصية: النماذج دي مخفية تمامًا — مش بتظهر في API خارجي ولا قايمة شات الموقع، ومش ممكن أي حد
@@ -146,7 +251,10 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
               </span>
               + مفتاح OpenRouter.
               <br />
-              3. فعّله من زر التشغيل بالقائمة تحت — أول موديل نشط بالترتيب هو اللي بيتستخدم.
+              3. فعّل قدراته من القايمة تحت (مثال fish-audio: توليد صوت + نسخ صوتي — لو عايز تفريغ استخدم
+              موديل whisper وفعّل «تفريغ صوتي») وحدد الصيغ (مثال: mp3,pcm).
+              <br />
+              4. فعّله من زر التشغيل — أول موديل نشط بالترتيب هو اللي بيتستخدم.
             </p>
           </div>
         </div>
@@ -195,64 +303,109 @@ export default function AdminVoiceModels({ notify }: { notify: (type: "ok" | "er
       ) : (
         <div className="space-y-2">
           {rows.map((m) => (
-            <div
-              key={m.id}
-              className="flex items-center gap-3 rounded-lg border border-hair bg-surface px-3.5 py-2.5"
-            >
-              <Mic size={14} className="shrink-0 text-accent" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-semibold text-ink">{m.name}</p>
-                <p className="tnum mt-0.5 block truncate text-[11.5px] text-ink-3" dir="ltr">
-                  {m.id} · {m.keysCount} {m.keysCount === 1 ? "مفتاح" : "مفاتيح"}
-                </p>
-              </div>
-              {m.isActive ? (
-                <span className="shrink-0 rounded-full bg-live-soft px-2 py-0.5 text-[10.5px] font-medium text-live">
-                  نشط
-                </span>
-              ) : (
-                <span className="shrink-0 rounded-full bg-surface-3 px-2 py-0.5 text-[10.5px] font-medium text-ink-3">
-                  موقوف
-                </span>
-              )}
-              <button
-                onClick={() => void toggleActive(m.id, !m.isActive)}
-                disabled={actingId !== null}
-                title={m.isActive ? "إيقاف الموديل" : "تشغيل الموديل"}
-                aria-label={m.isActive ? "إيقاف الموديل" : "تشغيل الموديل"}
-                className={`h-8 w-14 shrink-0 rounded-full px-2 text-[11px] font-medium transition-colors disabled:opacity-40 ${
-                  m.isActive ? "bg-live-soft text-live hover:bg-live/15" : "bg-surface-3 text-ink-3 hover:bg-surface-2"
-                }`}
-              >
-                {actingId === m.id ? <Loader2 size={13} className="mx-auto animate-spin" /> : m.isActive ? "إيقاف" : "تشغيل"}
-              </button>
-              {confirmDel === m.id ? (
-                <div className="flex shrink-0 items-center gap-1">
-                  <button
-                    onClick={() => void remove(m.id)}
-                    disabled={actingId !== null}
-                    className="rounded-md bg-danger-soft px-2.5 py-1.5 text-[11.5px] font-medium text-danger disabled:opacity-40"
-                  >
-                    {actingId === m.id ? <Loader2 size={12} className="animate-spin" /> : "متأكد؟ حذف"}
-                  </button>
-                  <button
-                    onClick={() => setConfirmDel(null)}
-                    className="rounded-md px-2 py-1.5 text-[11.5px] text-ink-3 hover:text-ink"
-                  >
-                    إلغاء
-                  </button>
+            <div key={m.id} className="rounded-lg border border-hair bg-surface px-3.5 py-3">
+              <div className="flex items-center gap-3">
+                <Mic size={14} className="shrink-0 text-accent" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-semibold text-ink">{m.name}</p>
+                  <p className="tnum mt-0.5 block truncate text-[11.5px] text-ink-3" dir="ltr">
+                    {m.id} · {m.keysCount} {m.keysCount === 1 ? "مفتاح" : "مفاتيح"}
+                  </p>
                 </div>
-              ) : (
+                {m.isActive ? (
+                  <span className="shrink-0 rounded-full bg-live-soft px-2 py-0.5 text-[10.5px] font-medium text-live">
+                    نشط
+                  </span>
+                ) : (
+                  <span className="shrink-0 rounded-full bg-surface-3 px-2 py-0.5 text-[10.5px] font-medium text-ink-3">
+                    موقوف
+                  </span>
+                )}
                 <button
-                  onClick={() => setConfirmDel(m.id)}
+                  onClick={() => void toggleActive(m.id, !m.isActive)}
                   disabled={actingId !== null}
-                  title="حذف موديل الصوت"
-                  aria-label={`حذف ${m.name}`}
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:bg-danger-soft hover:text-danger disabled:opacity-40"
+                  title={m.isActive ? "إيقاف الموديل" : "تشغيل الموديل"}
+                  aria-label={m.isActive ? "إيقاف الموديل" : "تشغيل الموديل"}
+                  className={`h-8 w-14 shrink-0 rounded-full px-2 text-[11px] font-medium transition-colors disabled:opacity-40 ${
+                    m.isActive ? "bg-live-soft text-live hover:bg-live/15" : "bg-surface-3 text-ink-3 hover:bg-surface-2"
+                  }`}
                 >
-                  <Trash2 size={14} />
+                  {actingId === m.id ? (
+                    <Loader2 size={13} className="mx-auto animate-spin" />
+                  ) : m.isActive ? (
+                    "إيقاف"
+                  ) : (
+                    "تشغيل"
+                  )}
                 </button>
-              )}
+                {confirmDel === m.id ? (
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      onClick={() => void remove(m.id)}
+                      disabled={actingId !== null}
+                      className="rounded-md bg-danger-soft px-2.5 py-1.5 text-[11.5px] font-medium text-danger disabled:opacity-40"
+                    >
+                      {actingId === m.id ? <Loader2 size={12} className="animate-spin" /> : "متأكد؟ حذف"}
+                    </button>
+                    <button
+                      onClick={() => setConfirmDel(null)}
+                      className="rounded-md px-2 py-1.5 text-[11.5px] text-ink-3 hover:text-ink"
+                    >
+                      إلغاء
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmDel(m.id)}
+                    disabled={actingId !== null}
+                    title="حذف موديل الصوت"
+                    aria-label={`حذف ${m.name}`}
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:bg-danger-soft hover:text-danger disabled:opacity-40"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
+              {/* ——— سطر القدرات + الصيغ ——— */}
+              <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-hair pt-2.5">
+                <span className="text-[10.5px] font-medium text-ink-3">القدرات:</span>
+                {CAPS.map((c) => {
+                  const on = capsOf(m).includes(c.tag);
+                  return (
+                    <button
+                      key={c.tag}
+                      onClick={() => void patchCaps(m.id, on ? capsOf(m).filter((x) => x !== c.tag) : [...capsOf(m), c.tag])}
+                      disabled={actingId !== null || capsBusy !== null}
+                      title={c.hint}
+                      aria-pressed={on}
+                      className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
+                        on ? "bg-accent-soft text-accent" : "bg-surface-3 text-ink-3 hover:text-ink-2"
+                      }`}
+                    >
+                      {capsBusy === m.id ? (
+                        <Loader2 size={11} className="animate-spin" />
+                      ) : on ? (
+                        <Check size={11} strokeWidth={3} />
+                      ) : (
+                        <Plus size={11} />
+                      )}
+                      {c.label}
+                    </button>
+                  );
+                })}
+                <span className="ms-auto flex items-center gap-1.5">
+                  <span className="text-[10.5px] text-ink-3">الصيغ:</span>
+                  <input
+                    value={formatsDraft[m.id] ?? m.audioFormats.join(",")}
+                    onChange={(e) => setFormatsDraft((prev) => ({ ...prev, [m.id]: e.target.value }))}
+                    onBlur={() => void applyFormats(m)}
+                    placeholder="mp3,pcm"
+                    dir="ltr"
+                    title="صيغ الصوت اللي النموذج بيقبلها/بيطلعها — مفصولة بفواصل"
+                    className="h-6 w-28 rounded-md border border-hair bg-surface-2 px-2 text-left font-mono text-[11px] text-ink placeholder:text-ink-3 focus:border-accent-line focus:outline-none"
+                  />
+                </span>
+              </div>
             </div>
           ))}
         </div>

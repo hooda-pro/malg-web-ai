@@ -93,6 +93,10 @@ export interface ModelSummary {
   modality: "chat" | "tts" | "stt";
   /** الصوت الافتراضي لموديلات TTS (مثال: alloy) — فارغ = صوت المزوّد الافتراضي */
   ttsVoice: string;
+  /** قدرات الصوت (وسوم CSV محلولة): stt / stt_transcriptions / tts / clone — شوف CAPABILITIES_ALLOWED */
+  capabilities: string[];
+  /** صيغ الصوت المدعومة (وسوم CSV محلولة) — لترشيح response_format في طلبات التوليد */
+  audioFormats: string[];
 }
 
 /** إعداد مزوّد مربوط بموديل معين — اللي بيستخدمه التفاوض الفعلي */
@@ -208,6 +212,8 @@ function modelRowToSummary(r: ModelRow): ModelSummary {
           ? "stt"
           : "chat",
     ttsVoice: typeof voiceRaw === "string" ? voiceRaw.slice(0, 80) : "",
+    capabilities: parseCapabilities((r as { capabilities?: unknown }).capabilities),
+    audioFormats: parseAudioFormats((r as { audio_formats?: unknown }).audio_formats),
   };
 }
 
@@ -222,14 +228,14 @@ export function invalidateModelCache(modelId?: string) {
 async function selectModelRows(whereActive: boolean): Promise<ModelRow[]> {
   if (whereActive) {
     return (await sql`
-      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, modality, tts_voice
+      SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, modality, tts_voice, capabilities, audio_formats
       FROM ai_models
       WHERE is_active = TRUE
       ORDER BY is_default DESC, sort_order ASC, created_at ASC
     `) as ModelRow[];
   }
   return (await sql`
-    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, modality, tts_voice
+    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, modality, tts_voice, capabilities, audio_formats
     FROM ai_models
     ORDER BY is_default DESC, sort_order ASC, created_at ASC
   `) as ModelRow[];
@@ -243,6 +249,34 @@ async function selectModelRows(whereActive: boolean): Promise<ModelRow[]> {
 export function isVoiceModelRow(id: string, modality?: string | null): boolean {
   if (modality === "tts" || modality === "stt") return true;
   return /voice/i.test(String(id ?? ""));
+}
+
+/** وسوم قدرات النموذج الصوتي المسموحة (CSV):
+ * - stt: بقرا التسجيلات عبر chat_completions (input_audio) — موديلات audio-native.
+ * - stt_transcriptions: بقرا الصوت عبر /audio/transcriptions (موديلات تفريغ خالصة مثل whisper).
+ * - tts: بتولّد صوت من نص (بيظهر في استوديو الصوت سالب modality).
+ * - clone: بيدعم نسخ الصوت بعينة مرجعية (input_references في طلب الـspeech). */
+export const CAPABILITIES_ALLOWED = ["stt", "stt_transcriptions", "tts", "clone"] as const;
+
+/** صيغ الصوت المسموحة في العمود audio_formats (CSV) — ترشيح فورمات طلبات الصوت. */
+export const AUDIO_FORMATS_ALLOWED = ["mp3", "pcm", "wav", "opus", "m4a", "flac", "webm", "aac"] as const;
+
+function parseTaggedCsv(raw: unknown, allowed: readonly string[]): string[] {
+  if (typeof raw !== "string") return [];
+  return raw
+    .split(",")
+    .map((t) => t.trim().toLowerCase())
+    .filter((t) => t && allowed.includes(t));
+}
+
+/** بتحلل عمود capabilities (CSV) لوسوم مسموحة — مدمنل رسالة خاطئة/وقيمة غريبة بتتناسى. */
+export function parseCapabilities(raw: unknown): string[] {
+  return parseTaggedCsv(raw, CAPABILITIES_ALLOWED);
+}
+
+/** بتحلل عمود audio_formats (CSV) لصيغ مسموحة. */
+export function parseAudioFormats(raw: unknown): string[] {
+  return parseTaggedCsv(raw, AUDIO_FORMATS_ALLOWED);
 }
 
 /** الحقيقة من الداتابيز: هل الموديل ده صف موديل صوت (مقفول للشات) — فحص الـmodality
@@ -390,24 +424,33 @@ export interface TtsModelConfig {
   /** الصوت الافتراضي للصف (قد يكون فارغًا — وقتها المزوّد يختار صوته الافتراضي) */
   voice: string;
   tier: "free" | "paid";
+  /** هل يدعم النموذج نسخ الصوت بعينة مرجعية (وسم clone) — للسماح بإرفاق عينة */
+  canClone: boolean;
+  /** صيغة ملف الصوت للطلب (من audio_formats — المتاح من OpenRouter: mp3/pcm؛ الافتراضي mp3) */
+  ttsFormat: "mp3" | "pcm";
 }
 
-/** إعداد موديل صوتي نشط (موديل معين أو الأول بالترتيب) — يرمي NO_TTS_MODEL لو مفيش. */
+/** إعداد موديل صوتي نشط (موديل معين أو الأول بالترتيب) — يرمي NO_TTS_MODEL لو مفيش.
+ * بيشمّل صفوف Modality='tts' + صفوف «النماذج الصوتية» (stt) اللي ليها قدرة tts. */
 export async function getTtsModelConfig(modelId?: string): Promise<TtsModelConfig> {
   const rows = (await sql`
-    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, modality, tts_voice
+    SELECT id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, updated_at, tier, cost_multiplier, sort_order, supports_mic, modality, tts_voice, capabilities, audio_formats
     FROM ai_models
-    WHERE is_active = TRUE AND modality = 'tts'
+    WHERE is_active = TRUE AND (modality = 'tts' OR (modality = 'stt' AND capabilities LIKE '%tts%'))
     ORDER BY is_default DESC, sort_order ASC, created_at ASC
   `) as ModelRow[];
   const wanted = modelId ? sanitizeModelId(modelId) : "";
   const row = (wanted ? rows.find((r) => r.id === wanted) : undefined) ?? rows[0];
   if (!row) throw new Error("NO_TTS_MODEL");
   const voiceRaw = (row as { tts_voice?: unknown }).tts_voice;
+  const caps = parseCapabilities((row as { capabilities?: unknown }).capabilities);
+  const formats = parseAudioFormats((row as { audio_formats?: unknown }).audio_formats);
   return {
     config: modelRowToConfig(row),
     voice: typeof voiceRaw === "string" ? voiceRaw.trim().slice(0, 80) : "",
     tier: (row as { tier?: unknown }).tier === "paid" ? "paid" : "free",
+    canClone: caps.includes("clone"),
+    ttsFormat: formats.includes("pcm") && !formats.includes("mp3") ? "pcm" : "mp3",
   };
 }
 

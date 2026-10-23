@@ -57,9 +57,14 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const text = typeof body?.text === "string" ? body.text : "";
   const modelId = typeof body?.modelId === "string" ? body.modelId : undefined;
+  // عينة النسخ المرجعي (اختياري): data URI صوتي مباشرة — الحجم بيتقيد هنا كمان
+  const referenceAudio =
+    typeof body?.referenceAudio === "string" && body.referenceAudio.startsWith("data:audio/")
+      ? body.referenceAudio
+      : undefined;
 
   try {
-    const out = await synthesizeSpeech({ userId: user.id, isAdmin, text, modelId });
+    const out = await synthesizeSpeech({ userId: user.id, isAdmin, text, modelId, referenceAudio });
     return new Response(out.audio as unknown as BodyInit, {
       status: 200,
       headers: {
@@ -78,8 +83,9 @@ export async function POST(req: NextRequest) {
         { status: 403 }
       );
     }
-    const status =
-      msg.includes("الحد الأقصى") || msg === "اكتب النص أولًا" ? 400 : msg.includes("رصيد") ? 403 : 502;
+    const badRequest =
+      msg.includes("الحد الأقصى") || msg === "اكتب النص أولًا" || msg.includes("عينة النسخ");
+    const status = badRequest ? 400 : msg.includes("رصيد") ? 403 : 502;
     return NextResponse.json({ error: msg }, { status });
   }
 }

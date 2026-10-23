@@ -1,9 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureSchema } from "@/lib/db";
 import { requireAdmin, logAdminAction } from "@/lib/adminGuard";
-import { invalidateProviderCache, listModels, validateModelInput } from "@/lib/provider";
+import {
+  invalidateProviderCache,
+  listModels,
+  validateModelInput,
+  CAPABILITIES_ALLOWED,
+  AUDIO_FORMATS_ALLOWED,
+} from "@/lib/provider";
 
 export const dynamic = "force-dynamic";
+
+/** بيجمد CSV وسوم معتمدة بس — من مصفوفة أو نص مسافراتي؛ الغريب بيتناسى. */
+function parseAllowedCsv(raw: unknown, allowed: readonly string[]): string {
+  const items = Array.isArray(raw) ? raw : typeof raw === "string" ? raw.split(",") : [];
+  return [
+    ...new Set(
+      items
+        .map((t) => String(t).trim().toLowerCase())
+        .filter((t) => t && allowed.includes(t))
+    ),
+  ].join(",");
+}
 
 /** كل الموديلات للأدمن (نشطة وغير نشطة) — بدون مفاتيح خام */
 export async function GET() {
@@ -42,9 +60,13 @@ export async function POST(req: NextRequest) {
   // stt = موديل إدخال صوتي («أذن المنصة» — بترجم التسجيلات لكل الموديلات، مخفي من الـAPI).
   const rawModality = (body as { modality?: unknown }).modality;
   const modality = rawModality === "tts" || rawModality === "stt" ? rawModality : "chat";
+  // القدرات والصيغ (وسوم CSV مسموحة بس) — النموذج الصوتي بيتولد بالقدرات اللي
+  // الأدمن اختارها، وبتتحرر لاحقًا من واجهة «النماذج الصوتية».
+  const capabilitiesCsv = parseAllowedCsv((body as { capabilities?: unknown }).capabilities, CAPABILITIES_ALLOWED);
+  const audioFormatsCsv = parseAllowedCsv((body as { audio_formats?: unknown }).audio_formats, AUDIO_FORMATS_ALLOWED);
   await sql`
-    INSERT INTO ai_models (id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, sort_order, modality)
-    VALUES (${v.id}, ${v.name}, ${v.description}, 'https://api.openai.com/v1', 'chat_completions', ${v.id}, '{}', 0.4, 128000, TRUE, ${isFirst}, ${nextOrder}, ${modality})
+    INSERT INTO ai_models (id, name, description, base_url, protocol, model, api_keys, temperature, max_tokens, is_active, is_default, sort_order, modality, capabilities, audio_formats)
+    VALUES (${v.id}, ${v.name}, ${v.description}, 'https://api.openai.com/v1', 'chat_completions', ${v.id}, '{}', 0.4, 128000, TRUE, ${isFirst}, ${nextOrder}, ${modality}, ${capabilitiesCsv}, ${audioFormatsCsv})
   `;
   invalidateProviderCache();
 

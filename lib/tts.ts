@@ -8,7 +8,7 @@
  */
 
 import { sql, ensureSchema } from "./db";
-import { cleanBaseUrl, getTtsModelConfig, resolveTtsEndpoint } from "./provider";
+import { cleanBaseUrl, getTtsModelConfig, parseCapabilities, resolveTtsEndpoint } from "./provider";
 import { checkAndMaybeRenewQuota, deductTokens } from "./quota";
 import { hasPaidSubscription } from "./subscription";
 
@@ -24,9 +24,12 @@ export interface TtsVoiceModel {
   locked: boolean;
   voice: string;
   isDefault: boolean;
+  /** هل يدعم النموذج نسخ الصوت بعينة مرجعية (وسم clone) — الواجهة تعرض زرار العينة معاه */
+  canClone: boolean;
 }
 
-/** موديلات الصوت النشطة للمستخدم + هل له حق الاستخدام (مشترك/أدمن) */
+/** موديلات الصوت النشطة للمستخدم + هل له حق الاستخدام (مشترك/أدمن).
+ * بيشمّل صفوف modality='tts' + صفوف «النماذج الصوتية» (stt) اللي ليها قدرة tts. */
 export async function listTtsModelsForUser(
   userId: string,
   isAdmin: boolean
@@ -39,13 +42,14 @@ export async function listTtsModelsForUser(
     description: string | null;
     tier: unknown;
     tts_voice: unknown;
+    capabilities: unknown;
     is_default: boolean;
   }[] = [];
   try {
     rows = (await sql`
-      SELECT id, name, description, tier, tts_voice, is_default
+      SELECT id, name, description, tier, tts_voice, capabilities, is_default
       FROM ai_models
-      WHERE is_active = TRUE AND modality = 'tts'
+      WHERE is_active = TRUE AND (modality = 'tts' OR (modality = 'stt' AND capabilities LIKE '%tts%'))
       ORDER BY is_default DESC, sort_order ASC, created_at ASC
     `) as typeof rows;
   } catch {
@@ -55,6 +59,7 @@ export async function listTtsModelsForUser(
     hasAccess: unlocked,
     models: rows.map((r) => {
       const tier = r.tier === "paid" ? "paid" : "free";
+      const caps = parseCapabilities(r.capabilities);
       return {
         id: r.id,
         name: r.name,
@@ -63,6 +68,7 @@ export async function listTtsModelsForUser(
         locked: tier === "paid" && !unlocked,
         voice: typeof r.tts_voice === "string" ? r.tts_voice : "",
         isDefault: r.is_default === true,
+        canClone: caps.includes("clone"),
       };
     }),
   };
@@ -73,7 +79,13 @@ export interface SynthesizeOptions {
   isAdmin: boolean;
   text: string;
   modelId?: string;
+  /** بيانات العينة المرجعية (data URL) لنسخ الصوت — فارغ/غير موجود = توليد عادي.
+   * بيتطلب قدرة clone على الموديل ويقيد الحجم (20MB base64 = 15MB فك ضغط). */
+  referenceAudio?: string;
 }
+
+/** حد عينة النسخ المرجعية — OpenRouter: 20MB base64 ⇒ ~15MB فك ضغط */
+export const TTS_REFERENCE_MAX_BASE64_CHARS = 20_000_000;
 
 export interface SynthesizeResult {
   audio: Uint8Array;
@@ -124,12 +136,29 @@ export async function synthesizeSpeech(opts: SynthesizeOptions): Promise<Synthes
   const keys = Array.isArray(resolved.config.apiKeys) ? resolved.config.apiKeys.filter(Boolean) : [];
   if (keys.length === 0) throw new Error("موديل الصوت بلا مفاتيح — أضف مفتاحًا من لوحة الأدمن");
 
-  const payload = {
+  // عينة النسخ المرجعية (Voice cloning): عينة واحدة في الطلب، وشكلها data URI صوتي.
+  const referenceAudio = typeof opts.referenceAudio === "string" ? opts.referenceAudio.trim() : "";
+  let inputReferences: unknown[] | undefined;
+  if (referenceAudio) {
+    if (!resolved.canClone) {
+      throw new Error("النموذج المحدد لا يدعم نسخ الصوت — فعّل قدرة «النسخ» له من لوحة الأدمن");
+    }
+    if (!/^data:audio\//i.test(referenceAudio) || !referenceAudio.includes("base64,")) {
+      throw new Error("عينة النسخ لازم تكون ملف صوتي — انظر الصيغ المدعومة: WAV/MP3/M4A/FLAC/OGG/WebM/AAC");
+    }
+    if (referenceAudio.length > TTS_REFERENCE_MAX_BASE64_CHARS) {
+      throw new Error("عينة النسخ كبيرة جدًا — الحد الأقصى ~15 ميجابايت");
+    }
+    inputReferences = [{ type: "input_audio", input_audio: { data: referenceAudio } }];
+  }
+
+  const payload: Record<string, unknown> = {
     model: resolved.config.model,
     input: text,
     voice: resolved.voice || TTS_DEFAULT_VOICE,
-    response_format: "mp3",
+    response_format: resolved.ttsFormat,
   };
+  if (inputReferences) payload.input_references = inputReferences;
 
   let lastError = "";
   for (const key of keys) {

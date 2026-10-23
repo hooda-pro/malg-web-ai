@@ -1,7 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureSchema } from "@/lib/db";
 import { requireAdmin, logAdminAction } from "@/lib/adminGuard";
-import { invalidateProviderCache, listModels, sanitizeModelId } from "@/lib/provider";
+import {
+  invalidateProviderCache,
+  listModels,
+  sanitizeModelId,
+  CAPABILITIES_ALLOWED,
+  AUDIO_FORMATS_ALLOWED,
+} from "@/lib/provider";
+
+/** بيجمد CSV وسوم معتمدة بس — من مصفوفة أو نص مسافراتي؛ الغريب بيتناسى. */
+function parseAllowedCsv(raw: unknown, allowed: readonly string[]): string {
+  const items = Array.isArray(raw) ? raw : typeof raw === "string" ? raw.split(",") : [];
+  return [
+    ...new Set(
+      items
+        .map((t) => String(t).trim().toLowerCase())
+        .filter((t) => t && allowed.includes(t))
+    ),
+  ].join(",");
+}
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +49,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     supports_mic?: unknown;
     modality?: unknown;
     tts_voice?: unknown;
+    capabilities?: unknown;
+    audio_formats?: unknown;
   };
 
   const sets: string[] = [];
@@ -78,6 +98,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       body.modality === "tts" ? "صوت (TTS)" : body.modality === "stt" ? "إدخال صوتي (أذن المنصة)" : "محادثة"
     );
     await sql`UPDATE ai_models SET modality = ${body.modality}, updated_at = now() WHERE id = ${id}`;
+  }
+  // قدرات النموذج الصوتي (وسوم CSV مسموحة بس) — إرسال المصفوفة/النص بتحدّث كامل القايمة.
+  if (typeof body.capabilities === "string" || Array.isArray(body.capabilities)) {
+    const csv = parseAllowedCsv(body.capabilities ?? "", CAPABILITIES_ALLOWED);
+    sets.push(csv ? `القدرات: ${csv}` : "مسح القدرات");
+    await sql`UPDATE ai_models SET capabilities = ${csv}, updated_at = now() WHERE id = ${id}`;
+  }
+  if (typeof body.audio_formats === "string" || Array.isArray(body.audio_formats)) {
+    const csv = parseAllowedCsv(body.audio_formats ?? "", AUDIO_FORMATS_ALLOWED);
+    sets.push(csv ? `صيغ الصوت: ${csv}` : "مسح صيغ الصوت");
+    await sql`UPDATE ai_models SET audio_formats = ${csv}, updated_at = now() WHERE id = ${id}`;
   }
   if (typeof body.tts_voice === "string") {
     const ttsVoice = body.tts_voice.trim().slice(0, 80);
