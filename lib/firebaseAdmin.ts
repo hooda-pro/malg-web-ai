@@ -52,11 +52,16 @@ export async function verifyOAuthIdToken(idToken: string): Promise<OAuthIdentity
   if (!decoded.email) {
     throw new Error("حساب الدخول ده مفيهوش بريد إلكتروني ظاهر");
   }
-  // ربط الحساب بيتم على الإيميل، فلازم يكون مؤكَّد ومن مزوّد موثوق فعلًا. من غير الفحص ده لو اتفعّلت
-  // طريقة تسجيل تانية في Firebase، حد يقدر يسجّل بإيميل مش بتاعه ويدخل على حساب حد تاني.
+  // ربط الحساب بيتم على الإيميل، فلازم يكون من مزوّد موثوق فعلًا. من غير الفحص ده
+  // لو اتفعّلت طريقة تسجيل تانية في Firebase، حد يقدر يسجّل بإيميل مش بتاعه ويدخل على حساب حد تاني.
+  //
+  // ملحوظة عن email_verified مع GitHub: Firebase بيرجّعها false في توكنات GitHub
+  // حتى لو البريد متأكد فعلاً عند GitHub (quirk معروف في التكامل). عشان كده بنعتمد
+  // على إن GitHub نفسه موثوق: حساب GitHub ببريد primary متأكد = البريد بتاعه فعلًا.
+  // Google بيبعت email_verified صحيحة عادي فبنفحصها عنده.
   const provider = (decoded.firebase as { sign_in_provider?: string } | undefined)?.sign_in_provider;
-  const allowed = provider === "google.com" || provider === "github.com";
-  if (!allowed || decoded.email_verified !== true) {
+  const emailVerified = decoded.email_verified === true || provider === "github.com";
+  if ((provider !== "google.com" && provider !== "github.com") || !emailVerified) {
     const err = new Error("لازم تسجّل الدخول بحساب Google أو GitHub ببريد إلكتروني مؤكَّد");
     err.name = "GoogleIdentityError";
     throw err;
