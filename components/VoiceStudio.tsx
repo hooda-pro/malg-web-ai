@@ -1,13 +1,38 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AudioLines, Check, ChevronDown, Crown, Download, Loader2, Play, X } from "lucide-react";
+import {
+  AudioLines,
+  Check,
+  ChevronDown,
+  Crown,
+  Download,
+  Loader2,
+  Laugh,
+  Play,
+  Smile,
+  TriangleAlert,
+  Type,
+  Waves,
+  X,
+} from "lucide-react";
 import { Button } from "./ui/Controls";
 import { cn } from "@/lib/utils";
 import { useSettings } from "./SettingsContext";
 
 /** الحد الأقصى لحروف النص — لازم يطابق TTS_TEXT_MAX_CHARS في lib/tts.ts (السيرفر هو المرجع) */
 const TTS_TEXT_MAX_CHARS = 2000;
+
+/** طوابع الأداء (علامات S2 open-domain: أي وصف بين أقواس مربعة) — بالترتيب المنطقي */
+type TtsMood = "" | "playful" | "angry" | "excited" | "calm" | "whispering";
+const MOODS: { value: TtsMood; key: string }[] = [
+  { value: "", key: "ttsNormal" },
+  { value: "playful", key: "ttsMoodPlayful" },
+  { value: "angry", key: "ttsMoodAngry" },
+  { value: "excited", key: "ttsMoodExcited" },
+  { value: "calm", key: "ttsMoodCalm" },
+  { value: "whispering", key: "ttsMoodWhisper" },
+];
 
 interface TtsModel {
   id: string;
@@ -19,6 +44,8 @@ interface TtsModel {
   isDefault: boolean;
   /** النموذج بيدعم نسخ الصوت بعينة مرجعية (وسم clone في قدراته) */
   canClone?: boolean;
+  /** النموذج بيدعم لمسة الأداء (علامات S2 — مزوّدات OpenRouter/Fish) */
+  styleOk?: boolean;
 }
 
 interface Clip {
@@ -26,15 +53,55 @@ interface Clip {
   url: string;
   text: string;
   modelName: string;
+  /** وصف اللمسة المختارة (فرفوش · ضحك · سريع) وقت التوليد */
+  label?: string;
   at: number;
 }
 
 /** حد العينة المرجعية للنسخ الصوتي — لازم يطابق حد السيرفر (~15MB فك ضغط من 20MB base64) */
 const TTS_REF_MAX_BYTES = 15 * 1024 * 1024;
 
+/** عنوان قسم صغير: أيقونة + نص مختصر — بيثبّت شكل كل أقسام الاستوديو */
+function SectionLabel({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <span className="mb-1.5 flex items-center gap-1.5 text-[12.5px] font-medium text-ink-2">
+      <span className="shrink-0 text-ink-3">{icon}</span>
+      {children}
+    </span>
+  );
+}
+
+/** شرائح اختيار واحدة (طابع/سرعة/ضحك) — State بنفس المظهر للكل */
+function Chip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "rounded-full border px-3 py-1.5 text-[12.5px] transition-colors duration-1",
+        active
+          ? "border-accent-line bg-accent-soft text-accent"
+          : "border-hair text-ink-2 hover:border-hair-2 hover:text-ink"
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 /**
- * استوديو الصوت كصفحة كاملة (مش popup): نص → صوت عبر أي موديل صوتي
- * يضيفه الأدمن (modality = 'tts'). للمشتركين (Pro) والأدمن فقط.
+ * استوديو الصوت كصفحة كاملة: نص → صوت عبر أي موديل صوتي يضيفه الأدمن (modality = 'tts').
+ * الأقسام مرتبة: الموديل ← النص ← اللمسة الصوتية (طابع/سرعة/ضحك) ← عينة النسخ ← التوليد.
+ * للمشتركين (Pro) والأدمن فقط.
  */
 export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }) {
   const { t } = useSettings();
@@ -47,6 +114,10 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [clips, setClips] = useState<Clip[]>([]);
+  /** اللمسة: طابع + سريع شوية + ضحك — بتتحول لعلامات S2 جوه النص على السيرفر */
+  const [mood, setMood] = useState<TtsMood>("");
+  const [brisk, setBrisk] = useState(false);
+  const [laughs, setLaughs] = useState(false);
   /** العينة المرجعية لنسخ الصوت (data URL) — بتظهر مع موديلات canClone */
   const [refClip, setRefClip] = useState<{ name: string; dataUrl: string } | null>(null);
   const refInputRef = useRef<HTMLInputElement>(null);
@@ -130,7 +201,12 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
       const r = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: value, modelId: modelId || undefined, referenceAudio: refClip?.dataUrl }),
+        body: JSON.stringify({
+          text: value,
+          modelId: modelId || undefined,
+          referenceAudio: refClip?.dataUrl,
+          style: { mood, speed: brisk ? "brisk" : "", laughs },
+        }),
       });
       if (!r.ok) {
         const j = await r.json().catch(() => null);
@@ -148,12 +224,14 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
       } catch {
         modelName = "";
       }
+      const label = selected?.styleOk
+        ? [mood ? t(MOODS.find((m) => m.value === mood)?.key ?? "") : "", laughs ? t("ttsLaughs") : "", brisk ? t("ttsSpeedBrisk") : ""]
+            .filter(Boolean)
+            .join(" · ")
+        : "";
       clipSeq.current += 1;
-      setClips((prev) => [
-        { id: clipSeq.current, url, text: value, modelName, at: Date.now() },
-        ...prev,
-      ]);
-      setText("");
+      setClips((prev) => [{ id: clipSeq.current, url, text: value, modelName, label, at: Date.now() }, ...prev]);
+      // نسيب النص بعد النجاح — يعدّل ويجادّد براحته
     } catch (e) {
       setError(e instanceof Error ? e.message : "تعذّر توليد الصوت");
     } finally {
@@ -197,8 +275,12 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
           )}
 
           {error && (
-            <p role="alert" className="rounded-2xl bg-danger-soft px-4 py-3 text-[13px] leading-6 text-danger">
-              {error}
+            <p
+              role="alert"
+              className="mb-3 flex items-start gap-2 rounded-2xl bg-danger-soft px-4 py-3 text-[13px] leading-6 text-danger"
+            >
+              <TriangleAlert size={15} className="mt-0.5 shrink-0" aria-hidden="true" />
+              <span className="min-w-0">{error}</span>
             </p>
           )}
 
@@ -221,91 +303,104 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
                 <p className="rounded-2xl bg-warn-soft px-4 py-3 text-[13px] leading-6 text-warn">{t("ttsNoModels")}</p>
               ) : (
                 <div className="rounded-3xl border border-hair bg-surface-2 p-4 shadow-2 sm:p-5">
-                  <div>
-                    <span className="mb-1.5 block text-[12.5px] font-medium text-ink-2">{t("ttsModelLabel")}</span>
-                    <div className="relative" ref={modelRef}>
-                      <button
-                        type="button"
-                        onClick={() => setModelOpen((o) => !o)}
-                        aria-haspopup="listbox"
-                        aria-expanded={modelOpen}
-                        className="flex h-12 w-full items-center gap-2 rounded-2xl border border-hair bg-surface px-3.5 text-[14px] shadow-1 transition-colors hover:border-hair-2"
-                      >
-                        <AudioLines size={15} className="shrink-0 text-accent" aria-hidden="true" />
-                        <span className="min-w-0 flex-1 truncate text-start font-medium text-ink" dir="auto">
-                          {selected?.name ?? ""}
-                        </span>
-                        {!!selected?.voice && (
-                          <span className="tnum hidden shrink-0 rounded-full bg-surface-3 px-2 py-px text-[11px] text-ink-2 sm:inline" dir="ltr">
-                            {selected.voice}
-                          </span>
-                        )}
-                        <ChevronDown
-                          size={16}
-                          aria-hidden="true"
-                          className={cn("shrink-0 text-ink-3 transition-transform duration-2", modelOpen && "rotate-180")}
-                        />
-                      </button>
-                      {modelOpen && (
-                        <div
-                          role="listbox"
-                          aria-label={t("ttsModelLabel")}
-                          className="animate-materialize glass absolute inset-x-0 top-[calc(100%+6px)] z-modal max-h-[280px] overflow-y-auto rounded-2xl border border-hair p-1.5 shadow-3"
+                  {/* ——— ١) الموديل الصوتي ——— */}
+                  <SectionLabel icon={<AudioLines size={13} aria-hidden="true" />}>{t("ttsModelLabel")}</SectionLabel>
+                  <div className="relative" ref={modelRef}>
+                    <button
+                      type="button"
+                      onClick={() => setModelOpen((o) => !o)}
+                      aria-haspopup="listbox"
+                      aria-expanded={modelOpen}
+                      className="flex h-12 w-full items-center gap-2 rounded-2xl border border-hair bg-surface px-3.5 text-[14px] shadow-1 transition-colors hover:border-hair-2"
+                    >
+                      <AudioLines size={15} className="shrink-0 text-accent" aria-hidden="true" />
+                      <span className="min-w-0 flex-1 truncate text-start font-medium text-ink" dir="auto">
+                        {selected?.name ?? ""}
+                      </span>
+                      {!!selected?.voice && (
+                        <span
+                          className="tnum hidden shrink-0 rounded-full bg-surface-3 px-2 py-px text-[11px] text-ink-2 sm:inline"
+                          dir="ltr"
                         >
-                          {models.map((m) => {
-                            const sel = m.id === modelId;
-                            return (
-                              <button
-                                key={m.id}
-                                type="button"
-                                role="option"
-                                aria-selected={sel}
-                                disabled={m.locked}
-                                onClick={() => {
-                                  setModelId(m.id);
-                                  setModelOpen(false);
-                                }}
-                                className={cn(
-                                  "flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-start transition-colors duration-1 disabled:opacity-60",
-                                  sel ? "bg-accent-soft" : "hover:bg-surface-3"
-                                )}
-                              >
-                                <span className="min-w-0 flex-1">
-                                  <span className="flex items-center gap-1.5">
-                                    <span className="truncate text-[13.5px] font-medium text-ink" dir="auto">
-                                      {m.name}
-                                    </span>
-                                    {m.locked && (
-                                      <span className="flex shrink-0 items-center gap-1 rounded-full bg-warn-soft px-1.5 py-px text-[10.5px] font-bold text-warn">
-                                        <Crown size={10} />
-                                        {t("modelProBadge")}
-                                      </span>
-                                    )}
+                          {selected.voice}
+                        </span>
+                      )}
+                      <ChevronDown
+                        size={16}
+                        aria-hidden="true"
+                        className={cn("shrink-0 text-ink-3 transition-transform duration-2", modelOpen && "rotate-180")}
+                      />
+                    </button>
+                    {modelOpen && (
+                      <div
+                        role="listbox"
+                        aria-label={t("ttsModelLabel")}
+                        className="animate-materialize glass absolute inset-x-0 top-[calc(100%+6px)] z-modal max-h-[280px] overflow-y-auto rounded-2xl border border-hair p-1.5 shadow-3"
+                      >
+                        {models.map((m) => {
+                          const sel = m.id === modelId;
+                          return (
+                            <button
+                              key={m.id}
+                              type="button"
+                              role="option"
+                              aria-selected={sel}
+                              disabled={m.locked}
+                              onClick={() => {
+                                setModelId(m.id);
+                                setModelOpen(false);
+                              }}
+                              className={cn(
+                                "flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-start transition-colors duration-1 disabled:opacity-60",
+                                sel ? "bg-accent-soft" : "hover:bg-surface-3"
+                              )}
+                            >
+                              <span className="min-w-0 flex-1">
+                                <span className="flex items-center gap-1.5">
+                                  <span className="truncate text-[13.5px] font-medium text-ink" dir="auto">
+                                    {m.name}
                                   </span>
-                                  {!!m.voice && (
-                                    <span className="tnum mt-0.5 block truncate text-[11.5px] text-ink-3" dir="ltr">
-                                      {m.voice}
+                                  {m.locked && (
+                                    <span className="flex shrink-0 items-center gap-1 rounded-full bg-warn-soft px-1.5 py-px text-[10.5px] font-bold text-warn">
+                                      <Crown size={10} />
+                                      {t("modelProBadge")}
                                     </span>
                                   )}
                                 </span>
-                                <span className="grid h-6 w-6 shrink-0 place-items-center">
-                                  {sel ? (
-                                    <Check size={15} strokeWidth={3} className="text-accent" />
-                                  ) : m.locked ? (
-                                    <Crown size={13} className="text-ink-3" />
-                                  ) : null}
+                                <span className="mt-0.5 flex items-center gap-1.5">
+                                  {!!m.voice && (
+                                    <span className="tnum block truncate text-[11.5px] text-ink-3" dir="ltr">
+                                      {m.voice}
+                                    </span>
+                                  )}
+                                  {m.styleOk && (
+                                    <span className="shrink-0 rounded-full bg-accent-soft px-1.5 py-px text-[10px] text-accent">
+                                      {t("ttsStyleSection")}
+                                    </span>
+                                  )}
                                 </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
+                              </span>
+                              <span className="grid h-6 w-6 shrink-0 place-items-center">
+                                {sel ? (
+                                  <Check size={15} strokeWidth={3} className="text-accent" />
+                                ) : m.locked ? (
+                                  <Crown size={13} className="text-ink-3" />
+                                ) : null}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
-                  <label className="mt-3 block">
+                  {/* ——— ٢) النص ——— */}
+                  <label className="mt-5 block">
                     <span className="mb-1.5 flex items-center justify-between text-[12.5px] font-medium text-ink-2">
-                      <span>{t("voiceStudio")}</span>
+                      <span className="flex items-center gap-1.5">
+                        <Type size={13} className="text-ink-3" aria-hidden="true" />
+                        {t("ttsTextLabel")}
+                      </span>
                       <span className="tnum text-ink-3">
                         {text.trim().length}/{TTS_TEXT_MAX_CHARS}
                       </span>
@@ -320,12 +415,51 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
                     />
                   </label>
 
-                  {/* ——— عينة النسخ المرجعية (لوحدها مع موديلات canClone) ——— */}
+                  {/* ——— ٣) اللمسة الصوتية (موديلات OpenRouter/Fish بس) ——— */}
+                  {selected?.styleOk && (
+                    <div className="mt-5">
+                      <SectionLabel icon={<Smile size={13} aria-hidden="true" />}>{t("ttsStyleSection")}</SectionLabel>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11.5px] text-ink-3">{t("ttsMood")}</span>
+                        {MOODS.map((m) => (
+                          <Chip key={m.value || "normal"} active={mood === m.value} onClick={() => setMood(m.value)}>
+                            {t(m.key)}
+                          </Chip>
+                        ))}
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11.5px] text-ink-3">{t("ttsSpeed")}</span>
+                        <Chip active={!brisk} onClick={() => setBrisk(false)}>
+                          {t("ttsNormal")}
+                        </Chip>
+                        <Chip active={brisk} onClick={() => setBrisk(true)}>
+                          {t("ttsSpeedBrisk")}
+                        </Chip>
+                      </div>
+                      <div className="mt-2">
+                        <button
+                          type="button"
+                          onClick={() => setLaughs((v) => !v)}
+                          aria-pressed={laughs}
+                          className={cn(
+                            "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] transition-colors duration-1",
+                            laughs
+                              ? "border-accent-line bg-accent-soft text-accent"
+                              : "border-hair text-ink-2 hover:border-hair-2 hover:text-ink"
+                          )}
+                        >
+                          <Laugh size={13} aria-hidden="true" />
+                          {t("ttsLaughs")}
+                          {laughs && <Check size={12} strokeWidth={3} aria-hidden="true" />}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ——— ٤) عينة النسخ المرجعية (موديلات canClone بس) ——— */}
                   {!!selected?.canClone && (
-                    <div className="mt-3">
-                      <span className="mb-1.5 block text-[12.5px] font-medium text-ink-2">
-                        {t("ttsCloneLabel")}
-                      </span>
+                    <div className="mt-5">
+                      <SectionLabel icon={<Waves size={13} aria-hidden="true" />}>{t("ttsCloneLabel")}</SectionLabel>
                       {refClip ? (
                         <div className="flex items-center gap-2 rounded-2xl border border-accent-line bg-accent-soft/40 px-3.5 py-2.5">
                           <AudioLines size={14} className="shrink-0 text-accent" aria-hidden="true" />
@@ -364,11 +498,12 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
                     </div>
                   )}
 
+                  {/* ——— ٥) التوليد ——— */}
                   <Button
                     variant="primary"
                     onClick={generate}
                     disabled={busy || !text.trim()}
-                    className="btn-sheen mt-3 h-12 w-full !rounded-2xl !text-[15px]"
+                    className="btn-sheen mt-5 h-12 w-full !rounded-2xl !text-[15px]"
                   >
                     {busy ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
                     {busy ? t("ttsGenerating") : t("ttsGenerate")}
@@ -386,7 +521,11 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
                     {clips.map((c, i) => (
                       <li
                         key={c.id}
-                        className={i === 0 ? "rounded-3xl border border-accent-line bg-surface p-4 shadow-2" : "rounded-3xl border border-hair bg-surface p-4 shadow-1"}
+                        className={
+                          i === 0
+                            ? "rounded-3xl border border-accent-line bg-surface p-4 shadow-2"
+                            : "rounded-3xl border border-hair bg-surface p-4 shadow-1"
+                        }
                       >
                         <p className="truncate text-[13.5px] font-medium text-ink" dir="auto" title={c.text}>
                           {c.text}
@@ -394,8 +533,15 @@ export default function VoiceStudio({ onOpenPlans }: { onOpenPlans: () => void }
                         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
                         <audio controls src={c.url} className="mt-2.5 w-full" />
                         <div className="mt-2 flex items-center justify-between gap-2">
-                          <span className="truncate text-[11.5px] text-ink-3" dir="auto">
-                            {c.modelName || selected?.name || ""}
+                          <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-ink-3">
+                            <span className="truncate" dir="auto">
+                              {c.modelName || selected?.name || ""}
+                            </span>
+                            {c.label && (
+                              <span className="shrink-0 rounded-full bg-surface-3 px-1.5 py-px text-[10.5px]" dir="auto">
+                                {c.label}
+                              </span>
+                            )}
                           </span>
                           <span className="flex shrink-0 items-center gap-1">
                             <a

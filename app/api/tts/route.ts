@@ -62,9 +62,18 @@ export async function POST(req: NextRequest) {
     typeof body?.referenceAudio === "string" && body.referenceAudio.startsWith("data:audio/")
       ? body.referenceAudio
       : undefined;
+  // لمسة الأداء (اختياري): طابع + سرعة + ضحك — تطبيع صارم قبل ما توصل للمزوّد
+  const styleRaw = body?.style && typeof body.style === "object" ? (body.style as Record<string, unknown>) : null;
+  const style = styleRaw
+    ? {
+        mood: typeof styleRaw.mood === "string" ? styleRaw.mood.slice(0, 30) : "",
+        speed: styleRaw.speed === "brisk" ? "brisk" : "",
+        laughs: styleRaw.laughs === true,
+      }
+    : undefined;
 
   try {
-    const out = await synthesizeSpeech({ userId: user.id, isAdmin, text, modelId, referenceAudio });
+    const out = await synthesizeSpeech({ userId: user.id, isAdmin, text, modelId, referenceAudio, style });
     return new Response(out.audio as unknown as BodyInit, {
       status: 200,
       headers: {

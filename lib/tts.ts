@@ -26,6 +26,8 @@ export interface TtsVoiceModel {
   isDefault: boolean;
   /** هل يدعم النموذج نسخ الصوت بعينة مرجعية (وسم clone) — الواجهة تعرض زرار العينة معاه */
   canClone: boolean;
+  /** هل يدعم لمسة الأداء (علامات S2 داخل النص) — بيتحدد من مزوّد الرابط (OpenRouter/Fish) */
+  styleOk: boolean;
 }
 
 /** موديلات الصوت النشطة للمستخدم + هل له حق الاستخدام (مشترك/أدمن).
@@ -44,10 +46,11 @@ export async function listTtsModelsForUser(
     tts_voice: unknown;
     capabilities: unknown;
     is_default: boolean;
+    base_url: unknown;
   }[] = [];
   try {
     rows = (await sql`
-      SELECT id, name, description, tier, tts_voice, capabilities, is_default
+      SELECT id, name, description, tier, tts_voice, capabilities, is_default, base_url
       FROM ai_models
       WHERE is_active = TRUE AND (modality = 'tts' OR (modality = 'stt' AND capabilities LIKE '%tts%'))
       ORDER BY is_default DESC, sort_order ASC, created_at ASC
@@ -60,6 +63,7 @@ export async function listTtsModelsForUser(
     models: rows.map((r) => {
       const tier = r.tier === "paid" ? "paid" : "free";
       const caps = parseCapabilities(r.capabilities);
+      const baseUrl = typeof r.base_url === "string" ? r.base_url : "";
       return {
         id: r.id,
         name: r.name,
@@ -69,6 +73,8 @@ export async function listTtsModelsForUser(
         voice: typeof r.tts_voice === "string" ? r.tts_voice : "",
         isDefault: r.is_default === true,
         canClone: caps.includes("clone"),
+        // علامات الأداء ([brackets] بتاعة Fish S2) بتمر حرفيًا على غير OpenRouter — فنتجاهلها هناك
+        styleOk: /openrouter\.ai/i.test(cleanBaseUrl(baseUrl)),
       };
     }),
   };
@@ -82,6 +88,51 @@ export interface SynthesizeOptions {
   /** بيانات العينة المرجعية (data URL) لنسخ الصوت — فارغ/غير موجود = توليد عادي.
    * بيتطلب قدرة clone على الموديل ويقيد الحجم (20MB base64 = 15MB فك ضغط). */
   referenceAudio?: string;
+  /** لمسة الأداء: طابع + سرعة + ضحك — بتتحول لعلامات S2 جوه النص (OpenRouter/Fish فقط). */
+  style?: TtsStyle;
+}
+
+/** لمسة الأداء اللي بيختارها المستخدم في الاستوديو — بتتحول لعلامات [brackets] جوا النص. */
+export interface TtsStyle {
+  /** طابع الجملة: playful / angry / excited / calm / whispering — فاضي = عادي */
+  mood?: string;
+  /** سرعة: brisk = سريع شوية بصياغة طبيعية — غيره = عادية */
+  speed?: string;
+  /** ضحك في اللحظات المناسبة: قهقهة خفيفة بعد أول جملة + ضحكة بالآخر */
+  laughs?: boolean;
+}
+
+/** الطوابع المسموحة — من دليل Fish S2 (open-domain، بس منقّي هنا لمنع الفوضى) */
+const TTS_MOODS_ALLOWED = new Set(["", "playful", "angry", "excited", "calm", "whispering"]);
+
+/**
+ * بيطبّق اللمسة على النص قبل النداء — علامات S2.1-Pro open-domain (اي وصف بين أقواس مربعة).
+ * قواعد دليل Fish الرسمي: طابع الجملة أول الجملة، الأصوات في أي مكان،
+ * وما تحشّش النص القصير في علامات.
+ * على مزوّد غير OpenRouter (زي OpenAI) الأقواس هتتقرا حرفيًا — فنتجاهل اللمسة هناك.
+ */
+export function applyVoiceStyle(text: string, style: TtsStyle | undefined, isOpenRouter: boolean): string {
+  if (!isOpenRouter || !style) return text;
+  const mood = typeof style.mood === "string" && TTS_MOODS_ALLOWED.has(style.mood) ? style.mood : "";
+  const brisk = style.speed === "brisk";
+  const laughs = style.laughs === true;
+  if (!mood && !brisk && !laughs) return text;
+  const headParts = [
+    mood ? `[${mood}]` : "",
+    brisk ? "[speaking briskly but clearly]" : "",
+  ].filter(Boolean);
+  let out = headParts.length ? `${headParts.join(" ")} ${text}` : text;
+  if (laughs) {
+    // قهقهة خفيفة بعد أول جملة (لو فيه كمان جمل بعد فترات) + ضحكة كاملة بالآخر — من غير نص مزوّر
+    let cut = -1;
+    for (const mark of ["؟", "?", "!", "."]) {
+      const i = out.indexOf(mark);
+      if (i >= 0 && i < out.length - 3 && (cut === -1 || i < cut)) cut = i;
+    }
+    if (cut >= 0) out = `${out.slice(0, cut + 1)} [chuckling] ${out.slice(cut + 1).trim()}`;
+    out = `${out.trim()} [laughing]`;
+  }
+  return out;
 }
 
 /** حد عينة النسخ المرجعية — OpenRouter: 20MB base64 ⇒ ~15MB فك ضغط */
@@ -171,9 +222,11 @@ export async function synthesizeSpeech(opts: SynthesizeOptions): Promise<Synthes
     inputReferences = [{ type: "input_audio", input_audio: { data: referenceAudio } }];
   }
 
+  // لمسة الأداء: علامات S2 جوه النص (OpenRouter بس) — الخصم/الحد بيتحسب على النص الأصلي مش اللمسة
+  const styledInput = applyVoiceStyle(text, opts.style, /openrouter\.ai/i.test(endpoint));
   const payload: Record<string, unknown> = {
     model: resolved.config.model,
-    input: text,
+    input: styledInput,
     response_format: resolved.ttsFormat,
   };
   // الصوت (voice): اسم الصوت خاص بكل مزوّد — على OpenAI نكتب alloy افتراضيًا لو الصف من غير صوت،
