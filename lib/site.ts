@@ -1,12 +1,17 @@
 /**
  * عنوان الموقع الأساسي (بدون / في الآخر) — بيُستخدم في metadataBase و robots و sitemap.
- * الأولوية: NEXT_PUBLIC_SITE_URL (لو عندك دومين مخصص) ← دومين Vercel الإنتاجي ← localhost للتطوير.
+ * الأولوية: NEXT_PUBLIC_SITE_URL (لو عندك دومين مخصص) ← دومين Vercel الإنتاجي ←
+ * RENDER_EXTERNAL_URL (Render بيحطه لوحده) ← localhost للتطوير.
+ * مهم للمعاينة على واتساب/تيليجرام: og:image لازم يكون رابط مطلق على دومين حقيقي —
+ * لو رجع localhost المنصات مش هتلاقي الصورة والمعاينة هتطلع من غير صورة.
  */
 export function getSiteUrl(): string {
   const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();
   if (explicit) return explicit.replace(/\/+$/, "");
   const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
   if (vercel) return `https://${vercel.replace(/^https?:\/\//, "").replace(/\/+$/, "")}`;
+  const render = process.env.RENDER_EXTERNAL_URL?.trim();
+  if (render) return render.replace(/\/+$/, "");
   return "http://localhost:3000";
 }
 
