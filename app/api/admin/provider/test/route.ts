@@ -3,6 +3,7 @@ import { ensureSchema } from "@/lib/db";
 import { requireAdmin } from "@/lib/adminGuard";
 import { getDefaultModelId, getSavedModelProvider, sanitizeModelId, validateProviderInput, resolveProviderEndpoint, type ProviderInput } from "@/lib/provider";
 import { buildUpstreamBody, classifyUpstreamError, extractResponsesSample } from "@/lib/ai";
+import { probeTranscriptionEndpoint } from "@/lib/voiceInput";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -112,6 +113,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, sample, protocol: v.protocol, endpoint });
     }
     const classified = classifyUpstreamError(res.status, text);
+    // موديلات التفريغ (whisper على Groq/OpenAI وغيرها) مش بتدعم الشات أصلًا —
+    // لو رد المزوّد صرح بده بنجرّب مسار /audio/transcriptions مباشرة بوحدة:
+    // نجاحه معناه إن الإعداد سليم والترجمة الفعلية هتشتغل وقت التشغيل.
+    const sttOnly =
+      /does\s*not\s*support[\s\S]{0,80}chat[\s_-]*completions/i.test(text) ||
+      /chat[\s_-]*completions[\s\S]{0,80}(is\s*not\s*supported|unsupported)/i.test(text);
+    if (sttOnly) {
+      const probe = await probeTranscriptionEndpoint(v.baseUrl, v.model, key);
+      if (probe.ok) {
+        return NextResponse.json({
+          ok: true,
+          sample:
+            "موديل تفريغ صوتي (STT) — النداء الشاتي مش مدعوم له فعلاً، بس مسار /audio/transcriptions شغال وبقبل التسجيلات ✅",
+          protocol: "transcriptions",
+          endpoint: probe.endpoint,
+        });
+      }
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            `المزوّد رد بخطأ ${res.status} — الموديل شكله موديل تفريغ صوتي مش بيدعم الشات، ` +
+            `وحتى مسار التفريغ رد بخطأ ${probe.status ?? "?"} — فعّل «تفريغ صوتي» في قدراته وراجع اسم الموديل وقاعدة الرابط (${probe.endpoint})`,
+          detail: `${text.slice(0, 300)}\n— تفريغ: ${probe.detail}`,
+          protocol: v.protocol,
+          endpoint: probe.endpoint,
+        },
+        { status: 502 }
+      );
+    }
     let hint = "";
     switch (classified.category) {
       case "invalid_api_key":

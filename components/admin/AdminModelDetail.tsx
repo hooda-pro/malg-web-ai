@@ -57,12 +57,12 @@ const CAPS: { tag: string; label: string; hint: string }[] = [
   {
     tag: "stt",
     label: "قراءة صوت",
-    hint: "ترجمة الرسايل الصوتية عبر مدخل audio في الشات (موديلات audio-native)",
+    hint: "ترجمة عبر الشات بمقطع input_audio — للموديلات audio-native اللي بتقبل الشات الصوتي (مش whisper)",
   },
   {
     tag: "stt_transcriptions",
     label: "تفريغ صوتي",
-    hint: "التفريغ عبر /audio/transcriptions — موديلات تفريغ خالصة زي whisper",
+    hint: "التفريغ عبر /audio/transcriptions برفع ملف — لموديلات تفريغ خالصة زي whisper على Groq/OpenAI",
   },
   {
     tag: "tts",
